@@ -1,7 +1,7 @@
 # Build artefacts
 /bin/
 /dist/
-draft
+/draft
 
 # Go
 *.test

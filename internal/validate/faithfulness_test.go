@@ -113,3 +113,25 @@ func TestShinglesAndJaccard(t *testing.T) {
 		t.Error("identical sets -> 1")
 	}
 }
+
+func TestWordBoundaryContains(t *testing.T) {
+	// "ax" appears inside "taxi" (no boundary) then standalone (boundary).
+	if !wordBoundaryContains("taxi and ax here", "ax") {
+		t.Error("should find the word-boundary occurrence after skipping the embedded one")
+	}
+	if wordBoundaryContains("taxink", "ax") {
+		t.Error("embedded-only occurrence should not match a word boundary")
+	}
+	if !wordBoundaryContains("f1 score", "f1") {
+		t.Error("standalone term should match")
+	}
+}
+
+func TestDuplicateParagraphsMany(t *testing.T) {
+	para := strings.Repeat("the routing gate keeps twelve of sixty four heads per token in this careful design ", 2)
+	article := strings.Repeat(para+"\n\n", 5) // 5 near-identical paragraphs
+	errs := duplicateParagraphs(article)
+	if !hasSubstr(errs, "paragraphs nearly duplicate") {
+		t.Errorf("expected the aggregate duplicate message, got %v", errs)
+	}
+}
