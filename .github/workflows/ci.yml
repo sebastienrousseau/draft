@@ -15,11 +15,35 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
+      - name: Install PDF tooling
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Verify formatting
         run: test -z "$(gofmt -s -l .)"
       - name: Vet
         run: go vet ./...
       - name: Test
         run: go test -race ./...
+      - name: Coverage gate (>=95%, excluding demo examples)
+        run: |
+          go test -coverprofile=coverage.out ./...
+          grep -v '/examples/' coverage.out > coverage.filtered.out
+          pct=$(go tool cover -func=coverage.filtered.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
+          echo "total coverage (excluding examples): ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 >= 95 ? 0 : 1) }' || { echo "coverage ${pct}% is below 95%"; exit 1; }
       - name: Build
         run: go build ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.1.6
+          # Skip the remote JSON-schema fetch (flaky CDN, returns 503); the
+          # config is verified locally before commit.
+          verify: false

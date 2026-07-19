@@ -26,8 +26,12 @@ race: ## Run tests with the race detector
 	go test -race $(PKG)
 
 .PHONY: cover
-cover: ## Report test coverage
-	go test -cover $(PKG)
+cover: ## Report test coverage (app + library packages; demos excluded)
+	go test -cover ./internal/... ./cmd/...
+
+.PHONY: bench
+bench: ## Run benchmarks
+	go test -run=NONE -bench=. -benchmem $(PKG)
 
 .PHONY: vet
 vet: ## Run go vet

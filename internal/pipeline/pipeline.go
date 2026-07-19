@@ -83,28 +83,36 @@ type (
 
 var slugRepeat = regexp.MustCompile(`-{2,}`)
 
-// Runner executes jobs against a primary engine with an optional fallback.
+// Runner executes jobs against an ordered chain of engines, advancing to the
+// next when one fails and sticking with the survivor.
 type Runner struct {
-	cfg      config.Config
-	primary  engine.Engine
-	fallback engine.Engine
-	events   chan<- Event
+	cfg     config.Config
+	engines []engine.Engine
+	cur     int // index of the active engine in the chain
+	events  chan<- Event
 	// engineName tracks the backend that actually produced the current output.
 	engineName string
+	// ledgerPath is the verified-claim-ledger scratch file for the current run,
+	// removed on success unless the user asked to keep artifacts.
+	ledgerPath string
 }
 
 // Event is the sum type carried on the progress channel.
 type Event any
 
-// NewRunner constructs a Runner. fallback may be nil.
-func NewRunner(cfg config.Config, primary, fallback engine.Engine, events chan<- Event) *Runner {
-	return &Runner{cfg: cfg, primary: primary, fallback: fallback, events: events}
+// NewRunner constructs a Runner over an ordered engine chain (see engine.Chain).
+func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) *Runner {
+	return &Runner{cfg: cfg, engines: engines, events: events}
 }
 
 // Run executes one job, reporting progress and a terminal Done/Err event. It
 // never closes the events channel; the caller owns its lifecycle.
 func (r *Runner) Run(ctx context.Context, job Job) {
-	r.engineName = r.primary.Name()
+	if len(r.engines) == 0 {
+		r.emit(ErrEvent("no generation engine available"))
+		return
+	}
+	r.engineName = r.engines[0].Name()
 	if err := r.run(ctx, job); err != nil {
 		r.emit(ErrEvent(err.Error()))
 	}
@@ -117,7 +125,7 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		return fmt.Errorf("no source files")
 	}
 	r.log(fmt.Sprintf("resolved %d source file(s)", len(job.Sources)))
-	r.emit(EngineEvent(r.primary.Name()))
+	r.emit(EngineEvent(r.engineName))
 	r.phase(PhaseResolve, "done")
 
 	// Phase 1: read and section.
@@ -173,10 +181,23 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		r.phase(PhaseSave, "failed")
 		return err
 	}
+	r.cleanupArtifacts()
 	r.log("saved " + shortPath(r.cfg, outputPath))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{OutputPath: outputPath, Words: words, Mode: "draft", Engine: r.engineName})
 	return nil
+}
+
+// cleanupArtifacts removes the scratch claim ledger after a successful draft so
+// the dated folder holds only finished articles. The --keep-artifacts flag
+// preserves it for fact-checking.
+func (r *Runner) cleanupArtifacts() {
+	if r.cfg.KeepArtifacts || r.ledgerPath == "" {
+		return
+	}
+	if err := os.Remove(r.ledgerPath); err == nil {
+		r.log("cleaned up claim ledger (use --keep-artifacts to keep it)")
+	}
 }
 
 // sections reads and splits every source file.
@@ -199,6 +220,7 @@ func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outp
 	var records []claims.Record
 	dropped := 0
 	ledgerPath := filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-verified-claim-ledger.md")
+	r.ledgerPath = ledgerPath
 	for i, sec := range sections {
 		r.log(fmt.Sprintf("claim section %d/%d", i+1, len(sections)))
 		res, err := r.generate(ctx, engine.Request{
@@ -306,25 +328,36 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 	return markdown, fmt.Errorf("article failed the rules after %d retr(y/ies):\n- %s", r.cfg.WriteRetries, strings.Join(errs, "\n- "))
 }
 
-// generate runs a request on the primary engine, failing over to the fallback
-// on error so a mid-run network drop (or a machine that was offline from the
-// start) degrades to Ollama instead of aborting. The switch is sticky: once the
-// fallback takes over it becomes the primary for the rest of the run, so an
-// offline job does not re-attempt Claude on every section.
+// generate runs a request against the active engine, advancing along the chain
+// on error (a provider that is offline, not logged in, or failing) until one
+// succeeds or the chain is exhausted. The advance is sticky: once an engine
+// fails the run does not return to it, so a queue of sections is not re-attempted
+// against a dead provider.
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
-	res, err := r.primary.Generate(ctx, req)
-	if err == nil {
-		return res, nil
+	var lastErr error
+	for r.cur < len(r.engines) {
+		e := r.engines[r.cur]
+		res, err := e.Generate(ctx, req)
+		if err == nil {
+			if r.engineName != e.Name() {
+				r.engineName = e.Name()
+				r.emit(EngineEvent(e.Name()))
+			}
+			return res, nil
+		}
+		lastErr = err
+		r.log(fmt.Sprintf("%s failed (%v)", e.Name(), err))
+		r.cur++
+		if r.cur < len(r.engines) {
+			r.engineName = r.engines[r.cur].Name()
+			r.emit(EngineEvent(r.engineName))
+			r.log("falling back to " + r.engineName)
+		}
 	}
-	if r.fallback == nil {
-		return res, err
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no engine available")
 	}
-	r.log(fmt.Sprintf("%s failed (%v); falling back to %s", r.primary.Name(), err, r.fallback.Name()))
-	r.primary = r.fallback
-	r.fallback = nil
-	r.engineName = r.primary.Name()
-	r.emit(EngineEvent(r.engineName))
-	return r.primary.Generate(ctx, req)
+	return engine.Result{}, lastErr
 }
 
 func (r *Runner) save(outputDir, markdown string) (string, int, error) {

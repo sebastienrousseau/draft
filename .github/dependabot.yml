@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Dependabot configuration for `draft`.
+#
+# 1. `gomod` — the Go module. Weekly (Monday 06:00 UTC). Grouped so a
+#    charmbracelet bump arrives as one PR, not five.
+# 2. `github-actions` — every workflow under `.github/workflows/`.
+#    Weekly. Keeps action pins current alongside version tags.
+#
+# Reference: https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps(go)"
+      include: scope
+    labels:
+      - dependencies
+      - go
+    groups:
+      charmbracelet:
+        patterns:
+          - "github.com/charmbracelet/*"
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: scope
+    labels:
+      - dependencies
+      - github_actions
+    groups:
+      actions:
+        patterns:
+          - "actions/*"
+      golangci:
+        patterns:
+          - "golangci/*"

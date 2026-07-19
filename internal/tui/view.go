@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sebastienrousseau/draft/internal/config"
+	"github.com/sebastienrousseau/draft/internal/engine"
 	"github.com/sebastienrousseau/draft/internal/pipeline"
 	"github.com/sebastienrousseau/draft/internal/rules"
 )
@@ -32,6 +33,9 @@ var (
 	panelStyle       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(panelDim)).Padding(1, 2)
 	activePanelStyle = panelStyle.BorderForeground(lipgloss.Color(cyanDim))
 	headerStyle      = lipgloss.NewStyle().Padding(0, 1)
+	runeStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Bold(true)
+	wordmarkStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(cyanSoft)).Bold(true)
+	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 )
 
 // View implements tea.Model.
@@ -63,23 +67,52 @@ func (m Model) View() string {
 	return m.scrollView(b.String())
 }
 
+// renderHeader lays out the wordmark on the left and run status on the right,
+// fitting them to the available width without wrapping. When space is tight it
+// drops the tagline first, then the model/word-range, so the right edge never
+// bleeds onto the next line. The whole line is hard-clipped as a final guard.
 func (m Model) renderHeader(width int) string {
-	mark := accentStyle.Render("ᚲ  DRAFT")
-	online := mutedStyle.Render("offline · ollama")
-	if m.engineName == "claude" {
-		online = accentStyle.Render("online · claude")
+	inner := max(10, width-2) // headerStyle padding is (0, 1)
+	// Logo: the Kenaz rune (creation, the spark) plus a bright wordmark.
+	mark := runeStyle.Render("ᚲ") + wordmarkStyle.Render("  DRAFT")
+	tagline := mutedStyle.Render("  ·  research → grounded markdown")
+
+	statusRender := mutedStyle.Render(m.engineName + " · offline")
+	if m.engineName != "ollama" {
+		statusRender = accentStyle.Render("online · " + m.engineName)
 	}
-	model := m.cfg.OllamaModel
-	if m.engineName == "claude" {
-		model = m.cfg.ClaudeModel
+	full := statusRender + statusStyle.Render(fmt.Sprintf("   %s   %d–%d words", m.effectiveModel(), rules.MinWords, rules.MaxWords))
+	compact := statusRender
+
+	left, right := mark+tagline, full
+	fits := func(l, r string) bool { return lipgloss.Width(l)+2+lipgloss.Width(r) <= inner }
+	switch {
+	case fits(left, right):
+	case fits(mark, right):
+		left = mark
+	case fits(mark, compact):
+		left, right = mark, compact
+	default:
+		left, right = mark, ""
 	}
-	left := mark + mutedStyle.Render("  research → grounded markdown")
-	right := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(
-		fmt.Sprintf("%s   %s   %d–%d words", online, model, rules.MinWords, rules.MaxWords),
-	)
-	gap := max(2, width-lipgloss.Width(left)-lipgloss.Width(right))
-	body := left + strings.Repeat(" ", gap) + right
+
+	gap := max(1, inner-lipgloss.Width(left)-lipgloss.Width(right))
+	body := lipgloss.NewStyle().MaxWidth(inner).Render(left + strings.Repeat(" ", gap) + right)
 	return headerStyle.Width(width).Render(body + "\n" + ruleStyle.Render(strings.Repeat("─", max(0, width-2))))
+}
+
+// effectiveModel is the model label to display for the active engine.
+func (m Model) effectiveModel() string {
+	if m.engineName == "ollama" {
+		return m.cfg.OllamaModel
+	}
+	if m.cfg.Model != "" {
+		return m.cfg.Model
+	}
+	if p, ok := engine.LookupProvider(m.engineName); ok && p.DefaultModel != "" {
+		return p.DefaultModel
+	}
+	return "session default"
 }
 
 func (m Model) renderControlPanel(width, height int) string {
@@ -119,7 +152,10 @@ func (m Model) renderPreviewPanel(width, height int) string {
 	b.WriteString(titleStyle.Render("Live Draft"))
 	b.WriteString("\n")
 	b.WriteString(m.spinner.View() + " " + mutedStyle.Render(m.statusText()) + "\n")
-	b.WriteString(m.progress.ViewAs(generationPercent(m.output)) + "\n\n")
+	pct := generationPercent(m.output)
+	m.progress.Width = clamp(width-13, 12, 48) // leave room for the appended " 100%"
+	bar := m.progress.ViewAs(pct)
+	b.WriteString(bar + accentStyle.Render(fmt.Sprintf(" %3.0f%%", pct*100)) + "\n\n")
 	preview := strings.TrimSpace(m.preview)
 	if preview == "" {
 		preview = mutedStyle.Render("Waiting for the first Markdown lines.")

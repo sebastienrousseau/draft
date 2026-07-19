@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -45,6 +46,11 @@ func Extract(ctx context.Context, path string) (string, error) {
 		}
 		return NormaliseSpace(out), nil
 	case ".docx":
+		// textutil is macOS-only; elsewhere DOCX is unsupported rather than a
+		// confusing "command not found".
+		if runtime.GOOS != "darwin" {
+			return "", fmt.Errorf("DOCX extraction requires macOS (textutil); convert to PDF or Markdown first")
+		}
 		out, err := runTool(ctx, 120*time.Second, "textutil", "-convert", "txt", "-stdout", path)
 		if err != nil {
 			return "", fmt.Errorf("textutil: %w", err)

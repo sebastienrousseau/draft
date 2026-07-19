@@ -6,14 +6,14 @@
 <h1 align="center">draft</h1>
 
 <p align="center">
-  Turn research PDFs into grounded, publication-ready Markdown drafts — written by Claude when you are online, by a local Ollama model when you are not.
+  Turn research PDFs into grounded, publication-ready Markdown drafts — written by any token-free AI coding-agent session when you are online, by a local Ollama model when you are not.
 </p>
 
 <p align="center">
   <a href="https://github.com/sebastienrousseau/draft/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/draft/ci.yml?branch=main&style=for-the-badge&logo=github&label=build" alt="Build status" /></a>
   <a href="https://pkg.go.dev/github.com/sebastienrousseau/draft"><img src="https://img.shields.io/badge/go.dev-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go reference" /></a>
-  <a href="https://goreportcard.com/report/github.com/sebastienrousseau/draft"><img src="https://img.shields.io/badge/go%20report-A%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Report Card" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License: MIT" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/coverage-95%25-brightgreen?style=for-the-badge" alt="Coverage 95%" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge" alt="License: MIT OR Apache-2.0" /></a>
   <a href="#"><img src="https://img.shields.io/badge/go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+" /></a>
 </p>
 
@@ -25,6 +25,7 @@
 - [Install](#install)
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
+- [Providers](#providers)
 - [Features](#features)
 - [Usage](#usage)
 - [Configuration](#configuration)
@@ -38,16 +39,17 @@
 
 ## Why draft
 
-Small local models invent plausible facts. Large cloud models cost tokens and
-need a network. `draft` gets the best of both: it writes with **Claude through
-your existing `claude` CLI session** — no API token, it reuses the login you
-already have — whenever the machine is online, and falls back to a **local
-Ollama model** the moment the network drops. Either way, every draft is grounded
-in a **verified claim ledger** mined from your sources, so the writer arranges
-pre-checked facts instead of hallucinating new ones.
+Small local models invent plausible facts. Cloud APIs cost tokens and need a
+network. `draft` gets the best of both: online, it writes with **whatever AI
+coding-agent CLI you already use** — Claude, Codex, Gemini, Copilot, Cursor,
+Amp, Crush, Goose, Grok, Qwen — through that tool's **own logged-in session, so
+there is no API token to manage**. Offline, it falls back to a **local Ollama
+model**. Either way, every draft is grounded in a **verified claim ledger**
+mined from your sources, so the writer arranges pre-checked facts instead of
+hallucinating new ones.
 
 Point it at one paper or a stack of them. Each PDF becomes its own draft,
-processed as a queue in a full-screen dashboard.
+processed as a queue in a full-screen dashboard — online or offline.
 
 ---
 
@@ -73,7 +75,7 @@ make build          # builds ./bin/draft
 | ------------------------ | --------------------------------- | ---------------------------- |
 | `pdftotext` (Poppler)    | reading PDFs                      | `brew install poppler`       |
 | `textutil`               | reading DOCX (built in on macOS) | —                            |
-| [`claude`][claude]       | online writing via your session | Claude Code install          |
+| a session CLI            | online writing via your session | [`claude`][claude], `codex`, `gemini`, … |
 | [`ollama`][ollama]       | offline writing                  | `brew install ollama`        |
 
 ---
@@ -121,25 +123,53 @@ flowchart LR
    rather than saving a truncated article.
 4. **Validate & save.** Structure, length, banned vocabulary, emoji,
    truncation, and faithfulness are enforced; violations trigger a targeted
-   rewrite before the draft is written to disk.
+   rewrite. On success only the finished article is kept — scratch files are
+   removed unless you pass `--keep-artifacts`.
+
+---
+
+## Providers
+
+In `auto` mode `draft` uses the first installed **stable** CLI on your `PATH`,
+in order, driving it through its own logged-in session (no API token).
+**Experimental** providers — invocation correct per their `--help`, but article
+output not yet verified end to end — are used by auto only with
+`--experimental`; any provider can be forced by name with `--engine <name>`.
+
+| Provider | Status | Headless invocation |
+| -------- | ------ | ------------------- |
+| `claude` | stable | `claude -p --output-format text` |
+| `copilot` | stable | `copilot -p --allow-all-tools` |
+| `codex` | experimental | `codex exec` |
+| `gemini` | experimental | `gemini -p` |
+| `cursor-agent` | experimental | `cursor-agent -p --output-format text` |
+| `amp` | experimental | `amp -x` |
+| `crush` | experimental | `crush run` |
+| `goose` | experimental | `goose run --no-session -t` |
+| `grok` | experimental | `grok --output-format plain --single` |
+| `qwen` | experimental | `qwen -p` |
+
+Run `go run ./examples/providers` to see status and which are installed.
 
 ---
 
 ## Features
 
-- **Zero-token Claude writing.** Uses the `claude` CLI in headless print mode,
-  authenticated by your existing session.
-- **Reliable offline fallback.** Auto mode always prefers Claude when the CLI is
-  present; if a call fails because you are offline, it fails over to Ollama and
-  stays there for the rest of the run — no flaky network probe gating the choice.
+- **Zero-token, any-agent writing.** Drives whichever coding-agent CLI you have
+  in headless mode, authenticated by that tool's own session — no API key.
+- **Reliable offline fallback.** No up-front network probe: if a session call
+  fails because you are offline, `draft` advances along the chain and finally to
+  a local Ollama model, and stays there for the rest of the run.
 - **Grounded by construction.** A verbatim-quote-verified claim ledger is the
   writer's only factual substrate.
-- **Bulk queue.** Pass many PDFs; each becomes its own draft, with live queue
-  progress. `--merge` combines them into one.
+- **Bulk queue, online or offline.** Pass many PDFs; each becomes its own draft
+  with live queue progress, and each re-selects its engine independently.
+  `--merge` combines them into one.
 - **Truncation-proof.** Detects length-limited stops and continues to a clean
   ending.
 - **House-style enforcement.** Banned words and phrases, British English, no
   emoji, sentence-rhythm and structure rules — checked, not just requested.
+- **Tidy output.** A successful run leaves only the article in the dated folder.
 - **Live dashboard.** A Bubble Tea TUI streams the article as it is written,
   with a pipeline view, per-run log, and a 25-minute focus timer.
 - **Scriptable.** `--print` runs headless and emits draft paths to stdout.
@@ -152,17 +182,19 @@ flowchart LR
 draft [flags] <source> [more-sources...]
 ```
 
-| Flag                    | Description                                             |
-| ----------------------- | ------------------------------------------------------- |
-| `--engine <mode>`       | `auto` (default), `claude`, or `ollama`                 |
-| `--claude-model <name>` | Claude model when online (default `sonnet`; e.g. `opus`)|
-| `--num-ctx <n>`         | Ollama context window (default `8192`)                  |
-| `--num-predict <n>`     | Ollama max output tokens (default `6000`)               |
-| `--force-new`           | Draft even if today's folder already has one            |
-| `--merge`               | Combine all sources into one draft                      |
-| `--print`               | Run without the TUI; print draft paths to stdout        |
-| `--version`             | Print version and exit                                  |
-| `-h, --help`            | Show help                                               |
+| Flag                | Description                                              |
+| ------------------- | ------------------------------------------------------- |
+| `--engine <mode>`   | `auto` (default), `ollama`, or a provider name          |
+| `--model <name>`    | Session-provider model override (e.g. `opus`)           |
+| `--experimental`    | Let auto mode use experimental providers                |
+| `--num-ctx <n>`     | Ollama context window (default `8192`)                  |
+| `--num-predict <n>` | Ollama max output tokens (default `6000`)               |
+| `--force-new`       | Draft even if today's folder already has one            |
+| `--merge`           | Combine all sources into one draft                      |
+| `--keep-artifacts`  | Keep the claim ledger beside a successful draft         |
+| `--print`           | Run without the TUI; print draft paths to stdout        |
+| `--version`         | Print version and exit                                  |
+| `-h, --help`        | Show help                                               |
 
 ---
 
@@ -172,8 +204,8 @@ Flags win over environment variables, which win over defaults.
 
 | Variable               | Default     | Purpose                                     |
 | ---------------------- | ----------- | ------------------------------------------- |
-| `DRAFT_ENGINE`         | `auto`      | Backend selection                           |
-| `DRAFT_CLAUDE_MODEL`   | `sonnet`    | Claude model when online                    |
+| `DRAFT_ENGINE`         | `auto`      | Backend selection (auto, ollama, provider)  |
+| `DRAFT_MODEL_SESSION`  | —           | Session-provider model override             |
 | `DRAFT_MODEL`          | —           | Sets all Ollama models at once              |
 | `DRAFT_WRITE_MODEL`    | `qwen3:4b`  | Ollama writing model                        |
 | `DRAFT_EXTRACT_MODEL`  | `gemma3:4b` | Ollama claim-extraction model               |
@@ -190,7 +222,7 @@ Flags win over environment variables, which win over defaults.
 
 Standard Go layout: a thin `cmd/` entrypoint over focused `internal/` packages,
 each with a single responsibility. The `Engine` interface is the key seam — the
-pipeline is identical whether Claude or Ollama runs behind it.
+pipeline is identical whether a session provider or Ollama runs behind it.
 
 ```text
 cmd/draft/          CLI entrypoint, flag parsing, headless mode
@@ -201,9 +233,10 @@ internal/
   prompt/           grounded claim / writing / review prompts
   claims/           claim parsing, verbatim verification, ledger
   validate/         house-rule and faithfulness checks
-  engine/           Engine interface, Claude + Ollama backends, routing
-  pipeline/         orchestration, retries, continuation, fallback
+  engine/           Engine interface, session-provider registry, Ollama, routing
+  pipeline/         orchestration, retries, continuation, fallback chain
   tui/              Bubble Tea dashboard and queue
+examples/           runnable, network-free demos of each capability
 ```
 
 The backend abstraction is a small, mockable interface — *accept interfaces,
@@ -235,9 +268,18 @@ type Result struct {
 | `draft a.pdf b.pdf c.pdf`                        | Queue three papers, one draft each               |
 | `draft --merge notes.md paper.pdf`               | One draft from combined sources                  |
 | `draft --engine ollama paper.pdf`                | Force the local model (offline)                  |
-| `draft --claude-model opus paper.pdf`            | Use Opus when online                             |
+| `draft --engine codex paper.pdf`                 | Force a specific session provider                |
+| `draft --model opus paper.pdf`                   | Override the session model                        |
 | `draft --print paper.pdf > path.txt`             | Headless; capture the output path                |
 | `DRAFT_NUM_CTX=2048 draft paper.pdf`             | Low-memory Ollama profile                        |
+
+Runnable, network-free library demos live in [`examples/`](examples):
+
+```sh
+go run ./examples/providers   # list providers and which CLIs are installed
+go run ./examples/grounding   # claim verification, ledger, prompt, validation
+go run ./examples/pipeline    # the full pipeline against an in-process engine
+```
 
 ---
 
@@ -246,35 +288,52 @@ type Result struct {
 ```sh
 make build     # compile to ./bin/draft
 make test      # run the unit + pipeline tests
+make cover     # coverage report (≥95%)
+make bench     # run benchmarks
 make vet       # go vet ./...
-make lint      # golangci-lint (if installed)
+make lint      # golangci-lint (config in .golangci.yml)
 make fmt       # gofmt -s -w
 make run ARGS='--help'
 ```
 
-The pipeline is tested end to end against a deterministic fake `Engine`, so
-correctness of extraction, grounding, truncation-continuation, and fallback is
-verified without any network call or LLM.
+The suite covers **≥95% of statements**. The pipeline is tested end to end
+against a deterministic fake `Engine` — extraction, grounding,
+truncation-continuation, and multi-provider fallback are verified without any
+network call or LLM — and provider CLIs are faked via the `TestHelperProcess`
+pattern, so even the session backends are covered without spawning real agents.
 
 ---
 
 ## Security
 
-- **No tokens on disk.** The Claude backend shells out to an already-authenticated
+- **No tokens on disk.** Session backends shell out to an already-authenticated
   CLI; `draft` never reads, stores, or logs an API key.
 - **Prompt-injection aware.** Template and source text are quoted as untrusted
   evidence, and the writing prompt explicitly instructs the model to ignore any
   instructions found inside them.
+- **Agent trust surface.** Session providers run in their non-interactive modes,
+  some of which auto-approve tool use (for example `copilot --allow-all-tools`,
+  `amp -x`). `draft` asks only for text and quotes your sources as untrusted, but
+  you are still handing a research PDF to an agent that *can* act — treat sources
+  as you would any untrusted input, and prefer Ollama for material you do not
+  trust.
+- **Cancellation.** Quitting the dashboard (or Ctrl+C in `--print`) cancels the
+  run's context, terminating any in-flight provider subprocess or Ollama request.
 - **Grounding as a safety control.** Ungrounded numbers and silent metric
   conversions are flagged; unverifiable claims are dropped before writing.
 - **Bounded external calls.** Extraction shells out only to `pdftotext` /
-  `textutil` with context timeouts and no shell interpolation.
+  `textutil` (macOS) with context timeouts and no shell interpolation.
 
 ---
 
 ## License
 
-Released under the [MIT License](LICENSE). © Sebastien Rousseau.
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
+[MIT License](LICENSE-MIT) at your option. © Sebastien Rousseau.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you shall be dual licensed as above, without any
+additional terms or conditions.
 
 [claude]: https://docs.claude.com/en/docs/claude-code
 [ollama]: https://ollama.com

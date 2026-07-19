@@ -10,23 +10,19 @@ import (
 	"time"
 )
 
-// EngineMode selects which generation backend the pipeline prefers.
-type EngineMode string
-
+// Engine selection sentinels. Any other value names a specific session provider
+// (claude, codex, gemini, copilot, cursor-agent, amp, crush, goose, grok, ...).
 const (
-	// EngineAuto uses Claude when the machine is online and the claude CLI is
-	// available, and falls back to Ollama otherwise. This is the default.
-	EngineAuto EngineMode = "auto"
-	// EngineClaude forces the Claude backend and fails fast when it is
-	// unavailable.
-	EngineClaude EngineMode = "claude"
-	// EngineOllama forces the local Ollama backend and never touches the network.
-	EngineOllama EngineMode = "ollama"
+	// EngineAuto picks the first installed session provider and falls back to
+	// Ollama if a call fails (offline). This is the default.
+	EngineAuto = "auto"
+	// EngineOllama forces the local Ollama backend and never touches a session
+	// CLI or the network.
+	EngineOllama = "ollama"
 )
 
 // Defaults captured as constants so they are documented in one place.
 const (
-	DefaultClaudeModel  = "sonnet"
 	DefaultOllamaModel  = "qwen3:4b"
 	DefaultExtractModel = "gemma3:4b"
 	DefaultEditModel    = "gemma3:4b"
@@ -40,17 +36,20 @@ const (
 
 // Config is the fully-resolved run configuration shared across packages.
 type Config struct {
-	Engine        EngineMode
-	ClaudeModel   string
-	OllamaModel   string // writing model for the Ollama backend
-	ExtractModel  string // claim-extraction model for the Ollama backend
-	EditModel     string // surgical-review model for the Ollama backend
+	Engine       string // "auto", "ollama", or a session provider name
+	Model        string // session-provider model override ("" = provider default)
+	OllamaModel  string // writing model for the Ollama backend
+	ExtractModel string // claim-extraction model for the Ollama backend
+	EditModel    string // surgical-review model for the Ollama backend
+
 	ContextLength int
 	PredictLength int
 	WriteRetries  int
 	MaxContinue   int // max length-driven continuations for a single generation
 	ForceNew      bool
 	Merge         bool // combine every input into one draft instead of queueing
+	KeepArtifacts bool // keep prompt/ledger files beside a successful draft
+	Experimental  bool // let auto-selection consider experimental providers
 	OllamaHost    string
 
 	HomeDir    string
@@ -63,8 +62,8 @@ type Config struct {
 func Load(flags Flags) Config {
 	home, _ := os.UserHomeDir()
 	c := Config{
-		Engine:        EngineAuto,
-		ClaudeModel:   env("DRAFT_CLAUDE_MODEL", DefaultClaudeModel),
+		Engine:        env("DRAFT_ENGINE", EngineAuto),
+		Model:         env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
 		OllamaModel:   env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
 		ExtractModel:  env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
 		EditModel:     env("DRAFT_EDIT_MODEL", env("DRAFT_MODEL", DefaultEditModel)),
@@ -77,16 +76,13 @@ func Load(flags Flags) Config {
 		SourcesDir:    filepath.Join(home, "Drop", "Drafts", "Sources"),
 		DraftsDir:     filepath.Join(home, "Drop", "Drafts"),
 	}
-	if v := strings.TrimSpace(os.Getenv("DRAFT_ENGINE")); v != "" {
-		c.Engine = EngineMode(v)
-	}
 
 	// Flags win over environment.
 	if flags.Engine != "" {
-		c.Engine = EngineMode(flags.Engine)
+		c.Engine = flags.Engine
 	}
-	if flags.ClaudeModel != "" {
-		c.ClaudeModel = flags.ClaudeModel
+	if flags.Model != "" {
+		c.Model = flags.Model
 	}
 	if flags.ContextLength > 0 {
 		c.ContextLength = flags.ContextLength
@@ -96,17 +92,21 @@ func Load(flags Flags) Config {
 	}
 	c.ForceNew = flags.ForceNew
 	c.Merge = flags.Merge
+	c.KeepArtifacts = flags.KeepArtifacts
+	c.Experimental = flags.Experimental || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "1") || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "true")
 	return c
 }
 
 // Flags holds the raw command-line values before they are merged into a Config.
 type Flags struct {
 	Engine        string
-	ClaudeModel   string
+	Model         string
 	ContextLength int
 	PredictLength int
 	ForceNew      bool
 	Merge         bool
+	KeepArtifacts bool
+	Experimental  bool
 }
 
 func env(name, fallback string) string {
@@ -116,13 +116,13 @@ func env(name, fallback string) string {
 	return fallback
 }
 
-func envInt(name string, fallback, min int) int {
+func envInt(name string, fallback, minValue int) int {
 	raw := strings.TrimSpace(os.Getenv(name))
 	if raw == "" {
 		return fallback
 	}
 	v, err := strconv.Atoi(raw)
-	if err != nil || v < min {
+	if err != nil || v < minValue {
 		return fallback
 	}
 	return v

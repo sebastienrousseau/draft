@@ -40,10 +40,10 @@ type jobResult struct {
 
 // Model is the Bubble Tea model backing the dashboard.
 type Model struct {
-	ctx      context.Context
-	cfg      config.Config
-	primary  engine.Engine
-	fallback engine.Engine
+	ctx     context.Context
+	cancel  context.CancelFunc
+	cfg     config.Config
+	engines []engine.Engine
 
 	jobs    []pipeline.Job
 	results []jobResult
@@ -67,8 +67,9 @@ type Model struct {
 	scroll        int
 }
 
-// New constructs the initial model for a set of jobs.
-func New(ctx context.Context, cfg config.Config, primary, fallback engine.Engine, jobs []pipeline.Job) Model {
+// New constructs the initial model for a set of jobs. cancel, when non-nil, is
+// invoked on quit to stop any in-flight pipeline work.
+func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
 	sp.Style = accentStyle
@@ -89,9 +90,9 @@ func New(ctx context.Context, cfg config.Config, primary, fallback engine.Engine
 
 	m := Model{
 		ctx:      ctx,
+		cancel:   cancel,
 		cfg:      cfg,
-		primary:  primary,
-		fallback: fallback,
+		engines:  engines,
 		jobs:     jobs,
 		results:  results,
 		events:   make(chan pipeline.Event, 256),
@@ -101,7 +102,9 @@ func New(ctx context.Context, cfg config.Config, primary, fallback engine.Engine
 		started:  time.Now(),
 	}
 	m.resetPhases()
-	m.engineName = primary.Name()
+	if len(engines) > 0 {
+		m.engineName = engines[0].Name()
+	}
 	// Init cannot return a mutated model, so reflect the first job's running
 	// state here; startJob still launches its goroutine from Init.
 	if len(results) > 0 {
@@ -130,7 +133,7 @@ func (m *Model) startJob(i int) tea.Cmd {
 	m.genStarted = time.Time{}
 	job := m.jobs[i]
 	events := m.events
-	runner := pipeline.NewRunner(m.cfg, m.primary, m.fallback, events)
+	runner := pipeline.NewRunner(m.cfg, m.engines, events)
 	return func() tea.Msg {
 		go runner.Run(m.ctx, job)
 		return nil
@@ -154,10 +157,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tea.MouseMsg:
-		switch msg.Type {
-		case tea.MouseWheelDown:
+		switch msg.Button {
+		case tea.MouseButtonWheelDown:
 			m.scroll += 3
-		case tea.MouseWheelUp:
+		case tea.MouseButtonWheelUp:
 			m.scroll = max(0, m.scroll-3)
 		}
 		return m, nil
@@ -205,6 +208,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
+		if m.cancel != nil {
+			m.cancel() // stop any in-flight session/Ollama call
+		}
 		return m, tea.Quit
 	case "enter":
 		if m.allDone {
