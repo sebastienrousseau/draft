@@ -15,6 +15,8 @@ jobs:
         with:
           go-version: "1.24"
           cache: true
+      - name: Install PDF tooling
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Verify formatting
         run: test -z "$(gofmt -s -l .)"
       - name: Vet
