@@ -49,3 +49,12 @@ func TestSplitSectionsKeepsHeadings(t *testing.T) {
 		t.Errorf("expected a section per heading, got %d", len(secs))
 	}
 }
+
+func TestLastIndexBefore(t *testing.T) {
+	if got := lastIndexBefore("a.b.c", ".", 100); got != 3 { // limit clamped to len
+		t.Errorf("limit>len should clamp; got %d", got)
+	}
+	if got := lastIndexBefore("a.b.c", ".", 3); got != 1 {
+		t.Errorf("within limit; got %d", got)
+	}
+}

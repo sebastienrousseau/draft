@@ -93,3 +93,20 @@ func hasLog(logs []string, sub string) bool {
 	}
 	return false
 }
+
+func TestTruncatedButAlreadyComplete(t *testing.T) {
+	cfg := testConfig(t)
+	// Backend reports Truncated=true but the text already ends on punctuation:
+	// continueGeneration should break immediately without another call.
+	eng := &fakeEngine{name: "fake", writer: func(int) (string, bool) { return validArticle("."), true }}
+	done, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}})
+	if errText != "" {
+		t.Fatalf("should succeed without a continuation: %s", errText)
+	}
+	if eng.writeCalls != 1 {
+		t.Errorf("expected exactly one write call, got %d", eng.writeCalls)
+	}
+	if done.OutputPath == "" {
+		t.Error("expected a saved draft")
+	}
+}
