@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
 name: ci
 
 on:
@@ -6,12 +8,15 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.24"
           cache: true
@@ -21,7 +26,7 @@ jobs:
         run: test -z "$(gofmt -s -l .)"
       - name: Vet
         run: go vet ./...
-      - name: Test
+      - name: Test (race)
         run: go test -race ./...
       - name: Coverage gate (>=95%, excluding demo examples)
         run: |
@@ -33,17 +38,46 @@ jobs:
       - name: Build
         run: go build ./...
 
-  lint:
-    runs-on: ubuntu-latest
+  test-matrix:
+    name: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.24"
           cache: true
-      - uses: golangci/golangci-lint-action@v7
+      - name: Install PDF tooling (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Install PDF tooling (macOS)
+        if: runner.os == 'macOS'
+        run: brew install poppler
+      - name: Test
+        run: go test ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
           version: v2.1.6
-          # Skip the remote JSON-schema fetch (flaky CDN, returns 503); the
-          # config is verified locally before commit.
+          # Skip the remote JSON-schema fetch (flaky CDN); config is verified locally.
           verify: false
+
+  reuse:
+    name: reuse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: REUSE compliance
+        uses: fsfe/reuse-action@bb774aa972c2a89ff34781233d275075cbddf542 # v5

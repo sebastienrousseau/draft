@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package prompt builds the grounded prompts sent to a generation backend: the
 // per-section claim-extraction prompt, the writing prompt (with an embedded
 // output skeleton and the compact claim ledger), and the surgical review

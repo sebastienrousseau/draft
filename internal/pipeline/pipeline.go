@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package pipeline orchestrates a single drafting job end to end: extract source
 // text, mine quote-verified claims, write a grounded article (continuing past
 // length limits and retrying on rule violations), validate it, and save it. It

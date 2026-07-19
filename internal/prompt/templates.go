@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 package prompt
 
 // outputSkeleton is the exact body structure every draft must follow.

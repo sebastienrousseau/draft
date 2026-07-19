@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package config resolves runtime configuration from command-line flags,
 // environment variables, and sensible defaults, in that order of precedence.
 package config

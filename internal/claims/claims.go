@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package claims extracts, verifies, de-duplicates, and renders the verified
 // claim ledger that grounds every draft. A claim survives only if its
 // SOURCE_QUOTE is an exact substring of the section it was drawn from and every

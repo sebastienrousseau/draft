@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package engine abstracts text generation over interchangeable backends:
 //
 //   - Session providers (Claude, Codex, Gemini, Copilot, Cursor, Amp, Crush,
