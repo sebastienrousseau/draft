@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+name: Bug report
+description: Report incorrect drafting, grounding, or CLI behaviour.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A minimal, self-contained reproduction is the
+        single most useful thing you can include.
+  - type: input
+    id: version
+    attributes:
+      label: draft version
+      description: The output of `draft --version`.
+      placeholder: "0.0.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      options:
+        - CLI / TUI (draft)
+        - Session provider (Claude, Codex, ...)
+        - Ollama (offline) backend
+        - Grounding / claim ledger
+        - Validation / house rules
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine in use
+      options:
+        - auto
+        - a specific provider (--engine <name>)
+        - ollama
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How you invoked it
+      description: The exact command line, e.g. `draft --engine ollama paper.pdf`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the full error output and any needs-review file path.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS + `go version` if built from source; which provider CLIs are installed.
+      placeholder: "macOS 15.5, go1.24, claude + ollama"
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: The reproduction above is minimal and self-contained.
+          required: true

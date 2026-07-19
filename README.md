@@ -13,7 +13,7 @@
   <a href="https://github.com/sebastienrousseau/draft/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/draft/ci.yml?branch=main&style=for-the-badge&logo=github&label=build" alt="Build status" /></a>
   <a href="https://pkg.go.dev/github.com/sebastienrousseau/draft"><img src="https://img.shields.io/badge/go.dev-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go reference" /></a>
   <a href="#"><img src="https://img.shields.io/badge/coverage-95%25-brightgreen?style=for-the-badge" alt="Coverage 95%" /></a>
-  <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License: MIT" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge" alt="License: MIT OR Apache-2.0" /></a>
   <a href="#"><img src="https://img.shields.io/badge/go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+" /></a>
 </p>
 
@@ -328,7 +328,12 @@ pattern, so even the session backends are covered without spawning real agents.
 
 ## License
 
-Released under the [MIT License](LICENSE). © Sebastien Rousseau.
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
+[MIT License](LICENSE-MIT) at your option. © Sebastien Rousseau.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you shall be dual licensed as above, without any
+additional terms or conditions.
 
 [claude]: https://docs.claude.com/en/docs/claude-code
 [ollama]: https://ollama.com

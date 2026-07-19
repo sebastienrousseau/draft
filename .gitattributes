@@ -1,0 +1,25 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Go source and modules
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf -merge
+
+# Config and docs
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+.editorconfig text eol=lf
+
+# License files
+LICENSE* text eol=lf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.ico binary

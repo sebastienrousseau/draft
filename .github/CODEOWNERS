@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# draft CODEOWNERS — every path is owned by the project maintainer.
+# Add co-maintainers to specific directory globs above the catch-all
+# to route reviews sensibly.
+#
+# Reference: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+* @sebastienrousseau
