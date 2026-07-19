@@ -22,6 +22,20 @@ series until `0.0.999`.
   demos, benchmarks for the hot paths, and godoc examples.
 - Test coverage raised to **≥95%** of app/library statements, including the
   session backends (faked via the `TestHelperProcess` pattern).
+- **Cancellation.** A signal-aware context is threaded through the run; quitting
+  the TUI or Ctrl+C in `--print` terminates any in-flight provider subprocess or
+  Ollama request instead of orphaning it.
+- **Experimental provider gating.** Only `claude` and `copilot` are verified end
+  to end and used by auto mode; the rest are marked experimental and require
+  `--experimental` (or `--engine <name>`), so the breadth claim stays honest.
+
+### Changed
+
+- DOCX extraction now returns a clear "requires macOS" error off Darwin instead
+  of a confusing missing-command failure.
+- Removed the unwired surgical-review prompt (`prompt.Review`) and its dead
+  helpers rather than shipping unused code.
+- Documented the agent auto-approve trust surface in the README security notes.
 
 ### Fixed
 

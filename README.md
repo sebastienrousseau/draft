@@ -130,24 +130,26 @@ flowchart LR
 
 ## Providers
 
-In `auto` mode `draft` uses the first of these CLIs found on your `PATH`, in
-order, driving it through its own logged-in session (no API token). Force a
-specific one with `--engine <name>`.
+In `auto` mode `draft` uses the first installed **stable** CLI on your `PATH`,
+in order, driving it through its own logged-in session (no API token).
+**Experimental** providers — invocation correct per their `--help`, but article
+output not yet verified end to end — are used by auto only with
+`--experimental`; any provider can be forced by name with `--engine <name>`.
 
-| Provider | Binary | Headless invocation |
+| Provider | Status | Headless invocation |
 | -------- | ------ | ------------------- |
-| `claude` | `claude` | `claude -p --output-format text` |
-| `codex` | `codex` | `codex exec` |
-| `gemini` | `gemini` | `gemini -p` |
-| `copilot` | `copilot` | `copilot -p --allow-all-tools` |
-| `cursor-agent` | `cursor-agent` | `cursor-agent -p --output-format text` |
-| `amp` | `amp` | `amp -x` |
-| `crush` | `crush` | `crush run` |
-| `goose` | `goose` | `goose run --no-session -t` |
-| `grok` | `grok` | `grok --output-format plain --single` |
-| `qwen` | `qwen` | `qwen -p` |
+| `claude` | stable | `claude -p --output-format text` |
+| `copilot` | stable | `copilot -p --allow-all-tools` |
+| `codex` | experimental | `codex exec` |
+| `gemini` | experimental | `gemini -p` |
+| `cursor-agent` | experimental | `cursor-agent -p --output-format text` |
+| `amp` | experimental | `amp -x` |
+| `crush` | experimental | `crush run` |
+| `goose` | experimental | `goose run --no-session -t` |
+| `grok` | experimental | `grok --output-format plain --single` |
+| `qwen` | experimental | `qwen -p` |
 
-Run `go run ./examples/providers` to see which are installed on your machine.
+Run `go run ./examples/providers` to see status and which are installed.
 
 ---
 
@@ -184,6 +186,7 @@ draft [flags] <source> [more-sources...]
 | ------------------- | ------------------------------------------------------- |
 | `--engine <mode>`   | `auto` (default), `ollama`, or a provider name          |
 | `--model <name>`    | Session-provider model override (e.g. `opus`)           |
+| `--experimental`    | Let auto mode use experimental providers                |
 | `--num-ctx <n>`     | Ollama context window (default `8192`)                  |
 | `--num-predict <n>` | Ollama max output tokens (default `6000`)               |
 | `--force-new`       | Draft even if today's folder already has one            |
@@ -308,10 +311,18 @@ pattern, so even the session backends are covered without spawning real agents.
 - **Prompt-injection aware.** Template and source text are quoted as untrusted
   evidence, and the writing prompt explicitly instructs the model to ignore any
   instructions found inside them.
+- **Agent trust surface.** Session providers run in their non-interactive modes,
+  some of which auto-approve tool use (for example `copilot --allow-all-tools`,
+  `amp -x`). `draft` asks only for text and quotes your sources as untrusted, but
+  you are still handing a research PDF to an agent that *can* act — treat sources
+  as you would any untrusted input, and prefer Ollama for material you do not
+  trust.
+- **Cancellation.** Quitting the dashboard (or Ctrl+C in `--print`) cancels the
+  run's context, terminating any in-flight provider subprocess or Ollama request.
 - **Grounding as a safety control.** Ungrounded numbers and silent metric
   conversions are flagged; unverifiable claims are dropped before writing.
 - **Bounded external calls.** Extraction shells out only to `pdftotext` /
-  `textutil` with context timeouts and no shell interpolation.
+  `textutil` (macOS) with context timeouts and no shell interpolation.
 
 ---
 

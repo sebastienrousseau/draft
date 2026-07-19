@@ -73,6 +73,9 @@ func Chain(cfg config.Config) []Engine {
 	case config.EngineAuto, "":
 		var chain []Engine
 		for _, p := range Providers {
+			if p.Experimental && !cfg.Experimental {
+				continue
+			}
 			if available(p.Bin) {
 				if s, ok := NewSession(p.Name, cfg); ok {
 					chain = append(chain, s)

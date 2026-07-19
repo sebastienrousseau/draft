@@ -51,27 +51,3 @@ func TestContinueWritingClipsTail(t *testing.T) {
 		t.Error("missing continuation instruction")
 	}
 }
-
-func TestReviewPromptClipsInputs(t *testing.T) {
-	research := strings.Repeat("r", MaxReviewSourceChars+1000)
-	draft := strings.Repeat("d", MaxDraftChars+1000)
-	p := Review(research, draft, "LEDGER")
-	// The clipped inputs leave a contiguous run of exactly the cap length, never
-	// one character longer.
-	if !strings.Contains(p, strings.Repeat("r", MaxReviewSourceChars)) || strings.Contains(p, strings.Repeat("r", MaxReviewSourceChars+1)) {
-		t.Error("research should be clipped to MaxReviewSourceChars")
-	}
-	if !strings.Contains(p, strings.Repeat("d", MaxDraftChars)) || strings.Contains(p, strings.Repeat("d", MaxDraftChars+1)) {
-		t.Error("draft should be clipped to MaxDraftChars")
-	}
-	if !strings.Contains(p, "LEDGER") || !strings.Contains(p, "JSON array") {
-		t.Error("review prompt missing ledger or output spec")
-	}
-}
-
-func TestReviewShortInputsNoClip(t *testing.T) {
-	p := Review("short research", "short draft", "LEDGER")
-	if !strings.Contains(p, "short research") || !strings.Contains(p, "short draft") {
-		t.Error("short inputs should pass through unclipped")
-	}
-}

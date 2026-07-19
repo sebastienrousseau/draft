@@ -180,3 +180,14 @@ func TestSessionStdinPlaceholder(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionContextCancelled(t *testing.T) {
+	withExec("default", func() {
+		s, _ := NewSession("claude", config.Config{})
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // cancelled before the call
+		if _, err := s.Generate(ctx, Request{Prompt: "p"}); err == nil {
+			t.Error("a cancelled context should abort the session call")
+		}
+	})
+}

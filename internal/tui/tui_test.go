@@ -30,7 +30,9 @@ func newModel(t *testing.T, jobs int) Model {
 		js[i] = pipeline.Job{Sources: []string{"/tmp/x.pdf"}}
 	}
 	cfg := config.Config{OllamaModel: "qwen3:4b", HomeDir: "/home/seb"}
-	return New(context.Background(), cfg, []engine.Engine{fakeEngine{"claude"}}, js)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return New(ctx, cancel, cfg, []engine.Engine{fakeEngine{"claude"}}, js)
 }
 
 func upd(m Model, msg tea.Msg) Model {
@@ -146,6 +148,20 @@ func TestQuitKeys(t *testing.T) {
 		if _, cmd := m.Update(key); cmd == nil {
 			t.Errorf("key %v should quit", key)
 		}
+	}
+}
+
+func TestQuitCancelsWork(t *testing.T) {
+	cancelled := false
+	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := New(ctx, func() { cancelled = true; cancel() }, config.Config{}, []engine.Engine{fakeEngine{"claude"}}, js)
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}); cmd == nil {
+		t.Fatal("q should quit")
+	}
+	if !cancelled {
+		t.Error("quitting should cancel in-flight work")
 	}
 }
 

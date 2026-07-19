@@ -49,6 +49,7 @@ type Config struct {
 	ForceNew      bool
 	Merge         bool // combine every input into one draft instead of queueing
 	KeepArtifacts bool // keep prompt/ledger files beside a successful draft
+	Experimental  bool // let auto-selection consider experimental providers
 	OllamaHost    string
 
 	HomeDir    string
@@ -92,6 +93,7 @@ func Load(flags Flags) Config {
 	c.ForceNew = flags.ForceNew
 	c.Merge = flags.Merge
 	c.KeepArtifacts = flags.KeepArtifacts
+	c.Experimental = flags.Experimental || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "1") || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "true")
 	return c
 }
 
@@ -104,6 +106,7 @@ type Flags struct {
 	ForceNew      bool
 	Merge         bool
 	KeepArtifacts bool
+	Experimental  bool
 }
 
 func env(name, fallback string) string {

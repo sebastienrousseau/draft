@@ -25,22 +25,32 @@ type Provider struct {
 	// StdinPlaceholder is appended as a positional argument when the prompt is
 	// delivered on stdin and the CLI needs a marker (e.g. "-").
 	StdinPlaceholder string
+	// Experimental marks a provider whose headless invocation is derived from
+	// its --help but whose article output has not been verified end to end. Such
+	// providers are skipped by auto-selection unless the user opts in with
+	// --experimental; they can always be forced with --engine <name>.
+	Experimental bool
 }
 
 // Providers is the registry of supported session CLIs, in auto-selection
-// preference order. The first one found on PATH becomes the default online
-// backend. Invocations were derived from each CLI's own --help.
+// preference order. The first non-experimental one found on PATH becomes the
+// default online backend. Invocations were derived from each CLI's own --help.
+//
+// claude and copilot are verified end to end (they return clean Markdown through
+// this abstraction). The rest are Experimental: their invocation is correct per
+// --help, but their output has not been verified for a full article, so
+// auto-selection skips them unless --experimental is set.
 var Providers = []Provider{
 	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true},
-	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model"},
-	{Name: "gemini", Bin: "gemini", Args: []string{"-p"}, ModelFlag: "--model"},
 	{Name: "copilot", Bin: "copilot", Args: []string{"-p", "--allow-all-tools"}},
-	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model"},
-	{Name: "amp", Bin: "amp", Args: []string{"-x"}},
-	{Name: "crush", Bin: "crush", Args: []string{"run"}},
-	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}},
-	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}},
-	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}},
+	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", Experimental: true},
+	{Name: "gemini", Bin: "gemini", Args: []string{"-p"}, ModelFlag: "--model", Experimental: true},
+	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", Experimental: true},
+	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
+	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
+	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}, Experimental: true},
+	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, Experimental: true},
+	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
 }
 
 // providerByName indexes Providers for O(1) lookup.
@@ -75,9 +85,13 @@ var available = func(bin string) bool {
 }
 
 // FirstAvailableProvider returns the first registered provider whose CLI is
-// installed, in preference order.
-func FirstAvailableProvider() (Provider, bool) {
+// installed, in preference order. Experimental providers are considered only
+// when includeExperimental is true.
+func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
 	for _, p := range Providers {
+		if p.Experimental && !includeExperimental {
+			continue
+		}
 		if available(p.Bin) {
 			return p, true
 		}

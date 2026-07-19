@@ -30,28 +30,46 @@ func TestProviderNames(t *testing.T) {
 }
 
 func TestFirstAvailableProvider(t *testing.T) {
+	// codex and amp are experimental; without opt-in none qualify.
 	withAvailable(map[string]bool{"codex": true, "amp": true}, func() {
-		p, ok := FirstAvailableProvider()
+		if _, ok := FirstAvailableProvider(false); ok {
+			t.Error("experimental providers should be skipped without opt-in")
+		}
+		p, ok := FirstAvailableProvider(true)
 		if !ok || p.Name != "codex" { // codex precedes amp in preference order
-			t.Errorf("expected codex first, got %+v %v", p, ok)
+			t.Errorf("expected codex first with opt-in, got %+v %v", p, ok)
+		}
+	})
+	// copilot is verified (non-experimental) and qualifies by default.
+	withAvailable(map[string]bool{"copilot": true}, func() {
+		if p, ok := FirstAvailableProvider(false); !ok || p.Name != "copilot" {
+			t.Errorf("copilot should qualify by default, got %+v %v", p, ok)
 		}
 	})
 	withAvailable(map[string]bool{}, func() {
-		if _, ok := FirstAvailableProvider(); ok {
+		if _, ok := FirstAvailableProvider(false); ok {
 			t.Error("no providers installed should yield ok=false")
 		}
 	})
 }
 
-func TestChainAuto(t *testing.T) {
+func TestChainAutoSkipsExperimental(t *testing.T) {
+	// amp is experimental, so auto skips it unless opted in.
 	withAvailable(map[string]bool{"claude": true, "amp": true}, func() {
 		chain := Chain(config.Config{Engine: config.EngineAuto})
-		// claude, amp (in order), then ollama.
-		if len(chain) != 3 {
-			t.Fatalf("expected 3 engines, got %d", len(chain))
+		if names(chain)[0] != "claude" || names(chain)[len(chain)-1] != "ollama" {
+			t.Errorf("unexpected chain: %v", names(chain))
 		}
-		if chain[0].Name() != "claude" || chain[1].Name() != "amp" || chain[2].Name() != "ollama" {
-			t.Errorf("unexpected chain order: %s, %s, %s", chain[0].Name(), chain[1].Name(), chain[2].Name())
+		for _, n := range names(chain) {
+			if n == "amp" {
+				t.Error("experimental amp should be skipped in default auto mode")
+			}
+		}
+		// With opt-in, amp joins the chain.
+		chain = Chain(config.Config{Engine: config.EngineAuto, Experimental: true})
+		got := names(chain)
+		if len(got) != 3 || got[0] != "claude" || got[1] != "amp" || got[2] != "ollama" {
+			t.Errorf("experimental opt-in chain wrong: %v", got)
 		}
 	})
 }
