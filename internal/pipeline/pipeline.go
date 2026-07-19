@@ -307,7 +307,10 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 }
 
 // generate runs a request on the primary engine, failing over to the fallback
-// on error so a mid-run network drop degrades to Ollama instead of aborting.
+// on error so a mid-run network drop (or a machine that was offline from the
+// start) degrades to Ollama instead of aborting. The switch is sticky: once the
+// fallback takes over it becomes the primary for the rest of the run, so an
+// offline job does not re-attempt Claude on every section.
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
 	res, err := r.primary.Generate(ctx, req)
 	if err == nil {
@@ -317,9 +320,11 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		return res, err
 	}
 	r.log(fmt.Sprintf("%s failed (%v); falling back to %s", r.primary.Name(), err, r.fallback.Name()))
-	r.emit(EngineEvent(r.fallback.Name()))
-	r.engineName = r.fallback.Name()
-	return r.fallback.Generate(ctx, req)
+	r.primary = r.fallback
+	r.fallback = nil
+	r.engineName = r.primary.Name()
+	r.emit(EngineEvent(r.engineName))
+	return r.primary.Generate(ctx, req)
 }
 
 func (r *Runner) save(outputDir, markdown string) (string, int, error) {

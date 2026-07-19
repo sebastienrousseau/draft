@@ -129,8 +129,9 @@ flowchart LR
 
 - **Zero-token Claude writing.** Uses the `claude` CLI in headless print mode,
   authenticated by your existing session.
-- **Seamless offline fallback.** Auto mode fails over to Ollama on startup *or*
-  mid-run if the network drops.
+- **Reliable offline fallback.** Auto mode always prefers Claude when the CLI is
+  present; if a call fails because you are offline, it fails over to Ollama and
+  stays there for the rest of the run — no flaky network probe gating the choice.
 - **Grounded by construction.** A verbatim-quote-verified claim ledger is the
   writer's only factual substrate.
 - **Bulk queue.** Pass many PDFs; each becomes its own draft, with live queue

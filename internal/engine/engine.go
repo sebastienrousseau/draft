@@ -11,9 +11,7 @@ package engine
 
 import (
 	"context"
-	"net"
 	"os/exec"
-	"time"
 
 	"github.com/sebastienrousseau/draft/internal/config"
 )
@@ -54,18 +52,6 @@ type Engine interface {
 	Generate(ctx context.Context, req Request) (Result, error)
 }
 
-// Online reports whether Anthropic is reachable, using a short-timeout TCP dial
-// so an offline run fails over to Ollama in well under two seconds.
-func Online(ctx context.Context) bool {
-	d := net.Dialer{Timeout: 1500 * time.Millisecond}
-	conn, err := d.DialContext(ctx, "tcp", "api.anthropic.com:443")
-	if err != nil {
-		return false
-	}
-	_ = conn.Close()
-	return true
-}
-
 // ClaudeAvailable reports whether the claude CLI is installed on PATH.
 func ClaudeAvailable() bool {
 	_, err := exec.LookPath("claude")
@@ -73,10 +59,15 @@ func ClaudeAvailable() bool {
 }
 
 // Select resolves the primary engine and an optional fallback for a run,
-// honouring the configured mode. In auto mode it prefers Claude when the
-// machine is online and the CLI is present, and always keeps Ollama as the
-// offline fallback.
-func Select(ctx context.Context, cfg config.Config) (primary Engine, fallback Engine) {
+// honouring the configured mode.
+//
+// In auto mode it PREFERS Claude whenever the CLI is present, with Ollama as the
+// fallback. It deliberately does not probe the network up front: a flaky
+// connectivity check must never be what downgrades an online machine to the
+// local model. Instead, if a Claude call actually fails (the machine really is
+// offline), the pipeline fails over to Ollama and stays there for the rest of
+// the run. This guarantees "online uses Claude" without a false-negative gate.
+func Select(cfg config.Config) (primary Engine, fallback Engine) {
 	claude := NewClaude(cfg)
 	ollama := NewOllama(cfg)
 	switch cfg.Engine {
@@ -85,7 +76,7 @@ func Select(ctx context.Context, cfg config.Config) (primary Engine, fallback En
 	case config.EngineOllama:
 		return ollama, nil
 	default: // EngineAuto
-		if ClaudeAvailable() && Online(ctx) {
+		if ClaudeAvailable() {
 			return claude, ollama
 		}
 		return ollama, nil
