@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.3] - 2026-07-19
+
+### Added
+
+- **Parallel claim extraction.** On a session provider, sections are mined
+  concurrently (configurable via `DRAFT_EXTRACT_CONCURRENCY`, default 4); Ollama
+  stays sequential. A failed worker retries down the fallback chain.
+- **Live streaming preview.** The Claude backend now uses the `stream-json`
+  event format, forwarding token deltas as they arrive instead of one jump.
+- **Review mode.** `--review <draft.md>` enhances an existing draft with
+  surgical find/replace edits grounded in the sources — validated for
+  uniqueness and non-overlap, and re-checked against the house rules.
+- **Cancellation** of in-flight work when the TUI quits or `--print` is
+  interrupted (signal-aware context).
+- **Experimental provider gating.** Only `claude`, `copilot`, and `codex` are
+  verified end to end and used by auto mode; the rest need `--experimental`.
+
+### Changed
+
+- `codex` promoted to a verified (stable) provider after end-to-end checks.
+- Removed the previously-dead surgical-edit code by wiring it into `--review`.
+- DOCX extraction returns a clear "requires macOS" error off Darwin.
+
+### Tooling
+
+- GitHub Actions pinned to commit SHAs; ubuntu + macOS test matrix; full REUSE
+  3.3 compliance with a `reuse` CI gate; GoReleaser release workflow attaching
+  darwin/linux (amd64/arm64) binaries on tag push.
+
 ## [0.0.2] - 2026-07-19
 
 ### Added
@@ -57,5 +86,6 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.3]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.3
 [0.0.2]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.2
 [0.0.1]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.1

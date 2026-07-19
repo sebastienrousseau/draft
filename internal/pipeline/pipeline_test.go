@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 package pipeline
 
 import (
@@ -6,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sebastienrousseau/draft/internal/config"
@@ -13,13 +17,20 @@ import (
 )
 
 // fakeEngine is a deterministic stand-in for a real backend, so the pipeline's
-// orchestration is exercised without any LLM call.
+// orchestration is exercised without any LLM call. It is safe for the concurrent
+// extraction calls the pipeline makes.
 type fakeEngine struct {
-	name       string
-	failAll    error
-	errOnWrite int // if >0, the Nth write call returns an error
-	writeCalls int
-	writer     func(call int) (string, bool)
+	name             string
+	failAll          error
+	errOnWrite       int    // if >0, the Nth write call returns an error
+	failExtractAfter int    // if >0, extract calls beyond this count return an error
+	editResponse     string // returned for KindEdit (defaults to "[]")
+	failEdit         bool   // if true, KindEdit calls return an error
+	writer           func(call int) (string, bool)
+
+	mu           sync.Mutex
+	writeCalls   int
+	extractCalls int
 }
 
 func (f *fakeEngine) Name() string { return f.name }
@@ -30,16 +41,36 @@ func (f *fakeEngine) Generate(_ context.Context, req engine.Request) (engine.Res
 	}
 	switch req.Kind {
 	case engine.KindExtract:
+		f.mu.Lock()
+		f.extractCalls++
+		n := f.extractCalls
+		f.mu.Unlock()
+		if f.failExtractAfter > 0 && n > f.failExtractAfter {
+			return engine.Result{}, errors.New("extract call failed")
+		}
 		return engine.Result{Text: extractionResponse}, nil
+	case engine.KindEdit:
+		if f.failEdit {
+			return engine.Result{}, errors.New("edit failed")
+		}
+		if f.editResponse == "" {
+			return engine.Result{Text: "[]"}, nil
+		}
+		return engine.Result{Text: f.editResponse}, nil
 	default:
+		f.mu.Lock()
 		f.writeCalls++
-		if f.errOnWrite > 0 && f.writeCalls == f.errOnWrite {
+		n := f.writeCalls
+		f.mu.Unlock()
+		if f.errOnWrite > 0 && n == f.errOnWrite {
 			return engine.Result{}, errors.New("write call failed")
 		}
-		text, truncated := f.writer(f.writeCalls)
+		text, truncated := f.writer(n)
 		return engine.Result{Text: text, Truncated: truncated}, nil
 	}
 }
+
+var errTest = errors.New("boom")
 
 const source = "The system reached a score of 0.82 on the test set. It used 5x fewer samples than before."
 

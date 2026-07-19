@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Command grounding demonstrates draft's offline building blocks with no LLM
 // or network: it verifies claims against a source, renders the ledger, builds a
 // writing prompt, and validates a draft against the house rules.

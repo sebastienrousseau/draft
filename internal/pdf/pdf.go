@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package pdf turns a research source file into normalised plain text and
 // splits that text into bounded sections suitable for claim extraction.
 //

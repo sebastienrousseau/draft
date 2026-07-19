@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Command pipeline runs the full drafting pipeline end to end against an
 // in-process demo engine — no network, no LLM, no session CLI. It shows how the
 // Runner streams progress events and where it writes the finished article.

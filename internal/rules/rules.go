@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package rules holds the shared editorial constants that both the prompt
 // builder and the validator depend on: word limits, the banned vocabulary,
 // metric vocabulary, and the accepted claim taxonomy. Keeping them in one

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package config resolves runtime configuration from command-line flags,
 // environment variables, and sensible defaults, in that order of precedence.
 package config
@@ -23,15 +26,16 @@ const (
 
 // Defaults captured as constants so they are documented in one place.
 const (
-	DefaultOllamaModel  = "qwen3:4b"
-	DefaultExtractModel = "gemma3:4b"
-	DefaultEditModel    = "gemma3:4b"
-	DefaultContextLen   = 8192
-	DefaultPredictLen   = 6000
-	DefaultWriteRetries = 2
-	DefaultMaxContinue  = 3
-	OllamaHost          = "http://127.0.0.1:11434"
-	FocusBlock          = 25 * time.Minute
+	DefaultOllamaModel        = "qwen3:4b"
+	DefaultExtractModel       = "gemma3:4b"
+	DefaultEditModel          = "gemma3:4b"
+	DefaultContextLen         = 8192
+	DefaultPredictLen         = 6000
+	DefaultWriteRetries       = 2
+	DefaultMaxContinue        = 3
+	DefaultExtractConcurrency = 4
+	OllamaHost                = "http://127.0.0.1:11434"
+	FocusBlock                = 25 * time.Minute
 )
 
 // Config is the fully-resolved run configuration shared across packages.
@@ -42,15 +46,16 @@ type Config struct {
 	ExtractModel string // claim-extraction model for the Ollama backend
 	EditModel    string // surgical-review model for the Ollama backend
 
-	ContextLength int
-	PredictLength int
-	WriteRetries  int
-	MaxContinue   int // max length-driven continuations for a single generation
-	ForceNew      bool
-	Merge         bool // combine every input into one draft instead of queueing
-	KeepArtifacts bool // keep prompt/ledger files beside a successful draft
-	Experimental  bool // let auto-selection consider experimental providers
-	OllamaHost    string
+	ContextLength      int
+	PredictLength      int
+	WriteRetries       int
+	MaxContinue        int // max length-driven continuations for a single generation
+	ExtractConcurrency int // parallel claim-extraction workers (session engines only)
+	ForceNew           bool
+	Merge              bool // combine every input into one draft instead of queueing
+	KeepArtifacts      bool // keep prompt/ledger files beside a successful draft
+	Experimental       bool // let auto-selection consider experimental providers
+	OllamaHost         string
 
 	HomeDir    string
 	SourcesDir string
@@ -62,19 +67,20 @@ type Config struct {
 func Load(flags Flags) Config {
 	home, _ := os.UserHomeDir()
 	c := Config{
-		Engine:        env("DRAFT_ENGINE", EngineAuto),
-		Model:         env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
-		OllamaModel:   env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
-		ExtractModel:  env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
-		EditModel:     env("DRAFT_EDIT_MODEL", env("DRAFT_MODEL", DefaultEditModel)),
-		ContextLength: envInt("DRAFT_NUM_CTX", DefaultContextLen, 512),
-		PredictLength: envInt("DRAFT_NUM_PREDICT", DefaultPredictLen, 1024),
-		WriteRetries:  envInt("DRAFT_WRITE_RETRIES", DefaultWriteRetries, 0),
-		MaxContinue:   envInt("DRAFT_MAX_CONTINUE", DefaultMaxContinue, 0),
-		OllamaHost:    env("OLLAMA_HOST", OllamaHost),
-		HomeDir:       home,
-		SourcesDir:    filepath.Join(home, "Drop", "Drafts", "Sources"),
-		DraftsDir:     filepath.Join(home, "Drop", "Drafts"),
+		Engine:             env("DRAFT_ENGINE", EngineAuto),
+		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
+		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
+		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
+		EditModel:          env("DRAFT_EDIT_MODEL", env("DRAFT_MODEL", DefaultEditModel)),
+		ContextLength:      envInt("DRAFT_NUM_CTX", DefaultContextLen, 512),
+		PredictLength:      envInt("DRAFT_NUM_PREDICT", DefaultPredictLen, 1024),
+		WriteRetries:       envInt("DRAFT_WRITE_RETRIES", DefaultWriteRetries, 0),
+		MaxContinue:        envInt("DRAFT_MAX_CONTINUE", DefaultMaxContinue, 0),
+		ExtractConcurrency: envInt("DRAFT_EXTRACT_CONCURRENCY", DefaultExtractConcurrency, 1),
+		OllamaHost:         env("OLLAMA_HOST", OllamaHost),
+		HomeDir:            home,
+		SourcesDir:         filepath.Join(home, "Drop", "Drafts", "Sources"),
+		DraftsDir:          filepath.Join(home, "Drop", "Drafts"),
 	}
 
 	// Flags win over environment.

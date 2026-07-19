@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Command providers prints draft's supported token-free session providers, in
 // auto-selection preference order, and whether each CLI is installed on PATH.
 //

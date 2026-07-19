@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 package engine
 
 import "os/exec"
@@ -30,20 +33,23 @@ type Provider struct {
 	// providers are skipped by auto-selection unless the user opts in with
 	// --experimental; they can always be forced with --engine <name>.
 	Experimental bool
+	// StreamJSON parses the Claude Code stream-json event format instead of raw
+	// text, forwarding token deltas as they arrive for a smooth live preview.
+	StreamJSON bool
 }
 
 // Providers is the registry of supported session CLIs, in auto-selection
 // preference order. The first non-experimental one found on PATH becomes the
 // default online backend. Invocations were derived from each CLI's own --help.
 //
-// claude and copilot are verified end to end (they return clean Markdown through
-// this abstraction). The rest are Experimental: their invocation is correct per
-// --help, but their output has not been verified for a full article, so
-// auto-selection skips them unless --experimental is set.
+// claude, copilot, and codex are verified end to end (they return clean Markdown
+// through this abstraction). The rest are Experimental: their invocation is
+// correct per --help, but their output has not been verified for a full article,
+// so auto-selection skips them unless --experimental is set.
 var Providers = []Provider{
-	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true},
+	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
 	{Name: "copilot", Bin: "copilot", Args: []string{"-p", "--allow-all-tools"}},
-	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", Experimental: true},
+	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model"},
 	{Name: "gemini", Bin: "gemini", Args: []string{"-p"}, ModelFlag: "--model", Experimental: true},
 	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", Experimental: true},
 	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 package engine
 
 import (
@@ -30,14 +33,14 @@ func TestProviderNames(t *testing.T) {
 }
 
 func TestFirstAvailableProvider(t *testing.T) {
-	// codex and amp are experimental; without opt-in none qualify.
-	withAvailable(map[string]bool{"codex": true, "amp": true}, func() {
+	// amp and grok are experimental; without opt-in none qualify.
+	withAvailable(map[string]bool{"amp": true, "grok": true}, func() {
 		if _, ok := FirstAvailableProvider(false); ok {
 			t.Error("experimental providers should be skipped without opt-in")
 		}
 		p, ok := FirstAvailableProvider(true)
-		if !ok || p.Name != "codex" { // codex precedes amp in preference order
-			t.Errorf("expected codex first with opt-in, got %+v %v", p, ok)
+		if !ok || p.Name != "amp" { // amp precedes grok in preference order
+			t.Errorf("expected amp first with opt-in, got %+v %v", p, ok)
 		}
 	})
 	// copilot is verified (non-experimental) and qualifies by default.

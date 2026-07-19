@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 // Package validate enforces the house article rules before a draft is saved:
 // required structure, length, banned vocabulary, emoji, truncation, and
 // faithfulness to the verified claim ledger.
