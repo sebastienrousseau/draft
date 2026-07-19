@@ -15,7 +15,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sebastienrousseau/draft/internal/claims"
@@ -53,10 +55,12 @@ var PhaseNames = [phaseCount]string{
 	"Resolve source", "Read and section", "Extract claims", "Write article", "Validate and save",
 }
 
-// Job is one unit of work: one or more resolved source paths that produce one
-// draft.
+// Job is one unit of work. Normally it is one or more resolved source paths that
+// produce one draft; when ReviewPath is set, it instead enhances that existing
+// draft with surgical edits grounded in the sources.
 type Job struct {
-	Sources []string // absolute paths
+	Sources    []string // absolute paths
+	ReviewPath string   // if set, enhance this existing draft instead of generating
 }
 
 // Event types reported during a run. Callers type-switch on them.
@@ -122,6 +126,9 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 }
 
 func (r *Runner) run(ctx context.Context, job Job) error {
+	if job.ReviewPath != "" {
+		return r.review(ctx, job)
+	}
 	// Phase 0: resolve.
 	r.phase(PhaseResolve, "running")
 	if len(job.Sources) == 0 {
@@ -217,27 +224,86 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 	return all, nil
 }
 
-// extractClaims runs the extraction model over each section and writes the full
-// ledger incrementally so a long run leaves a usable artefact even if it stops.
+// extractClaims mines quote-verified claims from every section. The first
+// section runs through the engine chain to settle on a working backend; the
+// remaining sections then run concurrently on that backend when it is a session
+// provider (independent subprocess per call), or sequentially for Ollama (a
+// single local model that should not be hit in parallel). Any section that
+// fails a parallel call is retried through the chain, so a mid-run provider drop
+// still degrades to Ollama.
 func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outputDir string) ([]claims.Record, int, error) {
-	var records []claims.Record
-	dropped := 0
 	ledgerPath := filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-verified-claim-ledger.md")
 	r.ledgerPath = ledgerPath
-	for i, sec := range sections {
-		r.log(fmt.Sprintf("claim section %d/%d", i+1, len(sections)))
-		res, err := r.generate(ctx, engine.Request{
-			Kind:        engine.KindExtract,
-			Prompt:      prompt.Claim(sec.Body),
-			Temperature: extractTemperature,
-		})
+	raw := make([]string, len(sections))
+
+	extract := func(body string) (string, error) {
+		return r.generateText(ctx, engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature})
+	}
+
+	// Section 0 settles the engine via the chain.
+	r.log(fmt.Sprintf("claim section 1/%d", len(sections)))
+	text0, err := extract(sections[0].Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
+	}
+	raw[0] = text0
+
+	conc := r.extractConcurrency()
+	pinned := r.engines[r.cur]
+	if conc > 1 && len(sections) > 1 {
+		r.log(fmt.Sprintf("extracting %d section(s) with %d workers via %s", len(sections)-1, conc, r.engineName))
+	}
+
+	var mu sync.Mutex
+	var failed []int
+	if conc > 1 {
+		sem := make(chan struct{}, conc)
+		var wg sync.WaitGroup
+		for i := 1; i < len(sections); i++ {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				res, err := pinned.Generate(ctx, engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(sections[i].Body), Temperature: extractTemperature})
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					failed = append(failed, i)
+					return
+				}
+				raw[i] = res.Text
+			}(i)
+		}
+		wg.Wait()
+	} else {
+		for i := 1; i < len(sections); i++ {
+			r.log(fmt.Sprintf("claim section %d/%d", i+1, len(sections)))
+			text, err := extract(sections[i].Body)
+			if err != nil {
+				return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
+			}
+			raw[i] = text
+		}
+	}
+
+	// Retry any parallel failures through the chain (handles a provider drop).
+	sort.Ints(failed)
+	for _, i := range failed {
+		r.log(fmt.Sprintf("retrying claim section %d/%d", i+1, len(sections)))
+		text, err := extract(sections[i].Body)
 		if err != nil {
 			return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
 		}
-		secRecords, secDropped := claims.Parse(res.Text, sec.Body)
+		raw[i] = text
+	}
+
+	var records []claims.Record
+	dropped := 0
+	for i, sec := range sections {
+		secRecords, secDropped := claims.Parse(raw[i], sec.Body)
 		records = append(records, secRecords...)
 		dropped += secDropped
-		_ = os.WriteFile(ledgerPath, []byte(claims.RenderLedger(records, dropped)+"\n"), 0o644)
 	}
 	if deduped := claims.Dedupe(records); len(deduped) != len(records) {
 		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
@@ -246,6 +312,28 @@ func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outp
 	_ = os.WriteFile(ledgerPath, []byte(claims.RenderLedger(records, dropped)+"\n"), 0o644)
 	r.log("claims saved to " + shortPath(r.cfg, ledgerPath))
 	return records, dropped, nil
+}
+
+// extractConcurrency is the number of parallel extraction workers for the
+// settled engine: 1 for Ollama (a single local model), the configured value
+// otherwise.
+func (r *Runner) extractConcurrency() int {
+	if r.engineName == "ollama" {
+		return 1
+	}
+	if n := r.cfg.ExtractConcurrency; n > 1 {
+		return n
+	}
+	return 1
+}
+
+// generateText runs a request through the engine chain and returns its text.
+func (r *Runner) generateText(ctx context.Context, req engine.Request) (string, error) {
+	res, err := r.generate(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return res.Text, nil
 }
 
 // write runs the initial generation and continues past any length-limit stop.

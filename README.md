@@ -138,9 +138,9 @@ output not yet verified end to end — are used by auto only with
 
 | Provider | Status | Headless invocation |
 | -------- | ------ | ------------------- |
-| `claude` | stable | `claude -p --output-format text` |
+| `claude` | stable | `claude -p --output-format stream-json` (live-streamed) |
 | `copilot` | stable | `copilot -p --allow-all-tools` |
-| `codex` | experimental | `codex exec` |
+| `codex` | stable | `codex exec` |
 | `gemini` | experimental | `gemini -p` |
 | `cursor-agent` | experimental | `cursor-agent -p --output-format text` |
 | `amp` | experimental | `amp -x` |
@@ -165,6 +165,14 @@ Run `go run ./examples/providers` to see status and which are installed.
 - **Bulk queue, online or offline.** Pass many PDFs; each becomes its own draft
   with live queue progress, and each re-selects its engine independently.
   `--merge` combines them into one.
+- **Fast, parallel grounding.** On a session provider, claim extraction runs
+  across sections concurrently (Ollama stays sequential); a failed worker retries
+  down the fallback chain.
+- **Live streaming.** The Claude backend uses the `stream-json` event format, so
+  the preview fills token-by-token instead of in one jump.
+- **Enhance, don't rewrite.** `--review <draft.md>` asks the model for exact
+  find/replace edits grounded in your sources, applies only unique non-overlapping
+  ones, and re-checks the house rules before saving.
 - **Truncation-proof.** Detects length-limited stops and continues to a clean
   ending.
 - **House-style enforcement.** Banned words and phrases, British English, no
@@ -191,6 +199,7 @@ draft [flags] <source> [more-sources...]
 | `--num-predict <n>` | Ollama max output tokens (default `6000`)               |
 | `--force-new`       | Draft even if today's folder already has one            |
 | `--merge`           | Combine all sources into one draft                      |
+| `--review <draft>`  | Enhance an existing draft with surgical edits           |
 | `--keep-artifacts`  | Keep the claim ledger beside a successful draft         |
 | `--print`           | Run without the TUI; print draft paths to stdout        |
 | `--version`         | Print version and exit                                  |
@@ -214,6 +223,8 @@ Flags win over environment variables, which win over defaults.
 | `DRAFT_NUM_PREDICT`    | `6000`      | Ollama max output tokens                    |
 | `DRAFT_WRITE_RETRIES`  | `2`         | Rewrite attempts on rule violations         |
 | `DRAFT_MAX_CONTINUE`   | `3`         | Max continuations on a length-limited stop  |
+| `DRAFT_EXTRACT_CONCURRENCY` | `4`    | Parallel extraction workers (session engines) |
+| `DRAFT_EXPERIMENTAL`   | —           | `1` to let auto use experimental providers  |
 | `OLLAMA_HOST`          | `http://127.0.0.1:11434` | Ollama server address          |
 
 ---
@@ -270,6 +281,7 @@ type Result struct {
 | `draft --engine ollama paper.pdf`                | Force the local model (offline)                  |
 | `draft --engine codex paper.pdf`                 | Force a specific session provider                |
 | `draft --model opus paper.pdf`                   | Override the session model                        |
+| `draft --review draft.md paper.pdf`              | Enhance an existing draft from the source         |
 | `draft --print paper.pdf > path.txt`             | Headless; capture the output path                |
 | `DRAFT_NUM_CTX=2048 draft paper.pdf`             | Low-memory Ollama profile                        |
 

@@ -19,6 +19,12 @@ import (
 // LedgerPlaceholder is substituted with the compact verified claim ledger.
 const LedgerPlaceholder = "{{VERIFIED_CLAIM_LEDGER}}"
 
+// MaxReviewSourceChars and MaxDraftChars bound the review prompt inputs.
+const (
+	MaxReviewSourceChars = 6000
+	MaxDraftChars        = 80000
+)
+
 // Claim builds the extraction prompt for a single source section.
 func Claim(source string) string {
 	return fmt.Sprintf(`You extract verified facts from a source document. You do NOT summarize, interpret, rephrase for style, or add anything. You are building a claim list that a later writing step will rely on, so a wrong or unsupported entry is worse than a missing one.
@@ -128,8 +134,78 @@ func ContinueWriting(partial string) string {
 %s`, tail)
 }
 
+// Review builds the surgical-edit prompt for enhancing an existing draft: the
+// model returns a JSON array of exact find/replace edits, never a rewrite.
+func Review(research, draft, ledger string) string {
+	return fmt.Sprintf(`You are editing an existing article. You do not rewrite it. You return a list of precise, individual edits, and nothing else.
+
+The draft is mostly good. Your job is the smallest set of changes that raises quality. If a sentence works, leave it untouched. You are not polishing; you are fixing specific, nameable problems.
+
+Use the verified claim ledger only to make existing claims more specific or correct. Do not add new sections. Do not restructure the article.
+
+## WHAT COUNTS AS A PROBLEM WORTH FIXING
+Flag an edit only when one of these is true:
+- A banned word or phrase from the STYLE RULES appears.
+- A sentence is generic where a specific detail from the source material would land harder.
+- Three or more sentences or paragraphs in a row open the same way.
+- Choppiness or fragments are used for effect and read as forced.
+- The ending summarizes instead of closing on a sharp thought, a call to action, or a prediction.
+- A qualifier is deadweight: very, really, quite, basically, essentially, arguably.
+- A numerical claim contradicts the source material.
+
+The test for every edit: would a sharp editor circle this in red? If it is a matter of taste between two working sentences, do NOT touch it.
+
+## MATCHING RULES
+- "find" must be copied VERBATIM from the draft: exact characters, spacing, and punctuation.
+- "find" must be UNIQUE in the document. If the phrase appears more than once, extend "find" with enough surrounding text to make it appear exactly once.
+- Keep "find" as short as possible while still unique. Do not quote a whole paragraph to change one word.
+- "replace" is the full replacement for that exact span.
+- Do not overlap edits. No two "find" spans may share text.
+
+## OUTPUT
+Return ONLY a JSON array, no prose before or after. Each element:
+
+[
+  {
+    "find": "exact text from the draft",
+    "replace": "the improved text",
+    "reason": "banned word | generic | repeated opening | forced choppiness | weak ending | filler | factual correction"
+  }
+]
+
+If the draft needs no changes, return exactly: []
+
+Order edits by their position in the text, top to bottom.
+
+## STYLE RULES
+%s
+
+## VERIFIED CLAIM LEDGER
+%s
+
+## SOURCE MATERIAL FOR CONTEXT ONLY
+Use this only to understand nearby wording. Do not add factual claims from this section unless they also appear in the verified claim ledger.
+
+%s
+
+## DRAFT
+%s`,
+		styleRules,
+		ledger,
+		clip(research, MaxReviewSourceChars),
+		clip(draft, MaxDraftChars),
+	)
+}
+
 func joinSorted(in []string) string {
 	cp := append([]string(nil), in...)
 	sort.Strings(cp)
 	return strings.Join(cp, ", ")
+}
+
+func clip(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }

@@ -6,6 +6,7 @@ package engine
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -74,7 +75,13 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
-	out := streamAll(stdout, req.OnChunk)
+	var out string
+	var streamErr error
+	if s.provider.StreamJSON {
+		out, streamErr = parseStreamJSON(stdout, req.OnChunk)
+	} else {
+		out = streamAll(stdout, req.OnChunk)
+	}
 
 	if err := cmd.Wait(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
@@ -83,7 +90,69 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		}
 		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(msg))
 	}
+	if streamErr != nil {
+		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(streamErr.Error()))
+	}
 	return Result{Text: strings.TrimSpace(out)}, nil
+}
+
+// parseStreamJSON reads the Claude Code stream-json event stream, forwarding
+// each text delta to onChunk as it arrives (for a live preview) and returning
+// the complete assistant text. The authoritative final `result` is preferred
+// over the accumulated deltas; an error result is surfaced as an error.
+func parseStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	var acc strings.Builder
+	var result string
+	var haveResult, isError bool
+	for scanner.Scan() {
+		var ev struct {
+			Type  string `json:"type"`
+			Event struct {
+				Type  string `json:"type"`
+				Delta struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"delta"`
+			} `json:"event"`
+			Subtype string `json:"subtype"`
+			IsError bool   `json:"is_error"`
+			Result  string `json:"result"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+			continue // ignore non-JSON or partial lines
+		}
+		switch ev.Type {
+		case "stream_event":
+			if ev.Event.Type == "content_block_delta" && ev.Event.Delta.Type == "text_delta" && ev.Event.Delta.Text != "" {
+				acc.WriteString(ev.Event.Delta.Text)
+				if onChunk != nil {
+					onChunk(ev.Event.Delta.Text)
+				}
+			}
+		case "result":
+			result = ev.Result
+			haveResult = true
+			isError = ev.IsError
+			if isError && result == "" {
+				result = ev.Subtype
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return acc.String(), err
+	}
+	if isError {
+		if result == "" {
+			result = "provider reported an error"
+		}
+		return "", fmt.Errorf("%s", result)
+	}
+	if haveResult && strings.TrimSpace(result) != "" {
+		return result, nil
+	}
+	return acc.String(), nil
 }
 
 // streamAll reads r to completion, forwarding each chunk to onChunk if set, and

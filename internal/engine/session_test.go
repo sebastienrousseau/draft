@@ -38,6 +38,15 @@ func TestHelperProcess(t *testing.T) {
 		buf := new(strings.Builder)
 		_, _ = io.Copy(buf, os.Stdin)
 		os.Stdout.WriteString("STDIN:" + buf.String())
+	case "stream-json":
+		os.Stdout.WriteString(`{"type":"system","subtype":"init"}` + "\n")
+		os.Stdout.WriteString(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"# Hi"}}}` + "\n")
+		os.Stdout.WriteString(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":" there."}}}` + "\n")
+		os.Stdout.WriteString(`{"type":"result","subtype":"success","is_error":false,"result":"# Hi there."}` + "\n")
+	case "stream-json-noresult":
+		os.Stdout.WriteString(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"only deltas"}}}` + "\n")
+	case "stream-json-error":
+		os.Stdout.WriteString(`{"type":"result","subtype":"error_max_turns","is_error":true,"result":""}` + "\n")
 	default:
 		os.Stdout.WriteString("# Title\n\nbody text.")
 	}
@@ -64,9 +73,9 @@ func withExec(mode string, fn func()) {
 
 func TestSessionGenerateSuccess(t *testing.T) {
 	withExec("default", func() {
-		s, ok := NewSession("claude", config.Config{})
+		s, ok := NewSession("codex", config.Config{}) // codex is a text-mode provider
 		if !ok {
-			t.Fatal("claude provider should exist")
+			t.Fatal("codex provider should exist")
 		}
 		var streamed strings.Builder
 		res, err := s.Generate(context.Background(), Request{
@@ -88,13 +97,13 @@ func TestSessionGenerateSuccess(t *testing.T) {
 
 func TestSessionGenerateError(t *testing.T) {
 	withExec("fail", func() {
-		s, _ := NewSession("claude", config.Config{})
+		s, _ := NewSession("codex", config.Config{})
 		_, err := s.Generate(context.Background(), Request{Prompt: "x"})
 		if err == nil {
 			t.Fatal("expected error from failing CLI")
 		}
 		// Only the first stderr line is surfaced, prefixed with the provider.
-		if !strings.Contains(err.Error(), "claude: boom") {
+		if !strings.Contains(err.Error(), "codex: boom") {
 			t.Errorf("error should carry provider + first stderr line, got %q", err)
 		}
 	})
@@ -102,13 +111,41 @@ func TestSessionGenerateError(t *testing.T) {
 
 func TestSessionPromptViaStdin(t *testing.T) {
 	withExec("echo-stdin", func() {
-		s, _ := NewSession("claude", config.Config{}) // claude uses stdin
+		// A text-mode provider that delivers the prompt on stdin.
+		s := &Session{provider: Provider{Name: "t", Bin: "cli", PromptViaStdin: true}}
 		res, err := s.Generate(context.Background(), Request{Prompt: "hello prompt"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(res.Text, "STDIN:hello prompt") {
 			t.Errorf("prompt should be delivered on stdin, got %q", res.Text)
+		}
+	})
+}
+
+func TestSessionStreamJSON(t *testing.T) {
+	withExec("stream-json", func() {
+		s := &Session{provider: Provider{Name: "claude", Bin: "claude", PromptViaStdin: true, StreamJSON: true}}
+		var streamed strings.Builder
+		res, err := s.Generate(context.Background(), Request{Prompt: "p", OnChunk: func(c string) { streamed.WriteString(c) }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Text != "# Hi there." {
+			t.Errorf("stream-json result = %q, want %q", res.Text, "# Hi there.")
+		}
+		if streamed.String() != "# Hi there." {
+			t.Errorf("deltas should stream to OnChunk, got %q", streamed.String())
+		}
+	})
+}
+
+func TestSessionStreamJSONError(t *testing.T) {
+	withExec("stream-json-error", func() {
+		s := &Session{provider: Provider{Name: "claude", Bin: "claude", PromptViaStdin: true, StreamJSON: true}}
+		_, err := s.Generate(context.Background(), Request{Prompt: "p"})
+		if err == nil || !strings.Contains(err.Error(), "error_max_turns") {
+			t.Errorf("stream-json is_error should surface as an error, got %v", err)
 		}
 	})
 }
@@ -131,7 +168,7 @@ func TestSessionPromptViaArg(t *testing.T) {
 
 func TestSessionModelFlag(t *testing.T) {
 	withExec("echo-args", func() {
-		s, _ := NewSession("claude", config.Config{Model: "opus"})
+		s, _ := NewSession("codex", config.Config{Model: "opus"}) // codex is text-mode with --model
 		res, _ := s.Generate(context.Background(), Request{Prompt: "p"})
 		if !strings.Contains(res.Text, "--model\x1fopus") {
 			t.Errorf("model flag should be passed, got %q", res.Text)
@@ -191,6 +228,16 @@ func TestSessionContextCancelled(t *testing.T) {
 		cancel() // cancelled before the call
 		if _, err := s.Generate(ctx, Request{Prompt: "p"}); err == nil {
 			t.Error("a cancelled context should abort the session call")
+		}
+	})
+}
+
+func TestSessionStreamJSONNoResult(t *testing.T) {
+	withExec("stream-json-noresult", func() {
+		s := &Session{provider: Provider{Name: "claude", Bin: "claude", PromptViaStdin: true, StreamJSON: true}}
+		res, err := s.Generate(context.Background(), Request{Prompt: "p"})
+		if err != nil || res.Text != "only deltas" {
+			t.Errorf("no-result stream should return accumulated deltas, got %q %v", res.Text, err)
 		}
 	})
 }
