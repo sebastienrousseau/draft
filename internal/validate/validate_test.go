@@ -1,6 +1,9 @@
 package validate
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestEndsSentence(t *testing.T) {
 	cases := []struct {
@@ -66,4 +69,25 @@ func contains(ss []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func TestErrorsEachMissingElement(t *testing.T) {
+	base := "# T\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\n" + filler(600) + "."
+	// Sanity: base is valid.
+	if e := Errors(base); len(e) != 0 {
+		t.Fatalf("base should be valid: %v", e)
+	}
+	checks := map[string]string{
+		"body-only mode must start": "no h1 " + base[2:],
+		"missing post-lead aside":   strings.Replace(base, `<aside class="post-lead">`, "", 1),
+		"missing Executive Summary": strings.Replace(base, "Executive Summary", "Overview", 1),
+		"missing section headings":  strings.Replace(base, "## S", "S", 1),
+		"contains emoji":            base + " 🚀",
+		"minimum is":                "# T\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\ntiny.",
+	}
+	for want, in := range checks {
+		if !hasSubstr(Errors(in), want) {
+			t.Errorf("expected error %q for its input", want)
+		}
+	}
 }

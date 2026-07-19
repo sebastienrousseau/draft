@@ -1,9 +1,10 @@
-// Package engine abstracts text generation over two interchangeable backends:
+// Package engine abstracts text generation over interchangeable backends:
 //
-//   - Claude, driven through the `claude` CLI in headless print mode, which uses
-//     the user's already-authenticated session (no API token) and is preferred
-//     whenever the machine is online.
-//   - Ollama, the local HTTP server, used offline or when Claude is unavailable.
+//   - Session providers (Claude, Codex, Gemini, Copilot, Cursor, Amp, Crush,
+//     Goose, Grok, Qwen, ...), each driven through its own CLI in headless mode
+//     using the user's already-authenticated session — no API token.
+//   - Ollama, the local HTTP server, used offline or when no session CLI is
+//     available.
 //
 // Callers depend only on the Engine interface, so the pipeline is identical
 // regardless of which backend actually runs.
@@ -11,16 +12,16 @@ package engine
 
 import (
 	"context"
-	"os/exec"
 
 	"github.com/sebastienrousseau/draft/internal/config"
 )
 
 // Kind identifies the pipeline stage a request belongs to, letting a backend
 // pick an appropriate model (Ollama uses a small model to extract and a larger
-// one to write; Claude uses one model throughout).
+// one to write; a session provider uses one model throughout).
 type Kind int
 
+// Generation stages a Request can belong to.
 const (
 	KindExtract Kind = iota // per-section claim extraction
 	KindWrite               // full article generation
@@ -52,33 +53,54 @@ type Engine interface {
 	Generate(ctx context.Context, req Request) (Result, error)
 }
 
-// ClaudeAvailable reports whether the claude CLI is installed on PATH.
-func ClaudeAvailable() bool {
-	_, err := exec.LookPath("claude")
-	return err == nil
-}
-
-// Select resolves the primary engine and an optional fallback for a run,
-// honouring the configured mode.
+// Chain resolves the ordered list of engines to try for a run, honouring the
+// configured mode. The pipeline uses the first that succeeds and sticks with it.
 //
-// In auto mode it PREFERS Claude whenever the CLI is present, with Ollama as the
-// fallback. It deliberately does not probe the network up front: a flaky
-// connectivity check must never be what downgrades an online machine to the
-// local model. Instead, if a Claude call actually fails (the machine really is
-// offline), the pipeline fails over to Ollama and stays there for the rest of
-// the run. This guarantees "online uses Claude" without a false-negative gate.
-func Select(cfg config.Config) (primary Engine, fallback Engine) {
-	claude := NewClaude(cfg)
+//   - "ollama": just the local backend.
+//   - a provider name: that session provider, then Ollama.
+//   - "auto" (default): every installed session provider in preference order,
+//     then Ollama.
+//
+// It deliberately does not probe the network up front: a flaky connectivity
+// check must never be what downgrades an online machine to the local model.
+// Instead, if a session call fails (the provider is offline or not logged in),
+// the pipeline advances to the next engine in the chain and stays there.
+func Chain(cfg config.Config) []Engine {
 	ollama := NewOllama(cfg)
 	switch cfg.Engine {
-	case config.EngineClaude:
-		return claude, nil
 	case config.EngineOllama:
-		return ollama, nil
-	default: // EngineAuto
-		if ClaudeAvailable() {
-			return claude, ollama
+		return []Engine{ollama}
+	case config.EngineAuto, "":
+		var chain []Engine
+		for _, p := range Providers {
+			if available(p.Bin) {
+				if s, ok := NewSession(p.Name, cfg); ok {
+					chain = append(chain, s)
+				}
+			}
 		}
-		return ollama, nil
+		return append(chain, ollama)
+	default:
+		if s, ok := NewSession(cfg.Engine, cfg); ok {
+			return []Engine{s, ollama}
+		}
+		return []Engine{ollama}
 	}
+}
+
+// ResolveModel returns the model label the given engine will use, for display.
+func ResolveModel(cfg config.Config, e Engine) string {
+	if e == nil {
+		return ""
+	}
+	if e.Name() == "ollama" {
+		return cfg.OllamaModel
+	}
+	if cfg.Model != "" {
+		return cfg.Model
+	}
+	if p, ok := LookupProvider(e.Name()); ok && p.DefaultModel != "" {
+		return p.DefaultModel
+	}
+	return "session default"
 }
