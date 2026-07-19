@@ -44,3 +44,6 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.1.6
+          # Skip the remote JSON-schema fetch (flaky CDN, returns 503); the
+          # config is verified locally before commit.
+          verify: false
