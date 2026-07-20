@@ -42,10 +42,10 @@ type Provider struct {
 // preference order. The first non-experimental one found on PATH becomes the
 // default online backend. Invocations were derived from each CLI's own --help.
 //
-// claude, copilot, and codex are verified end to end (they return clean Markdown
-// through this abstraction). The rest are Experimental: their invocation is
-// correct per --help, but their output has not been verified for a full article,
-// so auto-selection skips them unless --experimental is set.
+// claude, copilot, codex, and grok are verified end to end (they return clean
+// Markdown through this abstraction). The rest are Experimental: their invocation
+// is correct per --help, but their output has not been verified for a full
+// article, so auto-selection skips them unless --experimental is set.
 var Providers = []Provider{
 	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
 	{Name: "copilot", Bin: "copilot", Args: []string{"-p", "--allow-all-tools"}},
@@ -55,7 +55,7 @@ var Providers = []Provider{
 	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
 	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
 	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}, Experimental: true},
-	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, Experimental: true},
+	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}},
 	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
 }
 

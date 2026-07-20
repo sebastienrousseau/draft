@@ -146,7 +146,7 @@ output not yet verified end to end — are used by auto only with
 | `amp` | experimental | `amp -x` |
 | `crush` | experimental | `crush run` |
 | `goose` | experimental | `goose run --no-session -t` |
-| `grok` | experimental | `grok --output-format plain --single` |
+| `grok` | stable | `grok --output-format plain --single` |
 | `qwen` | experimental | `qwen -p` |
 
 Run `go run ./examples/providers` to see status and which are installed.

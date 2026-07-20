@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.4] - 2026-07-20
+
+### Changed
+
+- `grok` promoted to a verified (stable) provider after an end-to-end check
+  (clean, grounded 1.1k-word draft). Stable providers are now claude, copilot,
+  codex, and grok.
+
 ## [0.0.3] - 2026-07-19
 
 ### Added
@@ -86,6 +94,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.4]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.4
 [0.0.3]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.3
 [0.0.2]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.2
 [0.0.1]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.1

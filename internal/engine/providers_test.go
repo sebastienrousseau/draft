@@ -33,13 +33,13 @@ func TestProviderNames(t *testing.T) {
 }
 
 func TestFirstAvailableProvider(t *testing.T) {
-	// amp and grok are experimental; without opt-in none qualify.
-	withAvailable(map[string]bool{"amp": true, "grok": true}, func() {
+	// amp and crush are experimental; without opt-in none qualify.
+	withAvailable(map[string]bool{"amp": true, "crush": true}, func() {
 		if _, ok := FirstAvailableProvider(false); ok {
 			t.Error("experimental providers should be skipped without opt-in")
 		}
 		p, ok := FirstAvailableProvider(true)
-		if !ok || p.Name != "amp" { // amp precedes grok in preference order
+		if !ok || p.Name != "amp" { // amp precedes crush in preference order
 			t.Errorf("expected amp first with opt-in, got %+v %v", p, ok)
 		}
 	})
