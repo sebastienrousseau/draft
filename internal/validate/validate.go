@@ -19,13 +19,14 @@ import (
 )
 
 var (
-	h2Pat        = regexp.MustCompile(`(?m)^##\s+.+$`)
-	tagPat       = regexp.MustCompile(`<[^>]+>`)
-	mdNoisePat   = regexp.MustCompile("[#>*`_]+")
-	wordTokenPat = regexp.MustCompile(`[a-z][a-z-]{4,}`)
-	paraWordPat  = regexp.MustCompile(`[a-z0-9]+`)
-	blankLinePat = regexp.MustCompile(`\n\s*\n`)
-	bannedWordRe = compileWordBoundary(rules.BannedWords)
+	h2Pat          = regexp.MustCompile(`(?m)^##\s+.+$`)
+	tagPat         = regexp.MustCompile(`<[^>]+>`)
+	mdNoisePat     = regexp.MustCompile("[#>*`_]+")
+	wordTokenPat   = regexp.MustCompile(`[a-z][a-z-]{4,}`)
+	paraWordPat    = regexp.MustCompile(`[a-z0-9]+`)
+	blankLinePat   = regexp.MustCompile(`\n\s*\n`)
+	bannedWordRe   = compileWordBoundary(rules.BannedWords)
+	placeholderPat = regexp.MustCompile(`(?mi)^(#{1,6}\s*(\.{2,}|…)\s*$|\*\*opening thesis paragraph)`)
 )
 
 // Duplicate-detection tuning.
@@ -50,6 +51,9 @@ func Errors(md string) []string {
 	}
 	if !h2Pat.MatchString(md) {
 		errs = append(errs, "missing section headings")
+	}
+	if placeholderPat.MatchString(md) {
+		errs = append(errs, "contains an unfilled skeleton placeholder (title, heading, or thesis)")
 	}
 	if w := WordCount(md); w < rules.MinWords {
 		errs = append(errs, fmt.Sprintf("article is %d words; minimum is %d", w, rules.MinWords))

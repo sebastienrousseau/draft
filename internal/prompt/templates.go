@@ -22,7 +22,7 @@ const outputSkeleton = `# Title
 >
 > - ...
 
-## First analytical section
+## ...
 
 ...`
 

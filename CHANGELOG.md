@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.9] - 2026-07-21
+
+### Fixed
+
+- **Skeleton placeholder no longer leaks into drafts.** The output skeleton used
+  a concrete-looking heading ("First analytical section") that an obedient local
+  model copied verbatim instead of replacing. The skeleton now uses a neutral
+  placeholder, the writing prompt explicitly says to replace placeholders with
+  specific headings, and the validator rejects any unfilled placeholder (a "..."
+  heading or a leaked thesis marker) as a safety net. gemma now writes real,
+  descriptive section headings.
+
 ## [0.0.8] - 2026-07-21
 
 ### Changed
@@ -154,6 +166,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.9]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.9
 [0.0.8]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.8
 [0.0.7]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.7
 [0.0.6]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.6

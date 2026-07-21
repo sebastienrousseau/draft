@@ -87,6 +87,7 @@ func TestErrorsEachMissingElement(t *testing.T) {
 		"missing section headings":  strings.Replace(base, "## S", "S", 1),
 		"contains emoji":            base + " 🚀",
 		"minimum is":                "# T\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\ntiny.",
+		"unfilled skeleton":         strings.Replace(base, "## S", "## ...", 1),
 	}
 	for want, in := range checks {
 		if !hasSubstr(Errors(in), want) {
