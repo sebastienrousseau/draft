@@ -14,7 +14,7 @@ import (
 )
 
 // Engine selection sentinels. Any other value names a specific session provider
-// (claude, codex, gemini, copilot, cursor-agent, amp, crush, goose, grok, ...).
+// (claude, codex, agy, copilot, cursor-agent, amp, crush, goose, grok, ...).
 const (
 	// EngineAuto picks the first installed session provider and falls back to
 	// Ollama if a call fails (offline). This is the default.

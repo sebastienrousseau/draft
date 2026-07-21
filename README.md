@@ -144,7 +144,7 @@ output not yet verified end to end — are used by auto only with
 | `claude` | stable | `claude -p --output-format stream-json` (live-streamed) |
 | `copilot` | stable | `copilot -p --allow-all-tools` |
 | `codex` | stable | `codex exec` |
-| `gemini` | experimental | `gemini -p` |
+| `agy` | stable | `agy -p` (Google Antigravity) |
 | `cursor-agent` | experimental | `cursor-agent -p --output-format text` |
 | `amp` | experimental | `amp -x` |
 | `crush` | experimental | `crush run` |
