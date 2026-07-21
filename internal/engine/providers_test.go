@@ -122,9 +122,9 @@ func TestResolveModel(t *testing.T) {
 	if got := ResolveModel(config.Config{}, crush); got != "session default" {
 		t.Errorf("crush (no default) = %q, want 'session default'", got)
 	}
-	ollama := NewOllama(config.Config{OllamaModel: "qwen3:4b"})
-	if got := ResolveModel(config.Config{OllamaModel: "qwen3:4b"}, ollama); got != "qwen3:4b" {
-		t.Errorf("ollama model = %q, want qwen3:4b", got)
+	ollama := NewOllama(config.Config{OllamaModel: "gemma3:4b"})
+	if got := ResolveModel(config.Config{OllamaModel: "gemma3:4b"}, ollama); got != "gemma3:4b" {
+		t.Errorf("ollama model = %q, want gemma3:4b", got)
 	}
 }
 

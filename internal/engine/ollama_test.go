@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,7 +18,7 @@ func ollamaFor(t *testing.T, handler http.HandlerFunc) *Ollama {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return NewOllama(config.Config{OllamaHost: srv.URL, OllamaModel: "qwen3:4b", ExtractModel: "gemma3:4b", EditModel: "gemma3:4b"})
+	return NewOllama(config.Config{OllamaHost: srv.URL, OllamaModel: "gemma3:4b", ExtractModel: "gemma3:4b", EditModel: "gemma3:4b"})
 }
 
 func TestOllamaGenerateSuccess(t *testing.T) {
@@ -39,6 +40,37 @@ func TestOllamaGenerateSuccess(t *testing.T) {
 	}
 	if streamed.String() != "# Hi there" {
 		t.Errorf("streamed = %q", streamed.String())
+	}
+}
+
+func TestOllamaHonoursNumPredictAndKeepAlive(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"response":"ok","done":true,"done_reason":"stop"}` + "\n"))
+	}))
+	t.Cleanup(srv.Close)
+	o := NewOllama(config.Config{OllamaHost: srv.URL, OllamaModel: "gemma3:4b", ExtractModel: "gemma3:4b", EditModel: "gemma3:4b", PredictLength: 6000})
+
+	// A per-request cap below the engine default must win; keep_alive must be set.
+	if _, err := o.Generate(context.Background(), Request{Kind: KindWrite, NumPredict: 1500}); err != nil {
+		t.Fatal(err)
+	}
+	if gotBody["keep_alive"] == nil {
+		t.Error("request should set keep_alive to hold the model resident")
+	}
+	opts, _ := gotBody["options"].(map[string]any)
+	if got, _ := opts["num_predict"].(float64); got != 1500 {
+		t.Errorf("num_predict = %v, want 1500 (per-request cap)", got)
+	}
+
+	// A cap at or above the default leaves the engine default in place.
+	if _, err := o.Generate(context.Background(), Request{Kind: KindWrite, NumPredict: 9000}); err != nil {
+		t.Fatal(err)
+	}
+	opts, _ = gotBody["options"].(map[string]any)
+	if got, _ := opts["num_predict"].(float64); got != 6000 {
+		t.Errorf("num_predict = %v, want 6000 (engine default retained)", got)
 	}
 }
 

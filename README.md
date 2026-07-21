@@ -219,16 +219,50 @@ Flags win over environment variables, which win over defaults.
 | `DRAFT_ENGINE`         | `auto`      | Backend selection (auto, ollama, provider)  |
 | `DRAFT_MODEL_SESSION`  | —           | Session-provider model override             |
 | `DRAFT_MODEL`          | —           | Sets all Ollama models at once              |
-| `DRAFT_WRITE_MODEL`    | `qwen3:4b`  | Ollama writing model                        |
+| `DRAFT_WRITE_MODEL`    | `gemma3:4b` | Ollama writing model                        |
 | `DRAFT_EXTRACT_MODEL`  | `gemma3:4b` | Ollama claim-extraction model               |
 | `DRAFT_EDIT_MODEL`     | `gemma3:4b` | Ollama surgical-review model                |
 | `DRAFT_NUM_CTX`        | `8192`      | Ollama context window                       |
-| `DRAFT_NUM_PREDICT`    | `6000`      | Ollama max output tokens                    |
+| `DRAFT_NUM_PREDICT`    | `6000`      | Ollama output-token ceiling (auto-scaled down per draft) |
 | `DRAFT_WRITE_RETRIES`  | `2`         | Rewrite attempts on rule violations         |
 | `DRAFT_MAX_CONTINUE`   | `3`         | Max continuations on a length-limited stop  |
 | `DRAFT_EXTRACT_CONCURRENCY` | `4`    | Parallel extraction workers (session engines) |
 | `DRAFT_EXPERIMENTAL`   | —           | `1` to let auto use experimental providers  |
 | `OLLAMA_HOST`          | `http://127.0.0.1:11434` | Ollama server address          |
+
+### Offline performance
+
+The offline path is tuned for a memory-constrained laptop (8 GB) and gets most of
+its speed from three things:
+
+- **One shared model.** Extraction and writing both use `gemma3:4b`, so the
+  server never swaps a second 4B model in and out mid-run. gemma also follows the
+  writing brief closely — it keeps to the word budget and does not leak planning
+  text into the article, so drafts usually pass the house rules on the first try.
+- **Length scaled to the evidence.** The target word count is derived from the
+  number of verified claims, and the output-token limit is sized to match. A thin
+  ledger produces a short, fully-grounded piece instead of a padded one — faster
+  to generate and less likely to trip the faithfulness checks.
+- **Deterministic style repair.** Banned cliché words and phrases are swapped for
+  neutral equivalents in place, so a single stray "furthermore" no longer costs a
+  full regeneration.
+
+Biggest single win, though, is how the Ollama **server** is launched. The default
+configuration is slow on 8 GB; start it with a quantised KV cache and flash
+attention and a cold run drops from minutes to well under two:
+
+```sh
+# Quit the Ollama desktop app first, then:
+OLLAMA_FLASH_ATTENTION=1 \
+OLLAMA_KV_CACHE_TYPE=q8_0 \
+OLLAMA_MAX_LOADED_MODELS=1 \
+OLLAMA_KEEP_ALIVE=10m \
+  ollama serve
+```
+
+On a base 8 GB Apple-silicon machine a two-section source drafts in roughly two
+minutes end to end. Set `DRAFT_NUM_CTX=2048` to trade a little context headroom
+for an even smaller memory footprint.
 
 ---
 

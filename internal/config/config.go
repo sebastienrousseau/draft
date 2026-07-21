@@ -25,8 +25,14 @@ const (
 )
 
 // Defaults captured as constants so they are documented in one place.
+//
+// All three Ollama stages default to gemma3:4b. On a memory-constrained machine
+// a single shared model means the server never swaps a second 4B model in and
+// out between extraction and writing. gemma also follows the writing brief far
+// more closely than qwen3:4b, which tended to overshoot the word budget and leak
+// its own planning text into the article.
 const (
-	DefaultOllamaModel        = "qwen3:4b"
+	DefaultOllamaModel        = "gemma3:4b"
 	DefaultExtractModel       = "gemma3:4b"
 	DefaultEditModel          = "gemma3:4b"
 	DefaultContextLen         = 8192
