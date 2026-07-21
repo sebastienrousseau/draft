@@ -30,7 +30,7 @@ import (
 
 // version is the build version, overridden at release time via -ldflags
 // "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.6"
+var version = "0.0.7"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -190,9 +190,9 @@ ENGINE
 
     `+strings.Join(engine.ProviderNames(), ", ")+`
 
-  claude, copilot, codex, grok, and agy are verified end to end and used by auto
-  mode; the rest are experimental (invocation correct, output unverified) and are
-  used by auto only with --experimental. Any provider can still be forced by name.
+  claude, copilot, codex, grok, agy, and cursor-agent are verified end to end and
+  used by auto mode; the rest are experimental (invocation correct, output
+  unverified) and used by auto only with --experimental. Force any by name.
 
   If a session call fails because the machine is offline, draft fails over to a
   local Ollama model and stays there for the rest of the run. Force any backend
