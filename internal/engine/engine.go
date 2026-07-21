@@ -36,6 +36,11 @@ type Request struct {
 	Kind        Kind
 	Prompt      string
 	Temperature float64
+	// NumPredict caps the output tokens for this call (0 = the engine's default).
+	// The pipeline sizes it to the article's word budget so a sparse claim ledger
+	// cannot pad a local model toward its token ceiling. Session providers, which
+	// manage their own generation, ignore it.
+	NumPredict int
 	// OnChunk, if set, receives streamed text as it arrives for live preview.
 	OnChunk func(string)
 }

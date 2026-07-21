@@ -25,6 +25,7 @@ import (
 	"github.com/sebastienrousseau/draft/internal/engine"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/internal/prompt"
+	"github.com/sebastienrousseau/draft/internal/rules"
 	"github.com/sebastienrousseau/draft/internal/validate"
 )
 
@@ -102,6 +103,10 @@ type Runner struct {
 	// ledgerPath is the verified-claim-ledger scratch file for the current run,
 	// removed on success unless the user asked to keep artifacts.
 	ledgerPath string
+	// writeTokens caps output tokens for the writing calls of the current job,
+	// sized to the article's word budget (see writeBudget) so a thin ledger does
+	// not drive a local model to pad toward its token ceiling.
+	writeTokens int
 }
 
 // Event is the sum type carried on the progress channel.
@@ -168,10 +173,17 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	ledger := claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars)
 	r.phase(PhaseClaims, "done")
 
-	// Phase 3: write.
+	// Phase 3: write. Size the article to the grounded material: a handful of
+	// claims cannot honestly fill 3000 words, and padding is what both slows
+	// local generation and trips the faithfulness checks into a costly retry.
 	r.phase(PhaseWrite, "running")
+	minWords, maxWords := writeBudget(len(records))
+	r.writeTokens = writeNumPredict(maxWords, r.cfg.PredictLength)
+	if r.engineName == "ollama" {
+		r.log(fmt.Sprintf("target %d–%d words for %d claim(s) (cap %d tokens)", minWords, maxWords, len(records), r.writeTokens))
+	}
 	templates := loadTemplates(r.cfg)
-	writePrompt := prompt.Writing(templates, ledger)
+	writePrompt := prompt.Writing(templates, ledger, minWords, maxWords)
 	markdown, err := r.write(ctx, writePrompt)
 	if err != nil {
 		r.phase(PhaseWrite, "failed")
@@ -336,49 +348,101 @@ func (r *Runner) generateText(ctx context.Context, req engine.Request) (string, 
 	return res.Text, nil
 }
 
+// writeBudget scales the target article length to the amount of grounded
+// material. Fixed scaffolding (title, lead aside, executive summary, section
+// headers) sets a floor; each verified claim then buys a slice of prose. The
+// range is clamped to the house minimum and maximum, so a dense source still
+// yields a full-length piece while a thin one is not asked to pad.
+func writeBudget(claimCount int) (minWords, maxWords int) {
+	target := 350 + claimCount*110
+	if target > rules.MaxWords {
+		target = rules.MaxWords
+	}
+	maxWords = target
+	minWords = target * 3 / 4
+	if minWords < rules.MinWords {
+		minWords = rules.MinWords
+	}
+	if maxWords < minWords+150 {
+		maxWords = minWords + 150
+	}
+	return minWords, maxWords
+}
+
+// writeNumPredict converts a word budget into an output-token cap (roughly 1.8
+// tokens per word plus headroom for markdown and punctuation), never exceeding
+// the configured ceiling. Bounding output to the budget is what stops a local
+// model from running to its token limit on a thin ledger.
+func writeNumPredict(maxWords, ceiling int) int {
+	n := maxWords*18/10 + 400
+	if ceiling > 0 && n > ceiling {
+		n = ceiling
+	}
+	return n
+}
+
 // write runs the initial generation and continues past any length-limit stop.
 func (r *Runner) write(ctx context.Context, writePrompt string) (string, error) {
 	res, err := r.generate(ctx, engine.Request{
 		Kind:        engine.KindWrite,
 		Prompt:      writePrompt,
 		Temperature: writeTemperature,
+		NumPredict:  r.writeTokens,
 		OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
 	})
 	if err != nil {
 		return "", fmt.Errorf("generation failed: %w", err)
 	}
-	text := stripThinking(cleanOutput(res.Text))
+	text := normalizeDraft(res.Text)
 	if res.Truncated {
 		text = r.continueGeneration(ctx, text)
 	}
 	return text, nil
 }
 
-// continueGeneration completes an article that stopped on a length limit,
-// appending continuations until it ends cleanly or the budget is exhausted.
+// continuePredictTokens bounds each continuation call. A continuation only has
+// to finish the current sentence and add a brief conclusion, so it is capped far
+// below the main write budget. Giving it the full budget is what made a model
+// that ignores length generate another full block and truncate again, looping
+// expensively instead of closing out.
+const continuePredictTokens = 512
+
+// continueGeneration finishes an article that stopped on a length limit. Each
+// continuation is a small, conclusion-focused call; once the continuation budget
+// is spent and the model still has not closed on sentence punctuation, the tail
+// is trimmed to the last complete sentence. That keeps the draft from being
+// rejected as truncated — which would trigger a far more expensive full rewrite —
+// while never adding ungrounded text of our own.
 func (r *Runner) continueGeneration(ctx context.Context, partial string) string {
 	for i := 0; i < r.cfg.MaxContinue; i++ {
 		if validate.EndsSentence(strings.TrimRight(partial, " \t\r\n")) {
-			break
+			return partial
 		}
-		r.log(fmt.Sprintf("output hit length limit; continuing (%d/%d)", i+1, r.cfg.MaxContinue))
+		r.log(fmt.Sprintf("output hit length limit; concluding (%d/%d)", i+1, r.cfg.MaxContinue))
 		res, err := r.generate(ctx, engine.Request{
 			Kind:        engine.KindWrite,
 			Prompt:      prompt.ContinueWriting(partial),
 			Temperature: writeTemperature,
+			NumPredict:  continuePredictTokens,
 			OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
 		})
 		if err != nil {
 			r.log("continuation failed: " + err.Error())
 			break
 		}
-		cont := stripThinking(cleanOutput(res.Text))
+		cont := normalizeDraft(res.Text)
 		if strings.TrimSpace(cont) == "" {
 			break
 		}
 		partial = strings.TrimRight(partial, " \t\r\n") + " " + strings.TrimLeft(cont, " \t\r\n")
 		if !res.Truncated {
-			break
+			return partial
+		}
+	}
+	if !validate.EndsSentence(strings.TrimRight(partial, " \t\r\n")) {
+		if trimmed := trimToLastSentence(partial); trimmed != "" {
+			r.log("trimmed a ragged tail to the last complete sentence")
+			return trimmed
 		}
 	}
 	return partial
@@ -396,12 +460,13 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 				Kind:        engine.KindWrite,
 				Prompt:      retryPrompt,
 				Temperature: writeTemperature,
+				NumPredict:  r.writeTokens,
 				OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
 			})
 			if err != nil {
 				return markdown, fmt.Errorf("generation failed: %w", err)
 			}
-			markdown = stripThinking(cleanOutput(res.Text))
+			markdown = normalizeDraft(res.Text)
 			if res.Truncated {
 				markdown = r.continueGeneration(ctx, markdown)
 			}

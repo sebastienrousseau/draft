@@ -47,15 +47,23 @@ func (o *Ollama) Name() string { return "ollama" }
 // a length limit (done_reason == "length"), which the pipeline uses to continue
 // generation rather than fail on a mid-sentence cut.
 func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
+	numPred := o.numPred
+	if req.NumPredict > 0 && req.NumPredict < numPred {
+		numPred = req.NumPredict
+	}
 	payload := map[string]any{
 		"model":  o.modelFor(req.Kind),
 		"prompt": req.Prompt,
 		"stream": true,
 		"think":  false,
+		// keep_alive holds the model in memory between the per-section extraction
+		// calls and the write, so a run is not slowed by repeated reloads even when
+		// the server was started without an OLLAMA_KEEP_ALIVE default.
+		"keep_alive": "10m",
 		"options": map[string]any{
 			"temperature": req.Temperature,
 			"num_ctx":     o.numCtx,
-			"num_predict": o.numPred,
+			"num_predict": numPred,
 		},
 	}
 	body, err := json.Marshal(payload)

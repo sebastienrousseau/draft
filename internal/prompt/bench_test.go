@@ -3,11 +3,15 @@
 
 package prompt
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/sebastienrousseau/draft/internal/rules"
+)
 
 func BenchmarkWriting(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = Writing("", "some ledger content")
+		_ = Writing("", "some ledger content", rules.MinWords, rules.MaxWords)
 	}
 }

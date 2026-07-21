@@ -32,7 +32,7 @@ func newModel(t *testing.T, jobs int) Model {
 	for i := range js {
 		js[i] = pipeline.Job{Sources: []string{"/tmp/x.pdf"}}
 	}
-	cfg := config.Config{OllamaModel: "qwen3:4b", HomeDir: "/home/seb"}
+	cfg := config.Config{OllamaModel: "gemma3:4b", HomeDir: "/home/seb"}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	return New(ctx, cancel, cfg, []engine.Engine{fakeEngine{"claude"}}, js)
@@ -233,7 +233,7 @@ func TestEffectiveModel(t *testing.T) {
 		t.Errorf("claude default = %q", got)
 	}
 	m.engineName = "ollama"
-	if got := m.effectiveModel(); got != "qwen3:4b" {
+	if got := m.effectiveModel(); got != "gemma3:4b" {
 		t.Errorf("ollama model = %q", got)
 	}
 	m.cfg.Model = "opus"

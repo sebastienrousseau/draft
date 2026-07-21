@@ -21,7 +21,7 @@ func TestClaimPromptContainsSource(t *testing.T) {
 }
 
 func TestWritingPromptUsesDefaultStyleWhenEmpty(t *testing.T) {
-	p := Writing("", "LEDGER-CONTENT")
+	p := Writing("", "LEDGER-CONTENT", rules.MinWords, rules.MaxWords)
 	if !strings.Contains(p, "house style") {
 		t.Error("empty templates should fall back to the built-in style example")
 	}
@@ -35,7 +35,7 @@ func TestWritingPromptUsesDefaultStyleWhenEmpty(t *testing.T) {
 }
 
 func TestWritingPromptUsesProvidedTemplates(t *testing.T) {
-	p := Writing("MY TEMPLATE BLOCK", "L")
+	p := Writing("MY TEMPLATE BLOCK", "L", rules.MinWords, rules.MaxWords)
 	if !strings.Contains(p, "MY TEMPLATE BLOCK") {
 		t.Error("provided templates should be embedded")
 	}

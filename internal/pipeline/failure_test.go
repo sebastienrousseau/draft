@@ -49,18 +49,20 @@ func TestFailureArticleLikeGetsReviewCopy(t *testing.T) {
 	}
 }
 
-func TestContinuationEmptyBreaks(t *testing.T) {
+func TestContinuationEmptyThenTrims(t *testing.T) {
 	cfg := testConfig(t)
 	eng := &fakeEngine{name: "fake", writer: func(call int) (string, bool) {
 		if call == 1 {
-			return validArticle(" unfinished"), true // truncated
+			return validArticle(" unfinished"), true // truncated, no closing punctuation
 		}
-		return "", false // empty continuation -> loop breaks
+		return "", false // empty continuation -> loop breaks, tail is trimmed
 	}}
-	_, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}})
-	// The stitched article still ends on "unfinished" (no punctuation) -> fails.
-	if errText == "" {
-		t.Fatal("expected truncation failure when continuation is empty")
+	done, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}})
+	if errText != "" {
+		t.Fatalf("an empty continuation should be rescued by trimming, got: %s", errText)
+	}
+	if done.OutputPath == "" {
+		t.Fatal("expected a saved article after trimming")
 	}
 	if eng.writeCalls < 2 {
 		t.Errorf("continuation should have been attempted, calls=%d", eng.writeCalls)
@@ -70,13 +72,17 @@ func TestContinuationEmptyBreaks(t *testing.T) {
 func TestContinuationCallErrors(t *testing.T) {
 	cfg := testConfig(t)
 	// First write is truncated; the continuation call errors -> loop breaks and
-	// the (still-truncated) article fails validation.
+	// the tail is trimmed to the last complete sentence, so the draft still saves
+	// rather than being lost over a failed continuation.
 	eng := &fakeEngine{name: "fake", errOnWrite: 2, writer: func(int) (string, bool) {
 		return validArticle(" unfinished"), true
 	}}
-	_, errText, logs := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}})
-	if errText == "" {
-		t.Fatal("expected failure")
+	done, errText, logs := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}})
+	if errText != "" {
+		t.Fatalf("a continuation error should be rescued by trimming, got: %s", errText)
+	}
+	if done.OutputPath == "" {
+		t.Fatal("expected a saved article after trimming")
 	}
 	if !hasLog(logs, "continuation failed") {
 		t.Errorf("expected a continuation-failed log, got %v", logs)

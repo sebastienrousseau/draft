@@ -28,9 +28,10 @@ type fakeEngine struct {
 	failEdit         bool   // if true, KindEdit calls return an error
 	writer           func(call int) (string, bool)
 
-	mu           sync.Mutex
-	writeCalls   int
-	extractCalls int
+	mu            sync.Mutex
+	writeCalls    int
+	extractCalls  int
+	lastWritePred int // NumPredict seen on the most recent write call
 }
 
 func (f *fakeEngine) Name() string { return f.name }
@@ -61,6 +62,7 @@ func (f *fakeEngine) Generate(_ context.Context, req engine.Request) (engine.Res
 		f.mu.Lock()
 		f.writeCalls++
 		n := f.writeCalls
+		f.lastWritePred = req.NumPredict
 		f.mu.Unlock()
 		if f.errOnWrite > 0 && n == f.errOnWrite {
 			return engine.Result{}, errors.New("write call failed")

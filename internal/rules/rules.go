@@ -36,6 +36,36 @@ var BannedPhrases = []string{
 	"paradigm shift", "the dawn of", "in today's world",
 }
 
+// StyleReplacements maps every banned word and phrase to a neutral, in-style
+// equivalent, so a draft that trips the banned-vocabulary check can be repaired
+// in place rather than regenerated — regeneration is slow and, on a small local
+// model, simply produces fresh clichés. Every replacement is itself outside the
+// banned lists; matching is case-insensitive and the replacement takes the case
+// of the first matched character. Phrases are applied before single words, so a
+// phrase that contains a banned word (for example "in the realm of") is rewritten
+// whole. Keys must stay in sync with BannedWords and BannedPhrases.
+var StyleReplacements = map[string]string{
+	// words
+	"delve": "examine", "underscore": "highlight", "testament": "sign",
+	"foster": "encourage", "maximize": "increase", "navigate": "handle",
+	"tapestry": "mix", "catalyst": "trigger", "elevate": "raise",
+	"paradigm": "model", "revolutionize": "transform", "paramount": "essential",
+	"leverage": "use", "harness": "use", "unlock": "enable", "seamless": "smooth",
+	"robust": "strong", "realm": "area", "landscape": "field", "beacon": "example",
+	"game-changer": "breakthrough", "cutting-edge": "advanced", "utilize": "use",
+	"myriad": "many", "vibrant": "lively", "bustling": "busy",
+	"whimsical": "playful", "profound": "deep",
+	// phrases
+	"in today's fast-paced world": "today", "at its core": "essentially",
+	"it's important to note": "note", "furthermore": "also", "moreover": "also",
+	"in conclusion": "finally", "in summary": "overall", "let's face it": "admittedly",
+	"but here's the kicker": "but", "when it comes to": "for", "in the realm of": "in",
+	"look no further": "stop", "rest assured": "certainly", "needless to say": "clearly",
+	"not only": "not just", "but also": "but", "whether you're": "whether you are",
+	"that said": "still", "in essence": "essentially", "ultimately": "finally",
+	"paradigm shift": "shift", "the dawn of": "the start of", "in today's world": "today",
+}
+
 // MetricTerms are evaluation metrics that must never appear in a draft unless a
 // verified claim also uses them, guarding against silent metric conversion.
 var MetricTerms = []string{

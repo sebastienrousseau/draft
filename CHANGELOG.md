@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.8] - 2026-07-21
+
+### Changed
+
+- **Offline drafting is roughly 4× faster.** On a measured 8 GB machine a
+  two-section source went from ~474s to ~116s end to end, with the draft passing
+  the house rules on the first attempt instead of after retries. The gains come
+  from three changes below; none reduce grounding.
+- **Single Ollama model.** Writing now defaults to `gemma3:4b` (the model already
+  used for extraction), so a memory-constrained server no longer swaps a second
+  4B model in and out between phases. gemma also keeps to the word budget and does
+  not leak planning text into the article, which `qwen3:4b` did. `qwen3:4b` is no
+  longer used by default; the separate experimental `qwen` **session** provider is
+  unaffected.
+
+### Added
+
+- **Claim-scaled length budget.** The target word count and the Ollama
+  output-token cap are derived from the number of verified claims, so a thin
+  ledger yields a short, fully-grounded draft rather than a padded one. A draft
+  truncated at the cap is closed by trimming to its last complete sentence.
+- **Deterministic style repair.** Banned cliché words and phrases are swapped for
+  neutral, in-style equivalents in place (`internal/rules.StyleReplacements`),
+  removing the most common reason an otherwise-clean local draft needed a full,
+  slow regeneration.
+- **`keep_alive` on Ollama requests** and a documented 8 GB server profile
+  (flash attention + quantised KV cache) in the README — the single biggest
+  offline speed-up, taking a cold run from minutes to under two.
+
 ## [0.0.7] - 2026-07-21
 
 ### Changed
@@ -125,6 +154,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.8]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.8
 [0.0.7]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.7
 [0.0.6]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.6
 [0.0.5]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.5

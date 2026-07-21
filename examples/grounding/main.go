@@ -15,6 +15,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/internal/claims"
 	"github.com/sebastienrousseau/draft/internal/prompt"
+	"github.com/sebastienrousseau/draft/internal/rules"
 	"github.com/sebastienrousseau/draft/internal/validate"
 )
 
@@ -39,7 +40,7 @@ STRENGTH: demonstrated
 	fmt.Println(claims.RenderLedger(records, dropped))
 
 	ledger := claims.RenderPromptLedger(records, 45, 14000)
-	writingPrompt := prompt.Writing("", ledger)
+	writingPrompt := prompt.Writing("", ledger, rules.MinWords, rules.MaxWords)
 	fmt.Printf("built a %d-character grounded writing prompt\n\n", len(writingPrompt))
 
 	// A structurally incomplete draft: the validator explains what is missing.

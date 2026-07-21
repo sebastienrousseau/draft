@@ -55,7 +55,10 @@ If the SOURCE section contains no extractable claims, return exactly: NONE.
 
 // Writing builds the article-writing prompt. templates may be empty; ledger is
 // the compact verified claim ledger the model must treat as its only facts.
-func Writing(templates, ledger string) string {
+// minWords and maxWords set the target length: the pipeline scales them to the
+// number of verified claims so the model is not asked to pad a thin ledger into
+// a long article.
+func Writing(templates, ledger string, minWords, maxWords int) string {
 	style := templates
 	if strings.TrimSpace(style) == "" {
 		style = defaultStyleExample
@@ -113,10 +116,10 @@ Write a %d-%d word article for technical readers and founders titled around the 
 ## CLAIMS
 %s`,
 		style,
-		rules.MinWords, rules.MaxWords, rules.MinWords,
+		minWords, maxWords, minWords,
 		joinSorted(rules.BannedWords), joinSorted(rules.BannedPhrases),
 		outputSkeleton,
-		rules.MinWords, rules.MaxWords,
+		minWords, maxWords,
 		ledger,
 	)
 }
