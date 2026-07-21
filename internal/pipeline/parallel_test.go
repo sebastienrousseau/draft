@@ -68,12 +68,18 @@ func TestExtractConcurrency(t *testing.T) {
 		t.Errorf("session engine concurrency = %d, want 4", got)
 	}
 	r.engineName = "ollama"
-	if got := r.extractConcurrency(); got != 1 {
-		t.Errorf("ollama concurrency = %d, want 1 (single local model)", got)
+	if got := r.extractConcurrency(); got != ollamaExtractConcurrency {
+		t.Errorf("ollama concurrency = %d, want %d (capped for a shared GPU)", got, ollamaExtractConcurrency)
 	}
 	r.engineName = "claude"
 	r.cfg.ExtractConcurrency = 1
 	if got := r.extractConcurrency(); got != 1 {
 		t.Errorf("concurrency of 1 should stay 1, got %d", got)
+	}
+	// An explicit low value is honoured even for Ollama.
+	r.engineName = "ollama"
+	r.cfg.ExtractConcurrency = 1
+	if got := r.extractConcurrency(); got != 1 {
+		t.Errorf("ollama should honour an explicit 1, got %d", got)
 	}
 }

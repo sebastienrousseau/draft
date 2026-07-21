@@ -247,22 +247,32 @@ its speed from three things:
   neutral equivalents in place, so a single stray "furthermore" no longer costs a
   full regeneration.
 
+- **Parallel extraction.** Claims are mined two sections at a time. On a single
+  small GPU one request does not saturate the hardware, so two concurrent
+  extractions run at roughly 1.8x the throughput of one — provided the server is
+  started with `OLLAMA_NUM_PARALLEL=2` (below). A server pinned to one slot simply
+  queues the second call, so this is always safe. Raise or lower it with
+  `DRAFT_EXTRACT_CONCURRENCY` (capped at 2 for Ollama).
+
 Biggest single win, though, is how the Ollama **server** is launched. The default
-configuration is slow on 8 GB; start it with a quantised KV cache and flash
-attention and a cold run drops from minutes to well under two:
+configuration is slow on 8 GB; start it with a quantised KV cache, flash
+attention, and two parallel slots and a cold run drops from minutes to well under
+two:
 
 ```sh
 # Quit the Ollama desktop app first, then:
 OLLAMA_FLASH_ATTENTION=1 \
 OLLAMA_KV_CACHE_TYPE=q8_0 \
+OLLAMA_NUM_PARALLEL=2 \
 OLLAMA_MAX_LOADED_MODELS=1 \
 OLLAMA_KEEP_ALIVE=10m \
   ollama serve
 ```
 
 On a base 8 GB Apple-silicon machine a two-section source drafts in roughly two
-minutes end to end. Set `DRAFT_NUM_CTX=2048` to trade a little context headroom
-for an even smaller memory footprint.
+minutes end to end; a full multi-section paper is dominated by extraction, which
+the two parallel slots roughly halve. Set `DRAFT_NUM_CTX=2048` to trade a little
+context headroom for an even smaller memory footprint.
 
 ---
 

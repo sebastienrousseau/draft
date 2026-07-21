@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.10] - 2026-07-21
+
+### Changed
+
+- **Parallel claim extraction on Ollama.** Sections are now mined two at a time
+  against the local server (previously one at a time). On a single small GPU one
+  request does not saturate the hardware, so with the server started at
+  `OLLAMA_NUM_PARALLEL=2` two extractions run at ~1.8× the throughput of one; a
+  server pinned to one slot simply queues the second, so it is safe either way.
+  On a real 12-section paper this cut extraction from ~825s to ~645s. Capped at
+  two for Ollama (override with `DRAFT_EXTRACT_CONCURRENCY`).
+
+### Fixed
+
+- **Opening-thesis placeholder no longer leaks or fails a run.** The skeleton's
+  bold thesis was a concrete label ("Opening thesis paragraph.") that a literal
+  model copied verbatim; on a dense paper this tripped the placeholder check and
+  burned the whole retry budget. The label is gone from the skeleton, and
+  post-processing now strips both a copied label (keeping any real thesis after
+  it) and a bare unfilled `**...**` line. Combined with the above, a real
+  12-section paper now drafts in ~817s (down from ~1330s) and passes on the first
+  attempt.
+
 ## [0.0.9] - 2026-07-21
 
 ### Fixed
@@ -166,6 +189,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.10]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.10
 [0.0.9]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.9
 [0.0.8]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.8
 [0.0.7]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.7
