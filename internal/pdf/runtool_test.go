@@ -13,9 +13,11 @@ import (
 )
 
 func TestRunToolSuccess(t *testing.T) {
-	out, err := runTool(context.Background(), time.Second, "echo", "hello")
-	if err != nil || !strings.Contains(out, "hello") {
-		t.Errorf("runTool echo failed: %q %v", out, err)
+	// Use `go` (guaranteed on PATH) so the test is portable across OSes —
+	// `echo`/`false` are shell builtins that are not executables on Windows.
+	out, err := runTool(context.Background(), 10*time.Second, "go", "version")
+	if err != nil || !strings.Contains(out, "go") {
+		t.Errorf("runTool go version failed: %q %v", out, err)
 	}
 }
 
@@ -26,7 +28,8 @@ func TestRunToolMissingBinary(t *testing.T) {
 }
 
 func TestRunToolNonZeroExit(t *testing.T) {
-	if _, err := runTool(context.Background(), time.Second, "false"); err == nil {
+	// `go help <unknown>` exits non-zero on every platform.
+	if _, err := runTool(context.Background(), 10*time.Second, "go", "help", "zzznotacommand"); err == nil {
 		t.Error("non-zero exit should error")
 	}
 }
