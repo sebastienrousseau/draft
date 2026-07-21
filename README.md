@@ -270,9 +270,12 @@ OLLAMA_KEEP_ALIVE=10m \
 ```
 
 On a base 8 GB Apple-silicon machine a two-section source drafts in roughly two
-minutes end to end; a full multi-section paper is dominated by extraction, which
-the two parallel slots roughly halve. Set `DRAFT_NUM_CTX=2048` to trade a little
-context headroom for an even smaller memory footprint.
+minutes end to end. A full multi-section paper is dominated by extraction: on a
+measured 12-section paper the two parallel slots cut it from ~825s to ~645s
+(about a quarter faster — less than the raw ~1.8× per-request gain, because the
+first section runs alone and uneven section sizes bound each pair by its slower
+half). Set `DRAFT_NUM_CTX=2048` to trade a little context headroom for an even
+smaller memory footprint.
 
 ---
 
