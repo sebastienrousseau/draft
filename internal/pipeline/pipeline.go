@@ -326,17 +326,26 @@ func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outp
 	return records, dropped, nil
 }
 
-// extractConcurrency is the number of parallel extraction workers for the
-// settled engine: 1 for Ollama (a single local model), the configured value
-// otherwise.
+// ollamaExtractConcurrency caps how many extraction calls the local backend runs
+// at once. A single small GPU is not saturated by one request: with the server
+// started at OLLAMA_NUM_PARALLEL>=2, two concurrent extractions measured ~1.8x the
+// throughput of one on an 8 GB machine, and a server pinned to a single slot just
+// queues the second — so this is safe either way. Two keeps the win without adding
+// memory pressure a shared GPU cannot absorb.
+const ollamaExtractConcurrency = 2
+
+// extractConcurrency is the number of parallel extraction workers for the settled
+// engine: the configured value for a session provider (independent subprocesses),
+// and a small, capped amount for Ollama (concurrent requests to one local server).
 func (r *Runner) extractConcurrency() int {
-	if r.engineName == "ollama" {
-		return 1
+	n := r.cfg.ExtractConcurrency
+	if n < 1 {
+		n = 1
 	}
-	if n := r.cfg.ExtractConcurrency; n > 1 {
-		return n
+	if r.engineName == "ollama" && n > ollamaExtractConcurrency {
+		return ollamaExtractConcurrency
 	}
-	return 1
+	return n
 }
 
 // generateText runs a request through the engine chain and returns its text.

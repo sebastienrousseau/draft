@@ -108,10 +108,25 @@ func enforceStyle(md string) string {
 	return md
 }
 
-// normalizeDraft cleans backend noise, drops any leaked reasoning preamble, and
-// enforces the house vocabulary — the standard post-processing for generated
-// Markdown before it is validated.
+// leakedThesisLabel matches the skeleton's bold thesis placeholder when a literal
+// model copies the label but still writes a real thesis after it
+// ("**Opening thesis paragraph.** The real thesis..."). Only the label is removed,
+// keeping the real sentence.
+var leakedThesisLabel = regexp.MustCompile(`(?i)\*\*\s*opening thesis paragraph\.?\s*\*\*\s*`)
+
+// unfilledThesisLine matches a bold opening-thesis line the model left as a bare
+// placeholder — empty or just an ellipsis (`**...**`, `**…**`, `****`). There is
+// no real content to keep, so the whole line is dropped; the bold lead thesis is a
+// stylistic nicety the validator does not require. A real `**thesis.**` never
+// matches, because the inner text is neither empty nor an ellipsis.
+var unfilledThesisLine = regexp.MustCompile(`(?m)^\*\*[ \t]*(?:\.{2,}|…)?[ \t]*\*\*[ \t]*\r?\n?`)
+
+// normalizeDraft cleans backend noise, drops any leaked reasoning preamble and
+// unfilled skeleton placeholder, and enforces the house vocabulary — the standard
+// post-processing for generated Markdown before it is validated.
 func normalizeDraft(s string) string {
+	s = leakedThesisLabel.ReplaceAllString(s, "")
+	s = unfilledThesisLine.ReplaceAllString(s, "")
 	return enforceStyle(stripThinking(cleanOutput(s)))
 }
 

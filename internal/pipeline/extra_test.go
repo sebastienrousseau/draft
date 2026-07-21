@@ -92,6 +92,32 @@ func wordBoundaryHit(s, word string) bool {
 	return re.MatchString(s)
 }
 
+func TestNormalizeStripsLeakedThesisLabel(t *testing.T) {
+	in := "# Title\n\n**Opening thesis paragraph.** The real thesis follows here.\n"
+	got := normalizeDraft(in)
+	if strings.Contains(strings.ToLower(got), "opening thesis paragraph") {
+		t.Errorf("leaked thesis label should be stripped: %q", got)
+	}
+	if !strings.Contains(got, "The real thesis follows here.") {
+		t.Errorf("real thesis should survive the strip: %q", got)
+	}
+}
+
+func TestNormalizeDropsUnfilledThesisButKeepsRealOne(t *testing.T) {
+	// A bare ellipsis/empty bold thesis is a copied placeholder: drop the line.
+	for _, ph := range []string{"**...**", "**…**", "****", "**  **"} {
+		got := normalizeDraft("# Title\n\n" + ph + "\n\n## Section\n\nbody.")
+		if strings.Contains(got, ph) {
+			t.Errorf("unfilled thesis %q should be dropped: %q", ph, got)
+		}
+	}
+	// A real bold thesis must be preserved untouched.
+	got := normalizeDraft("# Title\n\n**Router-Q cuts FLOPs threefold.**\n\n## S\n\nbody.")
+	if !strings.Contains(got, "**Router-Q cuts FLOPs threefold.**") {
+		t.Errorf("a real bold thesis must survive: %q", got)
+	}
+}
+
 func TestTrimToLastSentence(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"A full stop here. Then a fragment", "A full stop here."},

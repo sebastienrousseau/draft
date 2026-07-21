@@ -6,7 +6,7 @@ package prompt
 // outputSkeleton is the exact body structure every draft must follow.
 const outputSkeleton = `# Title
 
-**Opening thesis paragraph.**
+**...**
 
 <!-- lead-start -->
 <aside class="post-lead" aria-label="Article summary">
