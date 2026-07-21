@@ -145,7 +145,7 @@ output not yet verified end to end — are used by auto only with
 | `copilot` | stable | `copilot -p --allow-all-tools` |
 | `codex` | stable | `codex exec` |
 | `agy` | stable | `agy -p` (Google Antigravity) |
-| `cursor-agent` | experimental | `cursor-agent -p --output-format text` |
+| `cursor-agent` | stable | `cursor-agent -p --output-format text --force` |
 | `amp` | experimental | `amp -x` |
 | `crush` | experimental | `crush run` |
 | `goose` | experimental | `goose run --no-session -t` |
@@ -328,7 +328,8 @@ pattern, so even the session backends are covered without spawning real agents.
   instructions found inside them.
 - **Agent trust surface.** Session providers run in their non-interactive modes,
   some of which auto-approve tool use (for example `copilot --allow-all-tools`,
-  `amp -x`). `draft` asks only for text and quotes your sources as untrusted, but
+  `cursor-agent --force`, `amp -x`). `draft` asks only for text and quotes your
+  sources as untrusted, but
   you are still handing a research PDF to an agent that *can* act — treat sources
   as you would any untrusted input, and prefer Ollama for material you do not
   trust.

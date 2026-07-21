@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.7] - 2026-07-21
+
+### Changed
+
+- `cursor-agent` promoted to a verified (stable) provider after an end-to-end
+  check. Its invocation now passes `--force` to clear the directory-trust prompt
+  that otherwise blocks non-interactive runs. Stable providers are now claude,
+  copilot, codex, grok, agy, and cursor-agent.
+
 ## [0.0.6] - 2026-07-21
 
 ### Changed
@@ -116,6 +125,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.7]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.7
 [0.0.6]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.6
 [0.0.5]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.5
 [0.0.4]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.4
