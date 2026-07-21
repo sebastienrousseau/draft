@@ -74,9 +74,12 @@ make build          # builds ./bin/draft
 | Tool                     | Needed for                        | Install (macOS)              |
 | ------------------------ | --------------------------------- | ---------------------------- |
 | `pdftotext` (Poppler)    | reading PDFs                      | `brew install poppler`       |
-| `textutil`               | reading DOCX (built in on macOS) | —                            |
+| `textutil`               | reading DOCX (macOS-only)         | built in                     |
 | a session CLI            | online writing via your session | [`claude`][claude], `codex`, `gemini`, … |
 | [`ollama`][ollama]       | offline writing                  | `brew install ollama`        |
+
+Runs on **macOS, Linux, and Windows** (release binaries for all three). PDF,
+Markdown, and text sources work everywhere; DOCX is macOS-only.
 
 ---
 

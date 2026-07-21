@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.5] - 2026-07-21
+
+### Added
+
+- **Windows support.** The CI test matrix now covers Windows alongside Ubuntu
+  and macOS, and releases ship Windows binaries (amd64 + arm64, as `.zip`). PDF,
+  Markdown, and text sources work on all three platforms; DOCX remains
+  macOS-only (`textutil`).
+
+### Changed
+
+- Made the `runTool` tests portable (use `go` instead of the `echo`/`false`
+  shell builtins) so the suite passes on Windows.
+
 ## [0.0.4] - 2026-07-20
 
 ### Changed
@@ -94,6 +108,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.5]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.5
 [0.0.4]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.4
 [0.0.3]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.3
 [0.0.2]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.2
