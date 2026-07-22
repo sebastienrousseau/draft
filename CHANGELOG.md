@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.12] - 2026-07-22
+
+### Changed
+
+- **The metric-conversion guard now accepts a grounded expansion.** An
+  abbreviation and its expansion — for example `bpb` and "bits per byte" — are the
+  same metric, so using one in the draft when a claim uses the other is no longer
+  flagged as a silent conversion. A switch to a genuinely different metric
+  (perplexity where a claim says cross-entropy) is still caught, because those
+  forms live in separate groups (`rules.MetricForms`). On a real metric-heavy
+  paper this turned a repeated faithfulness failure into a clean first-attempt
+  pass.
+
 ## [0.0.11] - 2026-07-22
 
 ### Changed
@@ -208,6 +221,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.12]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.12
 [0.0.11]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.11
 [0.0.10]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.10
 [0.0.9]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.9

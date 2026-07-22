@@ -94,7 +94,7 @@ func Faithfulness(article string, records []claims.Record) (errs, warnings []str
 		} else {
 			found = wordBoundaryContains(low, term)
 		}
-		if found && !strings.Contains(claimsBlob, term) {
+		if found && !metricGrounded(term, claimsBlob) {
 			errs = append(errs, "uses metric term '"+term+"' that appears in no claim (possible conversion)")
 		}
 	}
@@ -107,6 +107,19 @@ func Faithfulness(article string, records []claims.Record) (errs, warnings []str
 	warnings = append(warnings, hedgeUpgrades(article, records)...)
 	warnings = append(warnings, ungroundedNumbers(article, records)...)
 	return errs, warnings
+}
+
+// metricGrounded reports whether the metric term — or any equivalent surface form
+// of the same metric — appears in the claims. An expansion or abbreviation of one
+// metric (bpb and "bits per byte") counts as grounded; a switch to a different
+// metric does not, because those live in separate groups.
+func metricGrounded(term, claimsBlob string) bool {
+	for _, form := range rules.MetricForms(term) {
+		if strings.Contains(claimsBlob, form) {
+			return true
+		}
+	}
+	return false
 }
 
 // EndsSentence reports whether the trailing text closes on sentence-ending
