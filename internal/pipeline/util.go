@@ -121,13 +121,48 @@ var leakedThesisLabel = regexp.MustCompile(`(?i)\*\*\s*opening thesis paragraph\
 // matches, because the inner text is neither empty nor an ellipsis.
 var unfilledThesisLine = regexp.MustCompile(`(?m)^\*\*[ \t]*(?:\.{2,}|…)?[ \t]*\*\*[ \t]*\r?\n?`)
 
+// unfilledSectionHeading matches an H2–H6 heading the model left as a bare
+// ellipsis placeholder (`## ...`, `### …`). The heading line is dropped — its body
+// folds into the surrounding prose — so a copied placeholder neither ships nor
+// fails the run for want of a title we cannot invent. The H1 is deliberately not
+// dropped (a title is required and every model reliably writes one); a stray
+// ellipsis H1 is instead caught by the validator.
+var unfilledSectionHeading = regexp.MustCompile(`(?m)^#{2,6}[ \t]*(?:\.{2,}|…)[ \t]*\r?\n?`)
+
 // normalizeDraft cleans backend noise, drops any leaked reasoning preamble and
 // unfilled skeleton placeholder, and enforces the house vocabulary — the standard
 // post-processing for generated Markdown before it is validated.
 func normalizeDraft(s string) string {
 	s = leakedThesisLabel.ReplaceAllString(s, "")
 	s = unfilledThesisLine.ReplaceAllString(s, "")
+	s = unfilledSectionHeading.ReplaceAllString(s, "")
 	return enforceStyle(stripThinking(cleanOutput(s)))
+}
+
+// collapseSpace normalises a block to single-spaced text for echo comparison.
+func collapseSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// stripCalibrationEcho removes any prose paragraph the model copied wholesale from
+// the style-calibration block (the built-in example, or the user's own templates).
+// A small local model sometimes reproduces the tone sample as body text; a
+// paragraph whose text is contained verbatim in the calibration guidance is an
+// echo, not real content. Comparison ignores line wrapping, and headings are left
+// alone so structural calibration still works.
+func stripCalibrationEcho(article, styleText string) string {
+	cal := collapseSpace(styleText)
+	if len(cal) < 40 {
+		return article
+	}
+	blocks := strings.Split(article, "\n\n")
+	kept := make([]string, 0, len(blocks))
+	for _, b := range blocks {
+		nb := collapseSpace(b)
+		if len(nb) >= 40 && !strings.HasPrefix(strings.TrimSpace(b), "#") && strings.Contains(cal, nb) {
+			continue
+		}
+		kept = append(kept, b)
+	}
+	return strings.Join(kept, "\n\n")
 }
 
 // stripThinking removes any chain-of-thought preamble and returns the Markdown

@@ -107,6 +107,16 @@ type Runner struct {
 	// sized to the article's word budget (see writeBudget) so a thin ledger does
 	// not drive a local model to pad toward its token ceiling.
 	writeTokens int
+	// styleText is the style-calibration block embedded in the writing prompt, kept
+	// so any of it the model echoes verbatim into the draft can be stripped back out.
+	styleText string
+}
+
+// finalize applies the standard post-processing to a raw generation: clean it,
+// enforce the house vocabulary, and strip any style-calibration guidance the model
+// echoed into the body.
+func (r *Runner) finalize(raw string) string {
+	return stripCalibrationEcho(normalizeDraft(raw), r.styleText)
 }
 
 // Event is the sum type carried on the progress channel.
@@ -183,6 +193,7 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		r.log(fmt.Sprintf("target %d–%d words for %d claim(s) (cap %d tokens)", minWords, maxWords, len(records), r.writeTokens))
 	}
 	templates := loadTemplates(r.cfg)
+	r.styleText = prompt.EffectiveStyle(templates)
 	writePrompt := prompt.Writing(templates, ledger, minWords, maxWords)
 	markdown, err := r.write(ctx, writePrompt)
 	if err != nil {
@@ -402,7 +413,7 @@ func (r *Runner) write(ctx context.Context, writePrompt string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("generation failed: %w", err)
 	}
-	text := normalizeDraft(res.Text)
+	text := r.finalize(res.Text)
 	if res.Truncated {
 		text = r.continueGeneration(ctx, text)
 	}
@@ -439,7 +450,7 @@ func (r *Runner) continueGeneration(ctx context.Context, partial string) string 
 			r.log("continuation failed: " + err.Error())
 			break
 		}
-		cont := normalizeDraft(res.Text)
+		cont := r.finalize(res.Text)
 		if strings.TrimSpace(cont) == "" {
 			break
 		}
@@ -475,7 +486,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 			if err != nil {
 				return markdown, fmt.Errorf("generation failed: %w", err)
 			}
-			markdown = normalizeDraft(res.Text)
+			markdown = r.finalize(res.Text)
 			if res.Truncated {
 				markdown = r.continueGeneration(ctx, markdown)
 			}

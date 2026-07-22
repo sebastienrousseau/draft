@@ -10,6 +10,25 @@ import (
 	"github.com/sebastienrousseau/draft/internal/rules"
 )
 
+func TestEffectiveStyleFallsBackToBuiltIn(t *testing.T) {
+	if got := EffectiveStyle("   "); got != defaultStyleExample {
+		t.Error("blank templates should yield the built-in style example")
+	}
+	if got := EffectiveStyle("MY TEMPLATE"); got != "MY TEMPLATE" {
+		t.Error("provided templates should be returned unchanged")
+	}
+}
+
+func TestSkeletonMatchesStructureMarkers(t *testing.T) {
+	// The output skeleton must embed exactly the markers the validator checks for,
+	// so the template and validator cannot drift apart.
+	for _, m := range []string{rules.PostLeadAsideMarker, rules.ExecSummaryMarker, rules.H1Prefix, rules.H2Prefix} {
+		if !strings.Contains(outputSkeleton, m) {
+			t.Errorf("output skeleton is missing the structural marker %q", m)
+		}
+	}
+}
+
 func TestClaimPromptContainsSource(t *testing.T) {
 	p := Claim("SOME SOURCE TEXT")
 	if !strings.Contains(p, "SOME SOURCE TEXT") {
