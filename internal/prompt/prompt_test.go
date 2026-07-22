@@ -19,6 +19,19 @@ func TestEffectiveStyleFallsBackToBuiltIn(t *testing.T) {
 	}
 }
 
+func TestDefaultStyleExampleHasNoCopyableHeadings(t *testing.T) {
+	// The built-in style example must describe heading style as a principle, not
+	// show concrete section headings a literal model would copy verbatim.
+	for _, leak := range []string{"## What the result", "## Why the mechanism", "## Where it breaks"} {
+		if strings.Contains(defaultStyleExample, leak) {
+			t.Errorf("built-in style example still exposes a copyable heading: %q", leak)
+		}
+	}
+	if !strings.Contains(defaultStyleExample, "Invent them from the claims") {
+		t.Error("built-in style example should state the headings principle")
+	}
+}
+
 func TestSkeletonMatchesStructureMarkers(t *testing.T) {
 	// The output skeleton must embed exactly the markers the validator checks for,
 	// so the template and validator cannot drift apart.

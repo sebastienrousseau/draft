@@ -12,29 +12,30 @@ import (
 	"github.com/sebastienrousseau/draft/internal/config"
 )
 
-func TestLoadTemplatesMultipleFilesAndHeadings(t *testing.T) {
+func TestLoadTemplatesStripsHeadings(t *testing.T) {
 	home := t.TempDir()
 	tdir := filepath.Join(home, "Drop", "Drafts", "Templates") // the fallback dir
 	if err := os.MkdirAll(tdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Many headings to exercise the heading-count cap, across several files to
-	// exercise modTime sorting and the file cap.
-	var sb strings.Builder
-	for i := 0; i < 50; i++ {
-		sb.WriteString("# Heading\n")
-	}
-	sb.WriteString("\nStyle sample body goes here.")
+	// Templates carry headings; these must NOT survive into the calibration block,
+	// or a literal model copies them into unrelated drafts.
+	body := "# A Very Specific Template Heading\n\nStyle sample body goes here.\n\n## Another Template Heading\n\nMore prose."
 	for _, name := range []string{"a.md", "b.md", "c.md"} {
-		if err := os.WriteFile(filepath.Join(tdir, name), []byte(sb.String()), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(tdir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	got := loadTemplates(config.Config{HomeDir: home, DraftsDir: filepath.Join(home, "Drop", "Drafts")})
-	if got == "" || !strings.Contains(got, "Style sample") {
-		t.Errorf("expected a template block, got %q", got[:min(60, len(got))])
+	if got == "" || !strings.Contains(got, "Style sample body goes here.") {
+		t.Errorf("expected a prose style sample, got %q", got[:min(80, len(got))])
 	}
-	// Only the file cap worth of examples should be present.
+	if strings.Contains(got, "A Very Specific Template Heading") || strings.Contains(got, "Another Template Heading") {
+		t.Errorf("template headings must be stripped from the style sample: %q", got)
+	}
+	if strings.Contains(got, "Heading outline") {
+		t.Errorf("the heading outline section should no longer be emitted")
+	}
 	if strings.Count(got, "Template example:") > maxTemplateFiles {
 		t.Errorf("too many template examples included")
 	}
