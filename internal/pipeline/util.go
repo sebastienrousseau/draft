@@ -82,7 +82,15 @@ func buildStyleReplacers() []styleReplacer {
 		out = append(out, styleReplacer{regexp.MustCompile(`(?i)` + regexp.QuoteMeta(p)), rules.StyleReplacements[p]})
 	}
 	for _, w := range rules.BannedWords {
-		out = append(out, styleReplacer{regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(w) + `\b`), rules.StyleReplacements[w]})
+		repl := rules.StyleReplacements[w]
+		for _, f := range rules.WordForms(w) {
+			// Replace each inflected banned form with the replacement inflected the
+			// same way, so "leverages" -> "uses" and "leveraging" -> "using".
+			out = append(out, styleReplacer{
+				regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(f.Form) + `\b`),
+				rules.InflectLike(repl, f.Kind),
+			})
+		}
 	}
 	return out
 }

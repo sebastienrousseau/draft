@@ -7,6 +7,74 @@
 // place guarantees the writer is told exactly what the validator enforces.
 package rules
 
+import "strings"
+
+// WordForm is a surface form of a banned word paired with the inflection kind that
+// produced it, so a replacement can be inflected the same way.
+type WordForm struct {
+	Form string
+	Kind string // "base", "s", "ed", or "ing"
+}
+
+// WordForms returns the base banned word and its common inflections — plural or
+// third-person ("s"), past ("ed"), and gerund ("ing") — so the validator and the
+// style repair catch "leverages" and "leveraging", not only "leverage". Duplicate
+// forms are removed. It intentionally omits adverbial "-ly": the replacements do
+// not carry adverb forms, so those are handled as a separate concern.
+func WordForms(w string) []WordForm {
+	candidates := []WordForm{
+		{w, "base"},
+		{InflectLike(w, "s"), "s"},
+		{InflectLike(w, "ed"), "ed"},
+		{InflectLike(w, "ing"), "ing"},
+	}
+	seen := make(map[string]bool, len(candidates))
+	out := make([]WordForm, 0, len(candidates))
+	for _, f := range candidates {
+		if seen[f.Form] {
+			continue
+		}
+		seen[f.Form] = true
+		out = append(out, f)
+	}
+	return out
+}
+
+// InflectLike inflects word to the given kind using regular English spelling
+// rules (silent-e drop before "-ing", "-es" after a sibilant). An unknown kind —
+// including "base" — returns word unchanged, so a banned form and its replacement
+// stay aligned: "leverages" (kind "s") maps to InflectLike("use", "s") = "uses".
+func InflectLike(word, kind string) string {
+	switch kind {
+	case "s":
+		if endsSibilant(word) {
+			return word + "es"
+		}
+		return word + "s"
+	case "ed":
+		if strings.HasSuffix(word, "e") {
+			return word + "d"
+		}
+		return word + "ed"
+	case "ing":
+		if strings.HasSuffix(word, "e") {
+			return word[:len(word)-1] + "ing"
+		}
+		return word + "ing"
+	default:
+		return word
+	}
+}
+
+func endsSibilant(w string) bool {
+	for _, s := range []string{"s", "x", "z", "ch", "sh"} {
+		if strings.HasSuffix(w, s) {
+			return true
+		}
+	}
+	return false
+}
+
 // Word-count bounds for a finished body-only draft.
 const (
 	MinWords = 500

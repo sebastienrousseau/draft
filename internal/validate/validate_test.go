@@ -48,6 +48,18 @@ func TestErrorsStructure(t *testing.T) {
 	}
 }
 
+func TestErrorsCatchesInflectedBannedWord(t *testing.T) {
+	// An inflected banned word must still be flagged; the base-form-only matcher
+	// missed "leverages" and "leveraging".
+	base := "# T\n\n**x**\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\n"
+	for _, w := range []string{"leverages", "leveraging", "utilizes", "fostered"} {
+		md := base + filler(600) + " it " + w + " the data."
+		if !hasSubstr(Errors(md), "banned words") {
+			t.Errorf("expected %q to be flagged as a banned word", w)
+		}
+	}
+}
+
 func TestContainsEmoji(t *testing.T) {
 	if !ContainsEmoji("a rocket 🚀 here") {
 		t.Error("expected emoji detected")
