@@ -16,6 +16,21 @@ const (
 // MinQuoteChars is the shortest verbatim source span a claim may cite.
 const MinQuoteChars = 12
 
+// Structural markers the writer must emit and the validator checks for. They live
+// here so the output template (internal/prompt) and the validator share a single
+// definition and cannot silently drift apart; TestSkeletonMatchesStructureMarkers
+// enforces that the skeleton embeds each one.
+const (
+	// PostLeadAsideMarker opens the summary aside that carries the TL;DR and key
+	// takeaways.
+	PostLeadAsideMarker = `<aside class="post-lead"`
+	// ExecSummaryMarker labels the executive-summary blockquote.
+	ExecSummaryMarker = "Executive Summary"
+	// H1Prefix begins the single title line; H2Prefix begins each section heading.
+	H1Prefix = "# "
+	H2Prefix = "## "
+)
+
 // BannedWords are single tokens the house style forbids. They are matched on
 // word boundaries, case-insensitively.
 var BannedWords = []string{

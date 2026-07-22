@@ -26,7 +26,7 @@ var (
 	paraWordPat    = regexp.MustCompile(`[a-z0-9]+`)
 	blankLinePat   = regexp.MustCompile(`\n\s*\n`)
 	bannedWordRe   = compileWordBoundary(rules.BannedWords)
-	placeholderPat = regexp.MustCompile(`(?mi)^(#{1,6}\s*(\.{2,}|…)\s*$|\*\*opening thesis paragraph)`)
+	placeholderPat = regexp.MustCompile(`(?mi)^(#{1,6}[ \t]*(\.{2,}|…)[ \t]*$|\*\*[ \t]*(\.{2,}|…)[ \t]*\*\*|\*\*opening thesis paragraph)`)
 )
 
 // Duplicate-detection tuning.
@@ -40,13 +40,13 @@ const (
 // slice means the draft is publishable.
 func Errors(md string) []string {
 	var errs []string
-	if !strings.HasPrefix(md, "# ") {
+	if !strings.HasPrefix(md, rules.H1Prefix) {
 		errs = append(errs, "body-only mode must start with a Markdown H1")
 	}
-	if !strings.Contains(md, `<aside class="post-lead"`) {
+	if !strings.Contains(md, rules.PostLeadAsideMarker) {
 		errs = append(errs, "missing post-lead aside")
 	}
-	if !strings.Contains(md, "Executive Summary") {
+	if !strings.Contains(md, rules.ExecSummaryMarker) {
 		errs = append(errs, "missing Executive Summary")
 	}
 	if !h2Pat.MatchString(md) {
@@ -146,7 +146,7 @@ func WordCount(s string) int {
 // LooksLikeArticle reports whether s resembles a Markdown article body, used to
 // decide whether a failed draft is still worth saving for manual review.
 func LooksLikeArticle(s string) bool {
-	return strings.HasPrefix(s, "# ") && h2Pat.MatchString(s)
+	return strings.HasPrefix(s, rules.H1Prefix) && h2Pat.MatchString(s)
 }
 
 func hedgeUpgrades(article string, records []claims.Record) []string {

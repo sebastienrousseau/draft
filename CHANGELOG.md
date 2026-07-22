@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.11] - 2026-07-22
+
+### Changed
+
+- **Hardened the article template against a literal local model.** Three
+  refinements, none affecting a session provider's output:
+  - **Every skeleton placeholder now self-heals.** A copied thesis label or bare
+    `**...**` line is stripped, an unfilled `## ...` section heading is dropped
+    (its body folds into the surrounding prose), and any ellipsis-only heading is
+    caught by the validator — so a placeholder can neither ship nor fail a run.
+  - **Style-calibration echo is removed.** A small model sometimes reproduces the
+    tone example (or the user's own templates) as body text; any paragraph copied
+    verbatim from the calibration block is now stripped from the draft.
+  - **One source of truth for the house rules.** The writing and review prompts
+    share a single `houseStyleRules` block instead of two near-duplicate lists,
+    and the structural markers the validator checks for (`# `, `## `, the post-lead
+    aside, the executive-summary label) live in `internal/rules`, with a test that
+    keeps the skeleton in sync.
+
 ## [0.0.10] - 2026-07-21
 
 ### Changed
@@ -189,6 +208,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.11]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.11
 [0.0.10]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.10
 [0.0.9]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.9
 [0.0.8]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.8

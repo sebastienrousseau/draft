@@ -118,6 +118,39 @@ func TestNormalizeDropsUnfilledThesisButKeepsRealOne(t *testing.T) {
 	}
 }
 
+func TestNormalizeDropsUnfilledHeadingKeepsRealOnes(t *testing.T) {
+	in := "# Title\n\n## Real Heading\n\nSome prose.\n\n## ...\n\nMore prose under a dropped heading.\n"
+	got := normalizeDraft(in)
+	if strings.Contains(got, "## ...") {
+		t.Errorf("unfilled heading should be dropped: %q", got)
+	}
+	if !strings.Contains(got, "## Real Heading") {
+		t.Errorf("real heading must survive: %q", got)
+	}
+	if !strings.Contains(got, "More prose under a dropped heading.") {
+		t.Errorf("body under a dropped heading must survive: %q", got)
+	}
+}
+
+func TestStripCalibrationEcho(t *testing.T) {
+	style := "### Style sample\nStrong drafts open with a claim worth defending, not a definition. They stay concrete with real numbers and named methods."
+	article := "# Title\n\n## Section\n\nStrong drafts open with a claim worth defending, not a definition. They stay concrete with real numbers and named methods.\n\nReal grounded content about Router-Q and its six attention heads goes here.\n"
+	got := stripCalibrationEcho(article, style)
+	if strings.Contains(got, "Strong drafts open with a claim worth defending") {
+		t.Errorf("echoed calibration prose should be stripped: %q", got)
+	}
+	if !strings.Contains(got, "Real grounded content about Router-Q") {
+		t.Errorf("real content must survive: %q", got)
+	}
+	if !strings.Contains(got, "## Section") {
+		t.Errorf("headings must survive: %q", got)
+	}
+	// With no style text there is nothing to strip.
+	if got := stripCalibrationEcho(article, ""); got != article {
+		t.Error("empty style text must be a no-op")
+	}
+}
+
 func TestTrimToLastSentence(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"A full stop here. Then a fragment", "A full stop here."},
