@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.15] - 2026-07-22
+
+### Fixed
+
+- **Style-calibration headings no longer leak into drafts.** The built-in style
+  example showed a concrete heading outline ("What the result actually shows",
+  "Why the mechanism matters", "Where it breaks") and `loadTemplates` fed the
+  user's own template headings back as an outline — both of which a literal local
+  model copied verbatim into unrelated articles. The built-in example now states
+  the heading principle instead of showing copyable headings, and template style
+  samples are stripped to prose only. Heading structure still comes from the
+  output skeleton. Verified end to end: drafts now get specific, content-relevant
+  section headings.
+
 ## [0.0.14] - 2026-07-22
 
 ### Fixed
@@ -246,6 +260,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.15]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.15
 [0.0.14]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.14
 [0.0.13]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.13
 [0.0.12]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.12

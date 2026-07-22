@@ -30,11 +30,10 @@ const outputSkeleton = `# Title
 // the writer still receives concrete tone and structure guidance.
 const defaultStyleExample = `## Template example: house style
 
-### Heading outline
-# A clear, specific, argumentative title
-## What the result actually shows
-## Why the mechanism matters
-## Where it breaks
+### Headings
+Section headings are specific and argumentative: each names its section's point in
+the article's own terms, never a generic label. Invent them from the claims; do
+not copy any example wording.
 
 ### Style sample
 Strong drafts open with a claim worth defending, not a definition. They stay

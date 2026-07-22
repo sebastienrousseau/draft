@@ -19,7 +19,9 @@ const (
 	maxTemplateFiles = 2
 )
 
-var headingLine = regexp.MustCompile(`(?m)^#{1,3} .+$`)
+// templateHeadingLine matches a Markdown heading in a user template, dropped from
+// the style sample so a literal model has no template headings to copy verbatim.
+var templateHeadingLine = regexp.MustCompile(`(?m)^#{1,6} .*$`)
 
 // loadTemplates builds an optional style-calibration block from the user's local
 // template directory, if one exists. When absent (as on a fresh checkout), it
@@ -54,11 +56,14 @@ func loadTemplates(cfg config.Config) string {
 		if err != nil {
 			continue
 		}
-		text := pdf.NormaliseSpace(string(b))
+		// Drop heading lines before excerpting: the style sample is a tone sample,
+		// and a literal model would otherwise copy the template's headings into
+		// unrelated drafts. Heading structure comes from the OUTPUT SKELETON.
+		prose := templateHeadingLine.ReplaceAllString(string(b), "")
+		text := pdf.NormaliseSpace(prose)
 		if text == "" {
 			continue
 		}
-		headings := strings.Join(firstN(headingLine.FindAllString(text, -1), 40), "\n")
 		limit := 1500
 		if rem := maxTemplateChars - used; rem < limit {
 			limit = rem
@@ -70,7 +75,10 @@ func loadTemplates(cfg config.Config) string {
 		if len(excerpt) > limit {
 			excerpt = excerpt[:limit]
 		}
-		parts = append(parts, "## Template example: "+filepath.Base(f)+"\n\n### Heading outline\n"+headings+"\n\n### Style sample\n"+excerpt)
+		// Only the prose excerpt is shown, as a tone sample. A heading outline used
+		// to be included, but a literal model copied those headings verbatim into
+		// unrelated drafts; heading structure comes from the OUTPUT SKELETON instead.
+		parts = append(parts, "## Template example: "+filepath.Base(f)+"\n\n### Style sample\n"+excerpt)
 		used += len(excerpt)
 		if used >= maxTemplateChars {
 			break
@@ -85,11 +93,4 @@ func modTime(path string) int64 {
 		return 0
 	}
 	return fi.ModTime().UnixNano()
-}
-
-func firstN(in []string, n int) []string {
-	if len(in) > n {
-		return in[:n]
-	}
-	return in
 }
