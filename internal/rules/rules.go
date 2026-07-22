@@ -89,6 +89,31 @@ var MetricTerms = []string{
 	"bits per byte", "bits-per-byte",
 }
 
+// metricGroups lists the equivalent surface forms of a single metric — an
+// abbreviation and its expansion. A draft may use any form when a claim uses any
+// other form in the same group: expanding "bpb" to "bits per byte" is grounded,
+// whereas switching to a different metric (perplexity for cross-entropy) is not.
+var metricGroups = [][]string{
+	{"bits per byte", "bits-per-byte", "bpb"},
+	{"perplexity", "ppl"},
+	{"cross-entropy", "cross entropy"},
+	{"log-likelihood", "log likelihood"},
+}
+
+// MetricForms returns every surface form equivalent to term (including term
+// itself), so a grounding check accepts an abbreviation or expansion of the same
+// metric rather than only a byte-for-byte match.
+func MetricForms(term string) []string {
+	for _, g := range metricGroups {
+		for _, f := range g {
+			if f == term {
+				return g
+			}
+		}
+	}
+	return []string{term}
+}
+
 // AssertiveVerbs flag sentences that state a result as settled fact; combined
 // with a hedged claim they signal a possible hedge upgrade.
 var AssertiveVerbs = []string{

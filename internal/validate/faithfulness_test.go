@@ -37,6 +37,27 @@ func TestFaithfulnessMetricConversion(t *testing.T) {
 	}
 }
 
+func TestFaithfulnessMetricExpansionIsGrounded(t *testing.T) {
+	// A claim cites the source's "val_bpb"; expanding it to "bits per byte" is the
+	// same metric, so it must NOT be flagged as a conversion.
+	grounded := []claims.Record{
+		{Claim: "Group C reached a lower val_bpb than the baseline", SourceQuote: "best val_bpb of 1.20", Type: "metric", Strength: "demonstrated"},
+	}
+	article := "Group C reached a bits per byte of 1.20, beating the baseline."
+	errs, _ := Faithfulness(article, grounded)
+	if hasSubstr(errs, "bits per byte") {
+		t.Errorf("a grounded bpb -> bits per byte expansion must not be flagged, got %v", errs)
+	}
+
+	// But a switch to a different metric with no equivalent form in the claims is
+	// still a conversion.
+	article2 := "The model achieved a perplexity of 12."
+	errs2, _ := Faithfulness(article2, grounded)
+	if !hasSubstr(errs2, "perplexity") {
+		t.Errorf("a genuine metric switch should still be flagged, got %v", errs2)
+	}
+}
+
 func TestFaithfulnessTruncation(t *testing.T) {
 	errs, _ := Faithfulness("A sentence that just stops and", recs())
 	if !hasSubstr(errs, "truncated") {
