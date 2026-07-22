@@ -15,6 +15,12 @@ func TestInflectLike(t *testing.T) {
 		{"unlock", "ing", "unlocking"},
 		{"harness", "s", "harnesses"}, // sibilant takes -es
 		{"increase", "ing", "increasing"},
+		{"smooth", "ly", "smoothly"},
+		{"deep", "ly", "deeply"},
+		{"essential", "ly", "essentially"},
+		{"busy", "ly", "busily"},     // y after a consonant -> ily
+		{"basic", "ly", "basically"}, // -ic -> -ally
+		{"gentle", "ly", "gently"},   // -le -> -y
 		{"use", "base", "use"},
 		{"use", "unknown", "use"},
 	}
@@ -27,7 +33,7 @@ func TestInflectLike(t *testing.T) {
 
 func TestWordForms(t *testing.T) {
 	got := WordForms("leverage")
-	want := map[string]string{"leverage": "base", "leverages": "s", "leveraged": "ed", "leveraging": "ing"}
+	want := map[string]string{"leverage": "base", "leverages": "s", "leveraged": "ed", "leveraging": "ing", "leveragely": "ly"}
 	if len(got) != len(want) {
 		t.Fatalf("leverage forms = %v, want %d entries", got, len(want))
 	}

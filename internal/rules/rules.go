@@ -27,6 +27,7 @@ func WordForms(w string) []WordForm {
 		{InflectLike(w, "s"), "s"},
 		{InflectLike(w, "ed"), "ed"},
 		{InflectLike(w, "ing"), "ing"},
+		{InflectLike(w, "ly"), "ly"},
 	}
 	seen := make(map[string]bool, len(candidates))
 	out := make([]WordForm, 0, len(candidates))
@@ -61,9 +62,28 @@ func InflectLike(word, kind string) string {
 			return word[:len(word)-1] + "ing"
 		}
 		return word + "ing"
+	case "ly":
+		switch {
+		case strings.HasSuffix(word, "ic"): // basic -> basically
+			return word + "ally"
+		case strings.HasSuffix(word, "le") && len(word) > 2: // gentle -> gently
+			return word[:len(word)-1] + "y"
+		case strings.HasSuffix(word, "y") && len(word) > 1 && !isVowel(word[len(word)-2]): // busy -> busily
+			return word[:len(word)-1] + "ily"
+		default: // smooth -> smoothly, strong -> strongly, essential -> essentially
+			return word + "ly"
+		}
 	default:
 		return word
 	}
+}
+
+func isVowel(b byte) bool {
+	switch b {
+	case 'a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U':
+		return true
+	}
+	return false
 }
 
 func endsSibilant(w string) bool {
@@ -136,7 +156,7 @@ var StyleReplacements = map[string]string{
 	"leverage": "use", "harness": "use", "unlock": "enable", "seamless": "smooth",
 	"robust": "strong", "realm": "area", "landscape": "field", "beacon": "example",
 	"game-changer": "breakthrough", "cutting-edge": "advanced", "utilize": "use",
-	"myriad": "many", "vibrant": "lively", "bustling": "busy",
+	"myriad": "many", "vibrant": "vivid", "bustling": "busy",
 	"whimsical": "playful", "profound": "deep",
 	// phrases
 	"in today's fast-paced world": "today", "at its core": "essentially",

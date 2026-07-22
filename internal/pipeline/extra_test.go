@@ -84,6 +84,23 @@ func TestEnforceStyleRepairsInflectedBannedWords(t *testing.T) {
 	}
 }
 
+func TestEnforceStyleRepairsAdverbBannedWords(t *testing.T) {
+	// Adverbial -ly forms map to the replacement's adverb: seamlessly -> smoothly,
+	// robustly -> strongly, profoundly -> deeply.
+	in := "It scales seamlessly, performs robustly, and profoundly changes the field."
+	got := enforceStyle(in)
+	for _, bad := range []string{"seamlessly", "robustly", "profoundly"} {
+		if strings.Contains(strings.ToLower(got), bad) {
+			t.Errorf("adverb banned word %q survived: %q", bad, got)
+		}
+	}
+	for _, want := range []string{"smoothly", "strongly", "deeply"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected clean adverb %q in: %q", want, got)
+		}
+	}
+}
+
 func TestEnforceStyleEveryBannedTermHasAReplacement(t *testing.T) {
 	// Guards the rules invariant: nothing the validator bans is left uncovered by
 	// StyleReplacements, and no replacement is itself banned.
