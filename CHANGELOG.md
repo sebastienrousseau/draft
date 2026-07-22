@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.14] - 2026-07-22
+
+### Fixed
+
+- **Adverbial banned words are now caught and repaired too.** Building on the
+  inflection handling in 0.0.13, the `-ly` form of a banned adjective
+  ("seamlessly", "robustly", "profoundly") is now detected and rewritten to the
+  replacement's adverb ("smoothly", "strongly", "deeply"), with correct spelling
+  for `-ic` → `-ally`, `-le` → `-y`, and `-y` → `-ily` (so "bustling" repairs via
+  "busy" → "busily"). This closes the residual noted in 0.0.13. The `vibrant`
+  replacement moved to "vivid" so its adverb ("vividly") is clean.
+
 ## [0.0.13] - 2026-07-22
 
 ### Fixed
@@ -234,6 +246,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.14]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.14
 [0.0.13]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.13
 [0.0.12]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.12
 [0.0.11]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.11
