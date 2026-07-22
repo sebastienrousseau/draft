@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.13] - 2026-07-22
+
+### Fixed
+
+- **Banned words are now caught and repaired in their inflected forms.** Both the
+  validator and the deterministic style repair matched only the base word, so
+  "leverages", "leveraging", "utilizes", and "fostered" slipped through where
+  "leverage" would have been caught. The banned vocabulary is now expanded to its
+  common inflections (plural/third-person, past, gerund), and a matched form is
+  replaced with the replacement inflected the same way — "leverages" becomes
+  "uses", "leveraging" becomes "using" — using proper English spelling rules
+  (silent-e, sibilant "-es"). Adverbial "-ly" forms remain a separate concern.
+
 ## [0.0.12] - 2026-07-22
 
 ### Changed
@@ -221,6 +234,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.13]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.13
 [0.0.12]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.12
 [0.0.11]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.11
 [0.0.10]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.10

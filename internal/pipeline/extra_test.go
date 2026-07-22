@@ -68,6 +68,22 @@ func TestEnforceStyleRemovesBannedTerms(t *testing.T) {
 	}
 }
 
+func TestEnforceStyleRepairsInflectedBannedWords(t *testing.T) {
+	// Inflected banned words must be replaced with the correspondingly-inflected
+	// neutral term, not left in place (the base-form-only matcher missed these).
+	in := "The system leverages the data, utilizing caching, and fostered growth while harnessing power."
+	got := enforceStyle(in)
+	for _, bad := range []string{"leverages", "utilizing", "fostered", "harnessing"} {
+		if strings.Contains(strings.ToLower(got), bad) {
+			t.Errorf("inflected banned word %q survived: %q", bad, got)
+		}
+	}
+	// The replacement keeps the inflection: leverages -> uses, harnessing -> using.
+	if !strings.Contains(got, "uses") || !strings.Contains(got, "using") {
+		t.Errorf("replacement should keep the inflection: %q", got)
+	}
+}
+
 func TestEnforceStyleEveryBannedTermHasAReplacement(t *testing.T) {
 	// Guards the rules invariant: nothing the validator bans is left uncovered by
 	// StyleReplacements, and no replacement is itself banned.

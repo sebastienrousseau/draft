@@ -25,7 +25,7 @@ var (
 	wordTokenPat   = regexp.MustCompile(`[a-z][a-z-]{4,}`)
 	paraWordPat    = regexp.MustCompile(`[a-z0-9]+`)
 	blankLinePat   = regexp.MustCompile(`\n\s*\n`)
-	bannedWordRe   = compileWordBoundary(rules.BannedWords)
+	bannedWordRe   = compileWordBoundary(bannedWordForms())
 	placeholderPat = regexp.MustCompile(`(?mi)^(#{1,6}[ \t]*(\.{2,}|…)[ \t]*$|\*\*[ \t]*(\.{2,}|…)[ \t]*\*\*|\*\*opening thesis paragraph)`)
 )
 
@@ -346,6 +346,18 @@ func wordBoundaryContains(s, term string) bool {
 
 func isWordByte(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
+// bannedWordForms expands the banned vocabulary to include common inflections, so
+// "leverages" and "leveraging" are caught, not only the base "leverage".
+func bannedWordForms() []string {
+	var forms []string
+	for _, w := range rules.BannedWords {
+		for _, f := range rules.WordForms(w) {
+			forms = append(forms, f.Form)
+		}
+	}
+	return forms
 }
 
 func compileWordBoundary(words []string) *regexp.Regexp {

@@ -30,7 +30,7 @@ import (
 
 // version is the build version, overridden at release time via -ldflags
 // "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.12"
+var version = "0.0.13"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
