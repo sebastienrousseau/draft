@@ -47,12 +47,16 @@ func main() {
 
 	src := filepath.Join(dir, "router-s.txt")
 	_ = os.WriteFile(src, []byte("Router-S used 5x fewer FLOPs than the dense baseline."), 0o644)
+	notes := filepath.Join(dir, "notes.txt")
+	_ = os.WriteFile(notes, []byte("The dense baseline was trained on the same token budget."), 0o644)
 
+	// A Job with several sources is one merged draft — the CLI's --merge.
+	// One source per Job (the default) yields one draft per source instead.
 	cfg := config.Config{HomeDir: dir, DraftsDir: dir, MaxContinue: 3}
 	events := make(chan pipeline.Event, 256)
 	go func() {
 		pipeline.NewRunner(cfg, []engine.Engine{demoEngine{}}, events).
-			Run(context.Background(), pipeline.Job{Sources: []string{src}})
+			Run(context.Background(), pipeline.Job{Sources: []string{src, notes}})
 		close(events)
 	}()
 
