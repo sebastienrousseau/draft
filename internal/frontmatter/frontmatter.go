@@ -110,7 +110,7 @@ func Combine(frontmatterYAML, body string) string {
 	// Closed means the last LINE is a delimiter, not merely that the last
 	// characters happen to be dashes.
 	if fm != "---" && !strings.HasSuffix(fm, "\n---") {
-		fm = fm + "\n---"
+		fm += "\n---"
 	}
 	return fm + "\n\n" + bd + "\n"
 }
