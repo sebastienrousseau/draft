@@ -10,9 +10,11 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sebastienrousseau/draft/internal/claims"
 	"github.com/sebastienrousseau/draft/internal/engine"
+	"github.com/sebastienrousseau/draft/internal/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/prompt"
 	"github.com/sebastienrousseau/draft/internal/validate"
 )
@@ -36,6 +38,9 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		r.phase(PhaseResolve, "failed")
 		return fmt.Errorf("could not read draft to enhance: %w", err)
 	}
+	// The model reviews the article body; frontmatter is set aside and
+	// re-attached on save so YAML never reaches the prompt or the rules.
+	draftFM, draftBody := frontmatter.Split(string(draftBytes))
 	r.log("enhancing " + shortPath(r.cfg, job.ReviewPath))
 	r.emit(EngineEvent(r.engineName))
 	r.phase(PhaseResolve, "done")
@@ -71,7 +76,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	r.phase(PhaseWrite, "running")
 	res, err := r.generate(ctx, engine.Request{
 		Kind:        engine.KindEdit,
-		Prompt:      prompt.Review(research.String(), string(draftBytes), ledger),
+		Prompt:      prompt.Review(research.String(), draftBody, ledger),
 		Temperature: editTemperature,
 		OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
 	})
@@ -87,7 +92,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, res.Text, fmt.Errorf("model did not return valid surgical edits: %w", err))
 	}
-	enhanced, err := applySurgicalEdits(string(draftBytes), edits)
+	enhanced, err := applySurgicalEdits(draftBody, edits)
 	if err != nil {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, res.Text, fmt.Errorf("surgical edits failed to apply: %w", err))
@@ -96,7 +101,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, enhanced, fmt.Errorf("enhanced draft broke the rules:\n- %s", strings.Join(errs, "\n- ")))
 	}
-	if err := os.WriteFile(job.ReviewPath, []byte(strings.TrimRight(enhanced, "\n")+"\n"), 0o644); err != nil {
+	if err := saveEnhanced(job.ReviewPath, draftFM, enhanced); err != nil {
 		r.phase(PhaseSave, "failed")
 		return err
 	}
@@ -104,6 +109,25 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	r.log(fmt.Sprintf("applied %d surgical edit(s)", len(edits)))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{OutputPath: job.ReviewPath, Words: validate.WordCount(enhanced), Mode: "review", Engine: r.engineName})
+	return nil
+}
+
+// saveEnhanced writes the enhanced body back to path, re-attaching the
+// draft's original frontmatter, and resyncs the generated body/yaml/final
+// set when path belongs to one.
+func saveEnhanced(path, originalFM, body string) error {
+	out := strings.TrimRight(body, "\n") + "\n"
+	if originalFM != "" {
+		out = frontmatter.Combine(originalFM, body)
+	}
+	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		return err
+	}
+	if frontmatter.PartOfSet(path) {
+		if _, _, _, err := frontmatter.ProcessFile(path, time.Now()); err != nil {
+			return fmt.Errorf("draft enhanced but its generated set failed to resync: %w", err)
+		}
+	}
 	return nil
 }
 

@@ -100,9 +100,9 @@ func TestRunHeadless(t *testing.T) {
 	if failures != 0 {
 		t.Errorf("expected success, got %d failures", failures)
 	}
-	// The dated output folder should now contain exactly the article.
-	dated, _ := filepath.Glob(filepath.Join(cfg.DraftsDir, "*", "*.md"))
-	if len(dated) == 0 {
+	// The dated output folder holds the article as a day-folder set.
+	finals, _ := filepath.Glob(filepath.Join(cfg.DraftsDir, "*", "final", "*-final.md"))
+	if len(finals) == 0 {
 		t.Error("no article written")
 	}
 	if !strings.Contains(out.String(), ".md") {
@@ -199,5 +199,55 @@ func TestBuildJobsReview(t *testing.T) {
 	}
 	if _, err := buildJobs(cfg, []string{"paper.txt"}, "/no/such.md"); err == nil {
 		t.Error("--review with a missing draft should error")
+	}
+}
+
+func TestRunFrontmatterFlagConflicts(t *testing.T) {
+	dir := t.TempDir()
+	draftPath := filepath.Join(dir, "2026-07-27-conflict.md")
+	if err := os.WriteFile(draftPath, []byte("# T\n\nBody.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb strings.Builder
+	if code := run([]string{"--frontmatter", draftPath, "--review", draftPath}, &out, &errb); code != 2 {
+		t.Errorf("--frontmatter with --review should exit 2, got %d", code)
+	}
+	errb.Reset()
+	if code := run([]string{"--frontmatter", draftPath, "source.txt"}, &out, &errb); code != 2 {
+		t.Errorf("--frontmatter with positional args should exit 2, got %d", code)
+	}
+}
+
+func TestRunFrontmatterFlag(t *testing.T) {
+	dir := t.TempDir()
+	draftPath := filepath.Join(dir, "2026-07-26-test-article.md")
+	content := "# Test Article\n\n**Test Subtitle**\n\nProse content for test.\n"
+	if err := os.WriteFile(draftPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb strings.Builder
+	code := run([]string{"--frontmatter", draftPath}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("frontmatter flag failed with code %d: %s", code, errb.String())
+	}
+
+	if !strings.Contains(out.String(), "Frontmatter regenerated successfully") {
+		t.Errorf("unexpected output: %s", out.String())
+	}
+
+	bodyFile := filepath.Join(dir, "2026-07-26-test-article-body.md")
+	fmFile := filepath.Join(dir, "2026-07-26-test-article-frontmatter.yaml")
+	finalFile := filepath.Join(dir, "2026-07-26-test-article-final.md")
+
+	if _, err := os.Stat(bodyFile); err != nil {
+		t.Errorf("body file missing: %v", err)
+	}
+	if _, err := os.Stat(fmFile); err != nil {
+		t.Errorf("frontmatter file missing: %v", err)
+	}
+	if _, err := os.Stat(finalFile); err != nil {
+		t.Errorf("final file missing: %v", err)
 	}
 }

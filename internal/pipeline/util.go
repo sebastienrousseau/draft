@@ -221,6 +221,11 @@ func slugify(s string) string {
 	return out
 }
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func uniquePath(path string) string {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return path

@@ -28,10 +28,11 @@ type fakeEngine struct {
 	failEdit         bool   // if true, KindEdit calls return an error
 	writer           func(call int) (string, bool)
 
-	mu            sync.Mutex
-	writeCalls    int
-	extractCalls  int
-	lastWritePred int // NumPredict seen on the most recent write call
+	mu             sync.Mutex
+	writeCalls     int
+	extractCalls   int
+	lastWritePred  int    // NumPredict seen on the most recent write call
+	lastEditPrompt string // prompt seen on the most recent edit call
 }
 
 func (f *fakeEngine) Name() string { return f.name }
@@ -51,6 +52,9 @@ func (f *fakeEngine) Generate(_ context.Context, req engine.Request) (engine.Res
 		}
 		return engine.Result{Text: extractionResponse}, nil
 	case engine.KindEdit:
+		f.mu.Lock()
+		f.lastEditPrompt = req.Prompt
+		f.mu.Unlock()
 		if f.failEdit {
 			return engine.Result{}, errors.New("edit failed")
 		}
@@ -152,16 +156,55 @@ func TestRunHappyPathAndCleanup(t *testing.T) {
 		t.Errorf("output file missing: %v", err)
 	}
 	// Ledger scratch file must be cleaned up by default.
-	if ledgers, _ := filepath.Glob(filepath.Join(filepath.Dir(done.OutputPath), "*-verified-claim-ledger.md")); len(ledgers) != 0 {
+	if ledgers, _ := filepath.Glob(filepath.Join(cfg.DraftsDir, "*", "*-verified-claim-ledger.md")); len(ledgers) != 0 {
 		t.Errorf("ledger should have been cleaned up, found: %v", ledgers)
+	}
+}
+
+func TestRunSavesDayFolderSet(t *testing.T) {
+	cfg := testConfig(t)
+	done, errText, _ := drain(t, cfg, []engine.Engine{okEngine("fake")}, Job{Sources: []string{writeSource(t)}})
+	if errText != "" {
+		t.Fatalf("unexpected error: %s", errText)
+	}
+
+	// The final document lands in final/, with body and yaml siblings in
+	// source/ and yaml/ under the same dated directory.
+	dayDir := filepath.Dir(filepath.Dir(done.OutputPath))
+	if got := filepath.Base(filepath.Dir(done.OutputPath)); got != "final" {
+		t.Fatalf("output should be in final/, got %s (%s)", got, done.OutputPath)
+	}
+	stem := strings.TrimSuffix(filepath.Base(done.OutputPath), "-final.md")
+	if _, err := os.Stat(filepath.Join(dayDir, "source", stem+"-body.md")); err != nil {
+		t.Errorf("body file missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dayDir, "yaml", stem+"-frontmatter.yaml")); err != nil {
+		t.Errorf("frontmatter file missing: %v", err)
+	}
+
+	// A second run with the same title must bump the whole trio as a set:
+	// pre-existing files in ANY of the three folders may not desync the names.
+	done2, errText2, _ := drain(t, cfg, []engine.Engine{okEngine("fake")}, Job{Sources: []string{writeSource(t)}})
+	if errText2 != "" {
+		t.Fatalf("second run failed: %s", errText2)
+	}
+	stem2 := strings.TrimSuffix(filepath.Base(done2.OutputPath), "-final.md")
+	if stem2 == stem {
+		t.Fatalf("second run reused the same stem %q", stem)
+	}
+	if _, err := os.Stat(filepath.Join(dayDir, "source", stem2+"-body.md")); err != nil {
+		t.Errorf("second body file missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dayDir, "yaml", stem2+"-frontmatter.yaml")); err != nil {
+		t.Errorf("second frontmatter file missing: %v", err)
 	}
 }
 
 func TestRunKeepsArtifacts(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.KeepArtifacts = true
-	done, _, _ := drain(t, cfg, []engine.Engine{okEngine("fake")}, Job{Sources: []string{writeSource(t)}})
-	if ledgers, _ := filepath.Glob(filepath.Join(filepath.Dir(done.OutputPath), "*-verified-claim-ledger.md")); len(ledgers) == 0 {
+	drain(t, cfg, []engine.Engine{okEngine("fake")}, Job{Sources: []string{writeSource(t)}})
+	if ledgers, _ := filepath.Glob(filepath.Join(cfg.DraftsDir, "*", "*-verified-claim-ledger.md")); len(ledgers) == 0 {
 		t.Error("ledger should be kept with --keep-artifacts")
 	}
 }
