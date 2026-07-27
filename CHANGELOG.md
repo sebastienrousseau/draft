@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.16] - 2026-07-27
+
+### Added
+
+- **Modular frontmatter generation.** The new `internal/frontmatter` package
+  extracts article metadata (title, deck or bold-line subtitle, TL;DR /
+  executive-summary description, stopword-filtered keywords, frequency-scored
+  category) and generates the standard YAML frontmatter schema. Every draft is
+  now saved as a three-file set under the dated folder: `source/<stem>-body.md`
+  (article only), `yaml/<stem>-frontmatter.yaml` (adjacent frontmatter), and
+  `final/<stem>-final.md` (combined, ready to publish).
+- **`--frontmatter <file>` (alias `--combine`)** regenerates the set from any
+  article file. Regeneration is identity-preserving: the filename's
+  `YYYY-MM-DD-slug` is canonical for dates and URLs, existing frontmatter
+  fields always win over generated values (delete a field to have it
+  regenerated from the body), and reprocessing an unchanged set is a
+  byte-level no-op. Day-folder layouts route output to the sibling `source/`,
+  `yaml/`, and `final/` directories.
+- **`Site` publisher identity.** Generated frontmatter takes its author, URLs,
+  handles, and analytics ID from a `Site` struct (`DefaultSite` by default),
+  and the copyright end year follows the article date.
+
+### Changed
+
+- **`--review` is frontmatter-aware.** The draft's YAML block is set aside
+  before prompting, so the model and the house rules only ever see the body;
+  the frontmatter is re-attached on save, and reviewing one file of a
+  generated set resyncs its siblings.
+- **Draft sets can never desync.** The three output files are uniquified as a
+  set — a leftover file in any one folder bumps all three names together.
+
 ## [0.0.15] - 2026-07-22
 
 ### Fixed

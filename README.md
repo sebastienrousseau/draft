@@ -180,7 +180,10 @@ Run `go run ./examples/providers` to see status and which are installed.
   ending.
 - **House-style enforcement.** Banned words and phrases, British English, no
   emoji, sentence-rhythm and structure rules — checked, not just requested.
-- **Tidy output.** A successful run leaves only the article in the dated folder.
+- **Publish-ready output sets.** Every draft is saved three ways under the
+  dated folder — `source/` (body only), `yaml/` (adjacent frontmatter), and
+  `final/` (combined, ready to publish) — and `--frontmatter <file>`
+  regenerates a set from an edited body without losing curated metadata.
 - **Live dashboard.** A Bubble Tea TUI streams the article as it is written,
   with a pipeline view, per-run log, and a 25-minute focus timer.
 - **Scriptable.** `--print` runs headless and emits draft paths to stdout.
@@ -203,10 +206,47 @@ draft [flags] <source> [more-sources...]
 | `--force-new`       | Draft even if today's folder already has one            |
 | `--merge`           | Combine all sources into one draft                      |
 | `--review <draft>`  | Enhance an existing draft with surgical edits           |
+| `--frontmatter <f>` | Regenerate frontmatter + final doc from an article file |
+| `--combine <f>`     | Alias for `--frontmatter`                               |
 | `--keep-artifacts`  | Keep the claim ledger beside a successful draft         |
 | `--print`           | Run without the TUI; print draft paths to stdout        |
 | `--version`         | Print version and exit                                  |
 | `-h, --help`        | Show help                                               |
+
+---
+
+## Article sets & frontmatter
+
+A successful draft is saved as a three-file set under the dated output
+folder:
+
+```text
+2026-07-27/
+├── source/2026-07-27-<slug>-body.md         # article body only — edit this
+├── yaml/2026-07-27-<slug>-frontmatter.yaml  # adjacent YAML frontmatter
+└── final/2026-07-27-<slug>-final.md         # frontmatter + body, publishable
+```
+
+After editing a body file, regenerate its yaml and final documents in place:
+
+```sh
+draft --frontmatter 2026-07-27/source/2026-07-27-<slug>-body.md
+```
+
+Regeneration follows three rules:
+
+1. **The filename is the article's identity.** Its `YYYY-MM-DD` prefix and
+   slug drive every date and URL in the frontmatter, so regenerating later —
+   or after a retitle — never changes the permalink.
+2. **Existing frontmatter always wins.** Curated fields are preserved
+   verbatim; only missing fields are generated from the body. Delete a field
+   from the yaml file to have it regenerated.
+3. **Unchanged input is a no-op.** Reprocessing a set that has not changed
+   rewrites every file byte-identically.
+
+`--review` respects the same boundaries: the model only ever sees the article
+body, the frontmatter is re-attached on save, and reviewing one file of a set
+resyncs its siblings.
 
 ---
 
@@ -332,6 +372,7 @@ type Result struct {
 | `draft --engine codex paper.pdf`                 | Force a specific session provider                |
 | `draft --model opus paper.pdf`                   | Override the session model                        |
 | `draft --review draft.md paper.pdf`              | Enhance an existing draft from the source         |
+| `draft --frontmatter source/x-body.md`           | Regenerate the yaml + final set after a body edit |
 | `draft --print paper.pdf > path.txt`             | Headless; capture the output path                |
 | `DRAFT_NUM_CTX=2048 draft paper.pdf`             | Low-memory Ollama profile                        |
 
