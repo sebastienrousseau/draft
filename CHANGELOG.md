@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.17] - 2026-07-27
+
+### Added
+
+- **Complete example coverage.** Two new runnable, network-free demos:
+  `examples/review` (surgical-edit enhancement end to end — body-only
+  prompting, frontmatter re-attachment, and generated-set resync) and
+  `examples/frontmatter` (metadata extraction, a custom `Site` publisher
+  identity, the Split/Combine round trip, and the three regeneration rules,
+  each demonstrated live). The pipeline demo now drafts from two sources,
+  demonstrating `--merge`.
+
+### Changed
+
+- **README overhauled.** Grouped contents, a Library usage section with API
+  synopses for the pipeline runner, grounding, frontmatter, and the `Engine`
+  seam, an examples table, an honest when-not-to-use section, a documentation
+  index, and the `frontmatter/` package added to the architecture tree.
+
 ## [0.0.16] - 2026-07-27
 
 ### Added
