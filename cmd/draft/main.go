@@ -19,18 +19,20 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/sebastienrousseau/draft/internal/config"
 	"github.com/sebastienrousseau/draft/internal/engine"
+	"github.com/sebastienrousseau/draft/internal/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/pipeline"
 	"github.com/sebastienrousseau/draft/internal/tui"
 )
 
 // version is the build version, overridden at release time via -ldflags
 // "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.15"
+var version = "0.0.16"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -39,7 +41,7 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
-	var reviewPath string
+	var reviewPath, frontmatterPath string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -54,6 +56,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
 	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
 	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
+	fs.StringVar(&frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
+	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
 	fs.BoolVar(&headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
@@ -62,6 +66,27 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 	if showVersion {
 		fmt.Fprintln(stdout, "draft "+version)
+		return 0
+	}
+
+	if frontmatterPath != "" {
+		if reviewPath != "" {
+			fmt.Fprintln(stderr, "draft: --frontmatter cannot be combined with --review")
+			return 2
+		}
+		if len(fs.Args()) > 0 {
+			fmt.Fprintln(stderr, "draft: --frontmatter takes no source arguments")
+			return 2
+		}
+		bodyPath, fmPath, finalPath, err := frontmatter.ProcessFile(frontmatterPath, time.Now())
+		if err != nil {
+			fmt.Fprintln(stderr, "draft:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "Frontmatter regenerated successfully:")
+		fmt.Fprintln(stdout, "  Body file:       ", bodyPath)
+		fmt.Fprintln(stdout, "  Frontmatter file:", fmPath)
+		fmt.Fprintln(stdout, "  Final article:   ", finalPath)
 		return 0
 	}
 
