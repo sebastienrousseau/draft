@@ -21,18 +21,30 @@
 
 ## Contents
 
+**Getting started**
+
 - [Why draft](#why-draft)
 - [Install](#install)
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
+
+**Reference**
+
 - [Providers](#providers)
 - [Features](#features)
 - [Usage](#usage)
+- [Article sets & frontmatter](#article-sets--frontmatter)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
+- [Library usage](#library-usage)
 - [Examples](#examples)
+
+**Operational**
+
+- [When not to use draft](#when-not-to-use-draft)
 - [Development](#development)
 - [Security](#security)
+- [Documentation](#documentation)
 - [License](#license)
 
 ---
@@ -334,6 +346,7 @@ internal/
   prompt/           grounded claim / writing / review prompts
   claims/           claim parsing, verbatim verification, ledger
   validate/         house-rule and faithfulness checks
+  frontmatter/      metadata extraction, YAML generation, article-set regeneration
   engine/           Engine interface, session-provider registry, Ollama, routing
   pipeline/         orchestration, retries, continuation, fallback chain
   tui/              Bubble Tea dashboard and queue
@@ -361,7 +374,102 @@ type Result struct {
 
 ---
 
+## Library usage
+
+`draft` is a CLI first, but every capability sits in a focused package that the
+[examples](#examples) exercise directly. The synopses below are the shapes you
+will actually call.
+
+<details>
+<summary><strong>Run the pipeline in-process</strong> — one Job, streamed events</summary>
+
+```go
+cfg := config.Config{HomeDir: dir, DraftsDir: dir, MaxContinue: 3}
+events := make(chan pipeline.Event, 256)
+go func() {
+    pipeline.NewRunner(cfg, []engine.Engine{myEngine}, events).
+        Run(ctx, pipeline.Job{Sources: []string{"paper.txt"}})
+    close(events)
+}()
+for e := range events {
+    switch ev := e.(type) {
+    case pipeline.LogEvent:  // progress line
+    case pipeline.DoneEvent: // ev.OutputPath, ev.Words, ev.Engine
+    case pipeline.ErrEvent:  // failure text
+    }
+}
+```
+
+A `Job` with several sources is one merged draft (`--merge`); setting
+`Job.ReviewPath` enhances that draft instead of writing a new one
+(`--review`).
+
+</details>
+
+<details>
+<summary><strong>Verify claims and build a grounded prompt</strong> — claims, prompt, validate</summary>
+
+```go
+records, dropped := claims.Parse(rawExtraction, sourceText) // verbatim-quote gate
+ledger := claims.RenderPromptLedger(records, 45, 14000)
+p := prompt.Writing(styleSample, ledger, rules.MinWords, rules.MaxWords)
+
+for _, e := range validate.Errors(draftText) { // house rules + faithfulness
+    fmt.Println(e)
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Generate and regenerate frontmatter</strong> — article sets</summary>
+
+```go
+meta := frontmatter.ExtractMetadata(body)             // title, subtitle, keywords, category
+fm := frontmatter.GenerateWithOptions(body, frontmatter.Options{
+    Date: date,
+    Slug: "my-canonical-slug",   // filename identity beats the headline
+    Site: &mySite,               // publisher identity; nil = DefaultSite
+    Existing: parsedFields,      // curated fields always win
+})
+doc := frontmatter.Combine(fm, body)                  // publishable document
+bodyPath, yamlPath, finalPath, err := frontmatter.ProcessFile(path, time.Now())
+```
+
+</details>
+
+<details>
+<summary><strong>Bring your own backend</strong> — implement <code>engine.Engine</code></summary>
+
+```go
+type Engine interface {
+    Name() string
+    Generate(ctx context.Context, req Request) (Result, error)
+}
+```
+
+Return `Result{Truncated: true}` and the pipeline continues generation instead
+of saving a mid-sentence article. The whole test suite and every example run
+against in-process engines — no network, no model.
+
+</details>
+
+---
+
 ## Examples
+
+Every capability has a runnable, network-free demo in [`examples/`](examples)
+— no model, no session CLI, no API key needed.
+
+| Example | Run | What it shows |
+| ------- | --- | ------------- |
+| [`providers`](examples/providers/main.go) | `go run ./examples/providers` | Session providers in auto-selection order, install status, default models |
+| [`grounding`](examples/grounding/main.go) | `go run ./examples/grounding` | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation |
+| [`pipeline`](examples/pipeline/main.go) | `go run ./examples/pipeline` | The full five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output set |
+| [`review`](examples/review/main.go) | `go run ./examples/review` | Surgical-edit enhancement: body-only prompting, frontmatter re-attachment, set resync |
+| [`frontmatter`](examples/frontmatter/main.go) | `go run ./examples/frontmatter` | Metadata extraction, custom `Site` identity, Split/Combine round trip, the three regeneration rules |
+
+CLI recipes for day-to-day use:
 
 | Command                                          | What it does                                     |
 | ------------------------------------------------ | ------------------------------------------------ |
@@ -376,13 +484,27 @@ type Result struct {
 | `draft --print paper.pdf > path.txt`             | Headless; capture the output path                |
 | `DRAFT_NUM_CTX=2048 draft paper.pdf`             | Low-memory Ollama profile                        |
 
-Runnable, network-free library demos live in [`examples/`](examples):
+---
 
-```sh
-go run ./examples/providers   # list providers and which CLIs are installed
-go run ./examples/grounding   # claim verification, ledger, prompt, validation
-go run ./examples/pipeline    # the full pipeline against an in-process engine
-```
+## When not to use draft
+
+Honesty about the edges saves you an evening:
+
+- **You need a general-purpose summariser.** `draft` deliberately drops any
+  claim it cannot verify verbatim against your sources. Thin or scanned-image
+  PDFs yield thin ledgers and short drafts — that is the design, not a bug.
+- **You have no agent CLI and no Ollama.** There is no direct API mode; online
+  writing rides an installed session CLI's login, offline writing needs a
+  local Ollama model.
+- **Your house style is not this house style.** Structure, length bands,
+  banned vocabulary, and British English are enforced by
+  `internal/rules` and `internal/validate` — configurable in code, not yet by
+  flag.
+- **You publish with a different frontmatter schema.** The generated YAML
+  follows one opinionated schema; the publisher identity is swappable
+  (`frontmatter.Site`) but the field set is not.
+- **DOCX sources on Linux or Windows.** DOCX extraction uses macOS `textutil`;
+  PDF, Markdown, and plain text work everywhere.
 
 ---
 
@@ -390,12 +512,15 @@ go run ./examples/pipeline    # the full pipeline against an in-process engine
 
 ```sh
 make build     # compile to ./bin/draft
+make install   # go install into GOPATH/bin
 make test      # run the unit + pipeline tests
-make cover     # coverage report (≥95%)
+make race      # tests under the race detector
+make cover     # coverage report (≥95% gate, demos excluded)
 make bench     # run benchmarks
 make vet       # go vet ./...
 make lint      # golangci-lint (config in .golangci.yml)
 make fmt       # gofmt -s -w
+make check     # fmt + vet + test in one go
 make run ARGS='--help'
 ```
 
@@ -427,6 +552,19 @@ pattern, so even the session backends are covered without spawning real agents.
   conversions are flagged; unverifiable claims are dropped before writing.
 - **Bounded external calls.** Extraction shells out only to `pdftotext` /
   `textutil` (macOS) with context timeouts and no shell interpolation.
+
+---
+
+## Documentation
+
+| Document | What it covers |
+| -------- | -------------- |
+| [CHANGELOG](CHANGELOG.md) | Every released change, Keep-a-Changelog format |
+| [CONTRIBUTING](CONTRIBUTING.md) | How to propose changes and what CI expects |
+| [SECURITY](SECURITY.md) | Vulnerability disclosure policy |
+| [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) | Community standards |
+| [`examples/`](examples) | Runnable, network-free demo per capability |
+| [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation |
 
 ---
 
