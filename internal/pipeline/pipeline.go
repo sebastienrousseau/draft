@@ -23,6 +23,7 @@ import (
 	"github.com/sebastienrousseau/draft/internal/claims"
 	"github.com/sebastienrousseau/draft/internal/config"
 	"github.com/sebastienrousseau/draft/internal/engine"
+	"github.com/sebastienrousseau/draft/internal/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/internal/prompt"
 	"github.com/sebastienrousseau/draft/internal/rules"
@@ -536,13 +537,62 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 	return engine.Result{}, lastErr
 }
 
+// save writes the article as a day-folder set — source/<stem>-body.md,
+// yaml/<stem>-frontmatter.yaml and final/<stem>-final.md under outputDir —
+// and returns the final document's path.
 func (r *Runner) save(outputDir, markdown string) (string, int, error) {
-	title := extractTitle(markdown)
-	path := uniquePath(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+slugify(title)+".md"))
-	if err := os.WriteFile(path, []byte(markdown+"\n"), 0o644); err != nil {
+	_, body := frontmatter.Split(markdown)
+	body = strings.TrimSpace(body)
+
+	title := extractTitle(body)
+	now := time.Now()
+	dateStr := now.Format("2006-01-02")
+	base := dateStr + "-" + slugify(title)
+
+	srcDir := filepath.Join(outputDir, "source")
+	yamlDir := filepath.Join(outputDir, "yaml")
+	finalDir := filepath.Join(outputDir, "final")
+	for _, d := range []string{srcDir, yamlDir, finalDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return "", 0, err
+		}
+	}
+
+	// Uniquify the trio as a set: a leftover in any one folder bumps all
+	// three names together, so the files can never desync.
+	var stem, bodyPath, fmPath, finalPath string
+	for i := 1; ; i++ {
+		stem = base
+		if i > 1 {
+			stem = fmt.Sprintf("%s-%d", base, i)
+		}
+		bodyPath = filepath.Join(srcDir, stem+"-body.md")
+		fmPath = filepath.Join(yamlDir, stem+"-frontmatter.yaml")
+		finalPath = filepath.Join(finalDir, stem+"-final.md")
+		if !fileExists(bodyPath) && !fileExists(fmPath) && !fileExists(finalPath) {
+			break
+		}
+	}
+
+	if err := os.WriteFile(bodyPath, []byte(body+"\n"), 0o644); err != nil {
 		return "", 0, err
 	}
-	return path, validate.WordCount(markdown), nil
+	fmYAML := frontmatter.GenerateWithOptions(body, frontmatter.Options{
+		Date: now,
+		Slug: strings.TrimPrefix(stem, dateStr+"-"),
+	})
+	if err := os.WriteFile(fmPath, []byte(fmYAML+"\n"), 0o644); err != nil {
+		return "", 0, err
+	}
+	finalMD := frontmatter.Combine(fmYAML, body)
+	if err := os.WriteFile(finalPath, []byte(finalMD+"\n"), 0o644); err != nil {
+		return "", 0, err
+	}
+
+	r.log("saved body: " + shortPath(r.cfg, bodyPath))
+	r.log("saved frontmatter: " + shortPath(r.cfg, fmPath))
+
+	return finalPath, validate.WordCount(body), nil
 }
 
 // saveFailure preserves the raw output and, if it still looks like an article,

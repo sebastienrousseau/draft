@@ -8,8 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sebastienrousseau/draft/internal/engine"
+	"github.com/sebastienrousseau/draft/internal/frontmatter"
+	"github.com/sebastienrousseau/draft/internal/validate"
 )
 
 func writeDraft(t *testing.T) string {
@@ -19,6 +22,50 @@ func writeDraft(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
+	cfg := testConfig(t)
+	dir := t.TempDir()
+	draft := filepath.Join(dir, "2026-01-15-reviewed-final.md")
+	fmYAML := frontmatter.Generate(validArticle("."), time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	doc := frontmatter.Combine(fmYAML, validArticle("."))
+	if err := os.WriteFile(draft, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := &fakeEngine{name: "fake"}
+	done, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}, ReviewPath: draft})
+	if errText != "" {
+		t.Fatalf("review should succeed: %s", errText)
+	}
+
+	// The model must see the article body, never the YAML block.
+	if strings.Contains(eng.lastEditPrompt, "measurementID") {
+		t.Error("frontmatter leaked into the review prompt")
+	}
+	// The draft keeps its frontmatter and body after the review.
+	data, err := os.ReadFile(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "---") || !strings.Contains(string(data), "measurementID") {
+		t.Error("frontmatter was not re-attached to the reviewed draft")
+	}
+	if !strings.Contains(string(data), "# The Result That Holds") {
+		t.Error("body lost during review")
+	}
+	// Reviewing one file of a generated set resyncs its siblings.
+	if _, err := os.Stat(filepath.Join(dir, "2026-01-15-reviewed-body.md")); err != nil {
+		t.Errorf("body sibling not resynced: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "2026-01-15-reviewed-frontmatter.yaml")); err != nil {
+		t.Errorf("frontmatter sibling not resynced: %v", err)
+	}
+	// The reported word count covers the body, not the YAML.
+	if want := validate.WordCount(strings.TrimSpace(validArticle("."))); done.Words != want {
+		t.Errorf("done.Words = %d, want body-only count %d", done.Words, want)
+	}
 }
 
 func TestReviewAppliesEdits(t *testing.T) {
