@@ -68,6 +68,13 @@ func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
 	}
 }
 
+func TestSaveEnhancedWriteError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-dir", "draft.md")
+	if err := saveEnhanced(missing, "", "body text"); err == nil {
+		t.Error("writing into a missing directory should error")
+	}
+}
+
 func TestReviewAppliesEdits(t *testing.T) {
 	cfg := testConfig(t)
 	draft := writeDraft(t)

@@ -196,6 +196,106 @@ func TestCleanTextKeepsHashAndGreaterThan(t *testing.T) {
 	}
 }
 
+func TestExtractMetadataFallbacks(t *testing.T) {
+	// Executive summary drives the description when there is no TL;DR.
+	exec := "# Title A\n\n> **Executive Summary**\n>\n> - First point here.\n> - Second point here.\n\nProse.\n"
+	if got := ExtractMetadata(exec).Description; !strings.Contains(got, "First point here") {
+		t.Errorf("description should come from the executive summary, got %q", got)
+	}
+
+	// Subtitle stands in when there is no TL;DR or executive summary.
+	bold := "# Title B\n\n**A bold thesis line.**\n\nProse.\n"
+	if got := ExtractMetadata(bold).Description; got != "A bold thesis line." {
+		t.Errorf("description should fall back to the subtitle, got %q", got)
+	}
+
+	// The title is the last resort.
+	if got := ExtractMetadata("# Only Title\n\nplain prose here.").Description; got != "Only Title" {
+		t.Errorf("description should fall back to the title, got %q", got)
+	}
+
+	// Author lines are not subtitles.
+	author := "# Title C\n\n**Author: Someone Else**\n\nProse.\n"
+	if got := ExtractMetadata(author).Subtitle; got != "" {
+		t.Errorf("author line should not become the subtitle, got %q", got)
+	}
+
+	// A missing H1 yields the placeholder title.
+	if got := ExtractMetadata("just prose, no heading at all").Title; got != "Untitled Article" {
+		t.Errorf("unexpected placeholder title: %q", got)
+	}
+
+	// Long descriptions truncate at a word with an ellipsis; long subtitles
+	// cap the excerpt too.
+	long := strings.TrimSpace(strings.Repeat("wordy ", 60))
+	tldr := "# Title D\n\n**" + long + " and then even more subtitle text here**\n\n" +
+		`<p class="post-lead-tldr"><strong>TL;DR.</strong> ` + long + `</p>` + "\n\nProse.\n"
+	m := ExtractMetadata(tldr)
+	if len(m.Description) > 200 || !strings.HasSuffix(m.Description, "...") {
+		t.Errorf("description not truncated cleanly: %d bytes, %q", len(m.Description), m.Description)
+	}
+	if len(m.Excerpt) > 220 {
+		t.Errorf("excerpt not truncated: %d bytes", len(m.Excerpt))
+	}
+}
+
+func TestCombineEdges(t *testing.T) {
+	// Empty frontmatter returns the body alone.
+	if got := Combine("", "# B\n\nBody."); got != "# B\n\nBody." {
+		t.Errorf("empty frontmatter should return the body, got %q", got)
+	}
+	// A bare field block gets wrapped in delimiters.
+	fmPart, body := Split(Combine(`key: "v"`, "# B\n\nBody."))
+	if !strings.Contains(fmPart, "key:") {
+		t.Errorf("bare block not wrapped as frontmatter: %q", fmPart)
+	}
+	if !strings.HasPrefix(body, "# B") {
+		t.Errorf("body lost in wrapping: %q", body)
+	}
+}
+
+func TestSlugifyEdges(t *testing.T) {
+	if got := Slugify("!!! ***"); got != "draft-article" {
+		t.Errorf("no-letter input should use the placeholder slug, got %q", got)
+	}
+	long := strings.Repeat("word-", 30)
+	got := Slugify(long)
+	if len(got) > 90 || strings.HasSuffix(got, "-") {
+		t.Errorf("long slug not truncated cleanly: %d chars, %q", len(got), got)
+	}
+}
+
+func TestProcessFileErrors(t *testing.T) {
+	if _, _, _, err := ProcessFile("/no/such/dir/article.md", time.Time{}); err == nil {
+		t.Error("missing input should error")
+	}
+
+	// No date prefix: the whole stem is the slug and a zero date means now.
+	dir := t.TempDir()
+	f := filepath.Join(dir, "meeting-notes.md")
+	if err := os.WriteFile(f, []byte("# Some Note Title\n\nBody prose.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, fmPath, _, err := ProcessFile(f, time.Time{})
+	if err != nil {
+		t.Fatalf("ProcessFile failed: %v", err)
+	}
+	fmContent, err := os.ReadFile(fmPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(fmContent), "/meeting-notes") {
+		t.Error("slug should come from the dateless filename stem")
+	}
+}
+
+func TestGenerateZeroDateUsesNow(t *testing.T) {
+	yaml := Generate("# T\n\nBody.", time.Time{})
+	if !strings.Contains(yaml, `last_reviewed: "`+time.Now().Format("2006")+"") {
+		t.Error("zero date should fall back to the current time")
+	}
+}
+
 func TestPartOfSet(t *testing.T) {
 	cases := map[string]bool{
 		"/x/2026-01-15-a-body.md":        true,
