@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.20] - 2026-07-28
+
+### Fixed
+
+- **The logo now shows on a standard terminal.** It was gated at 28 rows, so
+  the common 80x24 window only ever got the one-line masthead. The layout is
+  now budgeted line by line: the logo appears from 24 rows (compact form —
+  tagline beside the wordmark), section rules and blank separators give way
+  first on short terminals, and the focus timer and log are drawn only when
+  the space left genuinely fits them. The running view no longer needs
+  scrolling at any height from 20 rows up, with the queue and the full
+  pipeline always visible. The nib artwork was redrawn with shoulders, a
+  vent hole, a slit, and a tip.
+
 ## [0.0.19] - 2026-07-28
 
 ### Changed

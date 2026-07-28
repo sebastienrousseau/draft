@@ -32,6 +32,48 @@ func TestRenderAllPhaseStates(t *testing.T) {
 	}
 }
 
+func TestLogoVisibleAtStandardTerminal(t *testing.T) {
+	// 80x24 is the classic default terminal; the logo must show there and
+	// the view must still fit without needing to scroll.
+	m := newModel(t, 1)
+	m = upd(m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	v := m.View()
+	if !strings.Contains(v, logoLines[0]) {
+		t.Errorf("logo missing at 80x24:\n%s", v)
+	}
+	if strings.Contains(v, "scroll ") {
+		t.Errorf("80x24 view should fit without scrolling:\n%s", v)
+	}
+	if got := len(strings.Split(v, "\n")); got > 24 {
+		t.Errorf("view is %d lines, exceeds the 24-row terminal", got)
+	}
+	if !strings.Contains(v, "Validate and save") {
+		t.Error("the whole pipeline must stay visible at 80x24")
+	}
+}
+
+func TestViewFitsEveryHeight(t *testing.T) {
+	// The running view must never need to scroll: at every terminal height
+	// the layout gives up decoration, then sections, to fit what is left.
+	for h := 20; h <= 60; h++ {
+		m := newModel(t, 2)
+		m = upd(m, tea.WindowSizeMsg{Width: 100, Height: h})
+		m.logs = []string{"resolved 1 source file(s)", "read 8 section(s)", "claim section 3/8"}
+		if v := m.View(); strings.Contains(v, "scroll ") {
+			t.Errorf("height %d needs scrolling:\n%s", h, v)
+		}
+	}
+}
+
+func TestLogoDisabledByEnv(t *testing.T) {
+	t.Setenv("DRAFT_SHOW_LOGO", "0")
+	m := newModel(t, 1)
+	m = upd(m, tea.WindowSizeMsg{Width: 120, Height: 50})
+	if v := m.View(); strings.Contains(v, logoLines[0]) {
+		t.Error("DRAFT_SHOW_LOGO=0 should suppress the logo")
+	}
+}
+
 func TestScrollViewShortAndTall(t *testing.T) {
 	m := newModel(t, 1)
 	// Tall terminal: everything fits, no scroll footer.

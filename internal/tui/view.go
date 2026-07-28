@@ -42,16 +42,16 @@ var (
 	errStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
 )
 
-// The nib: a fountain-pen point in the same braille art and red-gradient
-// treatment as the corral logo.
+// The nib: a fountain-pen point — shoulders, vent hole, slit, and tip — in
+// the same braille art and red-gradient treatment as the corral logo.
 var logoLines = []string{
-	`      ⢀⣀⣀⡀      `,
-	`    ⢀⣴⣿⣿⣿⣿⣦⡀    `,
-	`   ⢠⣿⣿⣿⠛⣿⣿⣿⡄   `,
-	`   ⣾⣿⣿⡇⠐⢸⣿⣿⣷   `,
-	`   ⠹⣿⣿⣧⣤⣼⣿⣿⠏   `,
-	`    ⠈⠻⣿⣿⣿⠟⠁     `,
-	`       ⠙⠋       `,
+	`   ⣰⣿⣿⣿⣿⣿⣿⣆   `,
+	`   ⣿⣿⣿⣿⣿⣿⣿⣿   `,
+	`   ⣿⣿⣿⠿⠿⣿⣿⣿   `,
+	`   ⠹⣿⣿⡇⢸⣿⣿⠏   `,
+	`    ⠻⣿⡇⢸⣿⠟    `,
+	`     ⠹⡇⢸⠏     `,
+	`      ⠘⠃      `,
 }
 
 var logoColors = []string{
@@ -64,14 +64,23 @@ var logoColors = []string{
 	"#9F1239",
 }
 
-// styledLogo returns the gradient nib, wordmark, and tagline.
-func styledLogo() string {
+// styledLogo returns the gradient nib with the wordmark and tagline. When
+// compact, the tagline sits beside the wordmark and the surrounding blank
+// lines are dropped, so the block still fits a standard 24-row terminal.
+func styledLogo(compact bool) string {
 	var sb strings.Builder
-	sb.WriteString("\n")
+	if !compact {
+		sb.WriteString("\n")
+	}
 	for i, line := range logoLines {
 		sb.WriteString("  " + lipgloss.NewStyle().Foreground(lipgloss.Color(logoColors[i])).Render(line) + "\n")
 	}
 	sb.WriteString("\n")
+	if compact {
+		sb.WriteString("  " + accentStyle.Render("Draft.") + "  " +
+			subtleStyle.Render("From paper to post. Grounded.") + "\n")
+		return sb.String()
+	}
 	sb.WriteString("  " + accentStyle.Render("Draft.") + "\n")
 	sb.WriteString("  " + valueStyle.Render("From paper to post. Grounded.") + "\n\n")
 	return sb.String()
@@ -97,27 +106,52 @@ func (m Model) View() string {
 		return m.scrollView(b.String())
 	}
 
-	headerLines := 4
-	if m.showLogo() {
-		headerLines = len(logoLines) + 8
+	// Budget the panels against everything else on screen: the header, the
+	// blank line under it, the chrome below (shortcut bar and footer, each
+	// preceded by a blank unless tight), and the row scrollView reserves.
+	chromeHeight := 4
+	if m.tight() {
+		chromeHeight = 2
 	}
-	panelHeight := clamp(m.height-headerLines-6, 10, 22)
+	panelHeight := clamp(m.height-m.headerHeight()-chromeHeight-2, 6, 22)
 	leftWidth := clamp(contentWidth/2-2, 34, 52)
 	rightWidth := contentWidth - leftWidth - 6
 	left := m.renderControlPanel(leftWidth, panelHeight)
 	right := m.renderPreviewPanel(rightWidth, panelHeight)
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, "  ", left, "    ", right))
-	b.WriteString("\n\n" + shortcutBar([][2]string{
+	chrome := "\n\n"
+	if m.tight() {
+		chrome = "\n"
+	}
+	b.WriteString(chrome + shortcutBar([][2]string{
 		{"[q]", "quit"}, {"[j/k]", "up/down"}, {"[pgup/pgdn]", "page"},
 	}))
-	b.WriteString("\n\n" + m.renderFooter(contentWidth))
+	b.WriteString(chrome + m.renderFooter(contentWidth))
 	return m.scrollView(b.String())
 }
 
-// showLogo reports whether the gradient logo header fits this run: tall
-// enough terminal, not the closing summary, and not disabled via env.
+// showLogo reports whether the gradient logo header fits this run. The block
+// costs 11 rows, so a standard 24-row terminal is exactly the floor at which
+// it can appear without crowding out the queue and pipeline; anything shorter
+// falls back to the one-line masthead. DRAFT_SHOW_LOGO=0 opts out entirely.
 func (m Model) showLogo() bool {
-	return os.Getenv("DRAFT_SHOW_LOGO") != "0" && m.height >= 28
+	return os.Getenv("DRAFT_SHOW_LOGO") != "0" && m.height >= 24
+}
+
+// compactLogo reports whether the logo block drops its tagline line and
+// surrounding padding to save vertical space.
+func (m Model) compactLogo() bool { return m.height < 32 }
+
+// headerHeight is the number of lines renderHeader emits, so the panels can
+// be sized to fill exactly the rest of the terminal.
+func (m Model) headerHeight() int {
+	if !m.showLogo() {
+		return 2
+	}
+	if m.compactLogo() {
+		return len(logoLines) + 4
+	}
+	return len(logoLines) + 7
 }
 
 // renderHeader draws the corral-style masthead: the gradient logo with an
@@ -128,7 +162,7 @@ func (m Model) renderHeader(width int) string {
 	activity := m.activityLine(width - 6)
 
 	if m.showLogo() {
-		return styledLogo() + "  " + subtleStyle.Render("⧇ "+activity) + "\n" + divider + "\n"
+		return styledLogo(m.compactLogo()) + "  " + subtleStyle.Render("⧇ "+activity) + "\n" + divider + "\n"
 	}
 
 	line := "  " + accentStyle.Render("Draft.") + "  " + subtleStyle.Render(activity)
@@ -174,44 +208,67 @@ func (m Model) effectiveModel() string {
 	return "session default"
 }
 
+// tight reports whether the terminal is short enough that decoration — section
+// rules and blank separators — must give way to information.
+func (m Model) tight() bool { return m.height < 30 }
+
 // section renders a corral-style section head: coral title over a thin rule.
-func section(title string, width int) string {
+// In tight mode the rule is dropped, keeping the title alone.
+func (m Model) section(title string, width int) string {
+	if m.tight() {
+		return titleStyle.Render(title) + "\n"
+	}
 	return titleStyle.Render(title) + "\n" + ruleStyle.Render(strings.Repeat("─", clamp(width, 8, 58))) + "\n"
 }
 
 func (m Model) renderControlPanel(width, height int) string {
+	gap := "\n"
+	if m.tight() {
+		gap = ""
+	}
+
 	var b strings.Builder
-	b.WriteString(section("Queue", width-4))
+	b.WriteString(m.section("Queue", width-4))
 	for i, res := range m.results {
 		b.WriteString(m.queueLine(i, res, width-6))
 	}
-	b.WriteString("\n")
-	b.WriteString(section("Pipeline", width-4))
+	b.WriteString(gap)
+	b.WriteString(m.section("Pipeline", width-4))
 	for i, name := range pipeline.PhaseNames {
 		b.WriteString(m.phaseLine(m.phases[i], name))
 	}
-	if !m.genStarted.IsZero() && height >= 16 {
+	// Spend the remaining lines on the focus timer and the log, in that
+	// order, and only when they genuinely fit — a half-drawn section is
+	// worse than none.
+	used := lineCount(b.String())
+	if !m.genStarted.IsZero() && height-used >= 4 {
+		b.WriteString(gap)
+		b.WriteString(m.focusView(time.Since(m.genStarted), width-6))
 		b.WriteString("\n")
-		b.WriteString(focusView(time.Since(m.genStarted), width-6))
-		b.WriteString("\n")
+		used = lineCount(b.String())
 	}
-	if len(m.logs) > 0 {
-		b.WriteString("\n")
-		b.WriteString(section("Log", width-4))
+	if room := height - used - 1; len(m.logs) > 0 && room >= 2 {
+		b.WriteString(gap)
+		b.WriteString(m.section("Log", width-4))
 		logs := m.logs
-		if height < 18 && len(logs) > 3 {
-			logs = logs[len(logs)-3:]
+		if len(logs) > room-1 {
+			logs = logs[len(logs)-(room-1):]
 		}
 		for _, entry := range logs {
 			b.WriteString(logStyle.Render("· "+truncate(entry, width-8)) + "\n")
 		}
 	}
-	return lipgloss.NewStyle().Width(width).Render(strings.TrimRight(b.String(), "\n"))
+	return lipgloss.NewStyle().Width(width).MaxHeight(height).Render(strings.TrimRight(b.String(), "\n"))
+}
+
+// lineCount counts rendered lines in s, ignoring a single trailing newline.
+func lineCount(s string) int {
+	return len(strings.Split(strings.TrimRight(s, "\n"), "\n"))
 }
 
 func (m Model) renderPreviewPanel(width, height int) string {
 	var b strings.Builder
-	b.WriteString(section("Live Draft", width-4))
+	b.WriteString(m.section("Live Draft", width-4))
 	b.WriteString(m.spinner.View() + " " + helpStyle.Render(m.statusText()) + "\n")
 	pct := generationPercent(m.output)
 	m.progress.Width = clamp(width-13, 12, 48) // leave room for the appended " 100%"
@@ -284,7 +341,7 @@ func (m Model) renderFooter(width int) string {
 	if gap < 2 {
 		gap = 2
 	}
-	return helpStyle.Render(" "+left+strings.Repeat(" ", gap)+right) + "\n"
+	return helpStyle.Render(" " + left + strings.Repeat(" ", gap) + right)
 }
 
 func (m Model) engineFootnote() string {
@@ -363,7 +420,7 @@ func (m Model) scrollView(s string) string {
 	return strings.Join(lines[scroll:end], "\n") + "\n" + footer
 }
 
-func focusView(elapsed time.Duration, width int) string {
+func (m Model) focusView(elapsed time.Duration, width int) string {
 	elapsed = elapsed.Round(time.Second)
 	remaining := config.FocusBlock - elapsed
 	var line string
@@ -379,7 +436,7 @@ func focusView(elapsed time.Duration, width int) string {
 	}
 	filled := int(pct * float64(barWidth))
 	bar := accentStyle.Render(strings.Repeat("━", filled)) + ruleStyle.Render(strings.Repeat("─", barWidth-filled))
-	return section("Focus", barWidth) + bar + "\n" + valueStyle.Render(line)
+	return m.section("Focus", barWidth) + bar + "\n" + valueStyle.Render(line)
 }
 
 func generationPercent(s string) float64 {
