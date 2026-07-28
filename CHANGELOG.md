@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.26] - 2026-07-28
+
+### Fixed
+
+- **Release signatures are now discoverable.** The cosign bundle shipped as
+  `checksums.txt.bundle`, an extension no tooling recognises — the OpenSSF
+  Scorecard scored Signed-Releases 0 despite the release being signed. It is
+  now `checksums.txt.sigstore.json`, the canonical Sigstore bundle name.
+- **Workflow tokens are read-only by default.** `release.yml` requested
+  `contents`, `id-token`, and `attestations` write at the workflow level,
+  so every step ran with them. Permissions are now `read-all` at the top and
+  widened only on the job that publishes.
+
+### Added
+
+- **CodeQL analysis** runs on push, pull request, and weekly, with the
+  `security-and-quality` query suite.
+
 ## [0.0.25] - 2026-07-28
 
 ### Added
@@ -28,12 +46,12 @@ series until `0.0.999`.
 
 - **Signed releases with SBOMs and build provenance.** Every archive now
   ships a CycloneDX SBOM, `checksums.txt` is signed keylessly with Sigstore
-  cosign (published as `checksums.txt.bundle`, carrying both the signature
+  cosign (published as `checksums.txt.sigstore.json`, carrying both the signature
   and the signing certificate), and GitHub build provenance is attested for
   each artefact. Verify with:
 
   ```sh
-  cosign verify-blob --bundle checksums.txt.bundle \
+  cosign verify-blob --bundle checksums.txt.sigstore.json \
     --certificate-identity-regexp 'https://github.com/sebastienrousseau/draft/.*' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     checksums.txt
