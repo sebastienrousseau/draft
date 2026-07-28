@@ -21,10 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sebastienrousseau/draft/internal/config"
-	"github.com/sebastienrousseau/draft/internal/engine"
-	"github.com/sebastienrousseau/draft/internal/frontmatter"
-	"github.com/sebastienrousseau/draft/internal/pipeline"
+	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/frontmatter"
+	"github.com/sebastienrousseau/draft/pipeline"
 )
 
 // demoEngine is a deterministic engine.Engine: it returns a fixed claim for

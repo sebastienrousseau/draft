@@ -13,10 +13,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/sebastienrousseau/draft/internal/claims"
-	"github.com/sebastienrousseau/draft/internal/prompt"
-	"github.com/sebastienrousseau/draft/internal/rules"
-	"github.com/sebastienrousseau/draft/internal/validate"
+	"github.com/sebastienrousseau/draft/claims"
+	"github.com/sebastienrousseau/draft/prompt"
+	"github.com/sebastienrousseau/draft/rules"
+	"github.com/sebastienrousseau/draft/validate"
 )
 
 func main() {

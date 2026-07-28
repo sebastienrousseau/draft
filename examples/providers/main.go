@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/sebastienrousseau/draft/internal/engine"
+	"github.com/sebastienrousseau/draft/engine"
 )
 
 func main() {

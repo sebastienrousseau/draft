@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/sebastienrousseau/draft/internal/pipeline"
+	"github.com/sebastienrousseau/draft/pipeline"
 )
 
 func TestRenderAllPhaseStates(t *testing.T) {

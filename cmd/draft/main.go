@@ -23,16 +23,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/sebastienrousseau/draft/internal/config"
-	"github.com/sebastienrousseau/draft/internal/engine"
-	"github.com/sebastienrousseau/draft/internal/frontmatter"
-	"github.com/sebastienrousseau/draft/internal/pipeline"
+	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/tui"
+	"github.com/sebastienrousseau/draft/pipeline"
 )
 
 // version is the build version, overridden at release time via -ldflags
 // "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.17"
+var version = "0.0.18"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 

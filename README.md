@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/sebastienrousseau/draft/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/draft/ci.yml?branch=main&style=for-the-badge&logo=github&label=build" alt="Build status" /></a>
   <a href="https://pkg.go.dev/github.com/sebastienrousseau/draft"><img src="https://img.shields.io/badge/go.dev-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go reference" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/coverage-95%25-brightgreen?style=for-the-badge" alt="Coverage 95%" /></a>
+  <a href="https://github.com/sebastienrousseau/draft/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-gated%20%E2%89%A595%25-brightgreen?style=for-the-badge" alt="Coverage gated at 95%" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge" alt="License: MIT OR Apache-2.0" /></a>
   <a href="#"><img src="https://img.shields.io/badge/go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+" /></a>
 </p>
@@ -280,7 +280,27 @@ Flags win over environment variables, which win over defaults.
 | `DRAFT_MAX_CONTINUE`   | `3`         | Max continuations on a length-limited stop  |
 | `DRAFT_EXTRACT_CONCURRENCY` | `4`    | Parallel extraction workers (session engines) |
 | `DRAFT_EXPERIMENTAL`   | —           | `1` to let auto use experimental providers  |
+| `DRAFT_SITE_*`         | see below   | Frontmatter publisher identity overrides    |
 | `OLLAMA_HOST`          | `http://127.0.0.1:11434` | Ollama server address          |
+
+### Publisher identity
+
+Generated frontmatter stamps a publisher identity (author, URLs, social
+handles, analytics ID). Override any part of it with `DRAFT_SITE_*`
+environment variables — unset variables keep the defaults, and curated
+frontmatter fields always win over generated ones regardless:
+
+| Variable | Overrides |
+| -------- | --------- |
+| `DRAFT_SITE_BASE_URL` | Canonical site root for permalinks and URLs |
+| `DRAFT_SITE_CDN` | Asset host for banners, logos, images |
+| `DRAFT_SITE_NAME` | Display name |
+| `DRAFT_SITE_SHORT_NAME` | Slug-like identity used in asset paths |
+| `DRAFT_SITE_EMAIL` | Contact address for author/webmaster fields |
+| `DRAFT_SITE_TWITTER` | Twitter/X handle |
+| `DRAFT_SITE_LOCATION` | Humans.txt location |
+| `DRAFT_SITE_MEASUREMENT_ID` | Analytics measurement ID |
+| `DRAFT_SITE_COPYRIGHT_FROM` | First year of the copyright range |
 
 ### Offline performance
 
@@ -339,16 +359,16 @@ pipeline is identical whether a session provider or Ollama runs behind it.
 
 ```text
 cmd/draft/          CLI entrypoint, flag parsing, headless mode
+config/             flag + env + default resolution
+rules/              shared editorial constants (banned words, limits)
+prompt/             grounded claim / writing / review prompts
+claims/             claim parsing, verbatim verification, ledger
+validate/           house-rule and faithfulness checks
+frontmatter/        metadata extraction, YAML generation, article-set regeneration
+engine/             Engine interface, session-provider registry, Ollama, routing
+pipeline/           orchestration, retries, continuation, fallback chain
 internal/
-  config/           flag + env + default resolution
   pdf/              text extraction and section splitting
-  rules/            shared editorial constants (banned words, limits)
-  prompt/           grounded claim / writing / review prompts
-  claims/           claim parsing, verbatim verification, ledger
-  validate/         house-rule and faithfulness checks
-  frontmatter/      metadata extraction, YAML generation, article-set regeneration
-  engine/           Engine interface, session-provider registry, Ollama, routing
-  pipeline/         orchestration, retries, continuation, fallback chain
   tui/              Bubble Tea dashboard and queue
 examples/           runnable, network-free demos of each capability
 ```
@@ -376,9 +396,17 @@ type Result struct {
 
 ## Library usage
 
-`draft` is a CLI first, but every capability sits in a focused package that the
-[examples](#examples) exercise directly. The synopses below are the shapes you
-will actually call.
+`draft` is a CLI first, but every capability is an importable Go package —
+`claims`, `config`, `engine`, `frontmatter`, `pipeline`, `prompt`, `rules`,
+and `validate` live at the module root (only the PDF extractor and the TUI
+stay internal):
+
+```sh
+go get github.com/sebastienrousseau/draft@latest
+```
+
+The [examples](#examples) exercise each package directly; the synopses below
+are the shapes you will actually call.
 
 <details>
 <summary><strong>Run the pipeline in-process</strong> — one Job, streamed events</summary>
@@ -502,7 +530,8 @@ Honesty about the edges saves you an evening:
   flag.
 - **You publish with a different frontmatter schema.** The generated YAML
   follows one opinionated schema; the publisher identity is swappable
-  (`frontmatter.Site`) but the field set is not.
+  (`DRAFT_SITE_*` variables or `frontmatter.Site` in code) but the field set
+  is not.
 - **DOCX sources on Linux or Windows.** DOCX extraction uses macOS `textutil`;
   PDF, Markdown, and plain text work everywhere.
 
