@@ -408,6 +408,12 @@ go get github.com/sebastienrousseau/draft@latest
 The [examples](#examples) exercise each package directly; the synopses below
 are the shapes you will actually call.
 
+> **API stability.** While the module is in `0.0.x` the exported API may change
+> between releases without a deprecation cycle. Pin an exact version if you
+> depend on it, and read the [CHANGELOG](CHANGELOG.md) before upgrading —
+> breaking changes are always listed there. The CLI's flags and output layout
+> are treated as the stable surface; the Go packages are not yet.
+
 <details>
 <summary><strong>Run the pipeline in-process</strong> — one Job, streamed events</summary>
 

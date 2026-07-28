@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -31,9 +32,21 @@ import (
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
-// version is the build version, overridden at release time via -ldflags
-// "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.23"
+// version is the build version. Release builds inject it via -ldflags
+// "-X main.version=…" (see .goreleaser.yaml); otherwise it is read from the
+// module's build info, so a `go install` reports the tag it came from. There
+// is deliberately no hand-maintained literal here — a second source of truth
+// is how v0.0.22 once shipped mislabelled.
+var version = buildVersion()
+
+func buildVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return strings.TrimPrefix(v, "v")
+		}
+	}
+	return "dev"
+}
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -42,7 +55,8 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
-	var reviewPath, frontmatterPath string
+	var jsonOut bool
+	var reviewPath, frontmatterPath, completionShell string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -60,6 +74,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
 	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
 	fs.BoolVar(&headless, "print", false, "run without the TUI; print draft paths to stdout")
+	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
+	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err := fs.Parse(argv); err != nil {
@@ -67,6 +83,13 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 	if showVersion {
 		fmt.Fprintln(stdout, "draft "+version)
+		return 0
+	}
+	if completionShell != "" {
+		if !writeCompletion(stdout, completionShell, engine.ProviderNames()) {
+			fmt.Fprintf(stderr, "draft: unknown shell %q (want bash, zsh, or fish)\n", completionShell)
+			return 2
+		}
 		return 0
 	}
 
@@ -110,6 +133,12 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	defer stop()
 	engines := engine.Chain(cfg)
 
+	if jsonOut {
+		if runHeadlessJSON(ctx, cfg, engines, jobs, stdout, stderr) > 0 {
+			return 1
+		}
+		return 0
+	}
 	if headless {
 		if runHeadless(ctx, cfg, engines, jobs, stdout, stderr) > 0 {
 			return 1
@@ -256,6 +285,8 @@ func usage(w io.Writer) {
 		{"--combine <file>", "alias for --frontmatter"},
 		{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 		{"--print", "run without the TUI; print draft paths to stdout"},
+		{"--json", "run without the TUI; one JSON object per job on stdout"},
+		{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
 		{"--version", "print version and exit"},
 		{"-h, --help", "show this help"},
 	} {

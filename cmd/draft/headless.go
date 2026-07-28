@@ -5,8 +5,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
@@ -39,6 +41,54 @@ func runHeadless(ctx context.Context, cfg config.Config, engines []engine.Engine
 				fmt.Fprintln(stderr, "  ×", string(ev))
 				failures++
 			}
+		}
+	}
+	return failures
+}
+
+// jobRecord is one line of --json output: a stable, machine-readable summary
+// of a single job's outcome.
+type jobRecord struct {
+	Source string `json:"source"`
+	Output string `json:"output,omitempty"`
+	Engine string `json:"engine,omitempty"`
+	Mode   string `json:"mode,omitempty"`
+	Words  int    `json:"words,omitempty"`
+	OK     bool   `json:"ok"`
+	Error  string `json:"error,omitempty"`
+}
+
+// runHeadlessJSON processes the queue emitting one JSON object per job to
+// stdout (JSON Lines), leaving stderr for human progress. It returns a count
+// of failed jobs.
+func runHeadlessJSON(ctx context.Context, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job, stdout, stderr io.Writer) int {
+	failures := 0
+	enc := json.NewEncoder(stdout)
+	for i, job := range jobs {
+		fmt.Fprintf(stderr, "[%d/%d] %v\n", i+1, len(jobs), job.Sources)
+		rec := jobRecord{Source: strings.Join(job.Sources, ",")}
+
+		events := make(chan pipeline.Event, 256)
+		runner := pipeline.NewRunner(cfg, engines, events)
+		go func() {
+			runner.Run(ctx, job)
+			close(events)
+		}()
+		for e := range events {
+			switch ev := e.(type) {
+			case pipeline.LogEvent:
+				fmt.Fprintln(stderr, "  ·", string(ev))
+			case pipeline.DoneEvent:
+				rec.Output, rec.Engine, rec.Mode, rec.Words, rec.OK = ev.OutputPath, ev.Engine, ev.Mode, ev.Words, true
+			case pipeline.ErrEvent:
+				rec.Error = string(ev)
+			}
+		}
+		if !rec.OK {
+			failures++
+		}
+		if err := enc.Encode(rec); err != nil {
+			fmt.Fprintln(stderr, "draft:", err)
 		}
 	}
 	return failures

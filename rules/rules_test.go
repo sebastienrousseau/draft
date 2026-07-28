@@ -3,7 +3,10 @@
 
 package rules
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestInflectLike(t *testing.T) {
 	cases := []struct{ word, kind, want string }{
@@ -47,5 +50,31 @@ func TestWordForms(t *testing.T) {
 		if f.Form == "" {
 			t.Error("empty form produced")
 		}
+	}
+}
+
+func TestMetricForms(t *testing.T) {
+	// An abbreviation and its expansion are the same metric, so a grounding
+	// check must accept either without treating the swap as a conversion.
+	forms := MetricForms("bpb")
+	if len(forms) < 2 {
+		t.Fatalf("bpb should belong to a group of equivalent forms, got %v", forms)
+	}
+	var found bool
+	for _, f := range forms {
+		if strings.Contains(strings.ToLower(f), "bits per byte") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("bpb group should contain its expansion, got %v", forms)
+	}
+	// Both directions resolve to the same group.
+	if got := MetricForms(forms[len(forms)-1]); len(got) != len(forms) {
+		t.Errorf("expansion should map back to the same group: %v vs %v", got, forms)
+	}
+	// An unknown term is its own only form.
+	if got := MetricForms("zzz-unknown"); len(got) != 1 || got[0] != "zzz-unknown" {
+		t.Errorf("unknown term should return itself alone, got %v", got)
 	}
 }
