@@ -77,7 +77,7 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engi
 	sp.Spinner = spinner.MiniDot
 	sp.Style = accentStyle
 
-	pr := progress.New(progress.WithGradient(cyan, cyanSoft), progress.WithoutPercentage())
+	pr := progress.New(progress.WithGradient(coral, coralSoft), progress.WithoutPercentage())
 	pr.Width = 44
 
 	ti := textinput.New()

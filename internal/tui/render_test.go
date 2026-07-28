@@ -27,7 +27,7 @@ func TestRenderAllPhaseStates(t *testing.T) {
 	}
 	m.phases[pipeline.PhaseWrite] = "failed"
 	v := m.View()
-	if !strings.Contains(v, "DRAFT") {
+	if !strings.Contains(v, "Draft.") {
 		t.Error("view should render")
 	}
 }
@@ -52,7 +52,7 @@ func TestFailedSummaryRendersError(t *testing.T) {
 	m = upd(m, tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = upd(m, pipeline.ErrEvent("something broke\nsecond line"))
 	v := m.View()
-	if !strings.Contains(v, "Queue complete") || !strings.Contains(v, "something broke") {
+	if !strings.Contains(v, "failures") || !strings.Contains(v, "something broke") {
 		t.Errorf("failed summary missing error: %s", v)
 	}
 }

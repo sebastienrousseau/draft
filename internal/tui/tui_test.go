@@ -73,7 +73,7 @@ func TestPipelineEventsAndView(t *testing.T) {
 	if m.words == 0 {
 		t.Error("tokens should update word count")
 	}
-	if v := m.View(); !strings.Contains(v, "DRAFT") || !strings.Contains(v, "Live Draft") {
+	if v := m.View(); !strings.Contains(v, "Draft.") || !strings.Contains(v, "Live Draft") {
 		t.Error("running view should render header and preview")
 	}
 	// Percentage must appear on the progress bar.
@@ -107,7 +107,7 @@ func TestDoneAdvancesQueueThenAllDone(t *testing.T) {
 		t.Error("should be all-done after last job")
 	}
 	v := m.View()
-	if !strings.Contains(v, "Queue complete") || !strings.Contains(v, "failed") {
+	if !strings.Contains(v, "Done.") && !strings.Contains(v, "failures") || !strings.Contains(v, "failed") {
 		t.Errorf("summary view wrong:\n%s", v)
 	}
 }

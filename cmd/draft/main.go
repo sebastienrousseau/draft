@@ -32,7 +32,7 @@ import (
 
 // version is the build version, overridden at release time via -ldflags
 // "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.18"
+var version = "0.0.19"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -128,6 +128,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 // quits so background pipeline work stops promptly.
 func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job) error {
 	defer cancel()
+	tui.Version = version
 	m := tui.New(ctx, cancel, cfg, engines, jobs)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
