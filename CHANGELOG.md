@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.18] - 2026-07-28
+
+### Added
+
+- **Publisher identity via environment.** `DRAFT_SITE_*` variables
+  (BASE_URL, CDN, NAME, SHORT_NAME, EMAIL, TWITTER, LOCATION,
+  MEASUREMENT_ID, COPYRIGHT_FROM) override the frontmatter publisher
+  identity for the CLI and pipeline alike; unset variables keep the
+  defaults, and curated fields still always win.
+
+### Changed
+
+- **Library packages are now public.** `claims`, `config`, `engine`,
+  `frontmatter`, `pipeline`, `prompt`, `rules`, and `validate` moved from
+  `internal/` to the module root, so external projects can import them
+  (`go get github.com/sebastienrousseau/draft`). Only the PDF extractor and
+  the TUI remain internal. Import paths within this module changed
+  accordingly; the CLI is unaffected.
+
 ## [0.0.17] - 2026-07-27
 
 ### Added

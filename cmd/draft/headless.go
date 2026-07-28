@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/sebastienrousseau/draft/internal/config"
-	"github.com/sebastienrousseau/draft/internal/engine"
-	"github.com/sebastienrousseau/draft/internal/pipeline"
+	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/pipeline"
 )
 
 // runHeadless processes the queue without the Bubble Tea UI. Progress logs go to

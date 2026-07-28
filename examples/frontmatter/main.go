@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sebastienrousseau/draft/internal/frontmatter"
+	"github.com/sebastienrousseau/draft/frontmatter"
 )
 
 const article = `# Router-S Cuts Compute Without Cutting Accuracy
