@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.25] - 2026-07-28
+
+### Added
+
+- **OpenSSF Scorecard analysis and badge.** A weekly (and on-push) workflow
+  publishes the repository's supply-chain score, so the signing, SBOM,
+  provenance, pinned-action and vulnerability-scanning work is visible
+  rather than implied.
+- **A module overview on pkg.go.dev.** `doc.go` explains the grounding
+  guarantee, maps the packages, and states the 0.0.x stability contract, so
+  the module's landing page says what the tool is for.
+
+### Changed
+
+- **`cmd/draft` coverage** rose from 88.6% to 91.1%, covering the `--json`
+  failure record (a failed job must report `ok:false` with an error rather
+  than claiming success), the version fallback, and the `max` helper.
+
 ## [0.0.24] - 2026-07-28
 
 ### Added
