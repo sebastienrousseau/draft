@@ -202,6 +202,36 @@ func TestBuildJobsReview(t *testing.T) {
 	}
 }
 
+func TestUsageIsBranded(t *testing.T) {
+	var b strings.Builder
+	usage(&b)
+	out := b.String()
+
+	// The command's own surface carries the same identity as the dashboard.
+	for _, want := range []string{"⣰⣿", "Draft.", "From paper to post. Grounded."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("usage is missing branding %q", want)
+		}
+	}
+	// And it documents every flag the binary actually accepts.
+	for _, want := range []string{"--frontmatter", "--combine", "DRAFT_SITE_"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("usage does not document %q", want)
+		}
+	}
+}
+
+func TestUsageLogoDisabledByEnv(t *testing.T) {
+	t.Setenv("DRAFT_SHOW_LOGO", "0")
+	var b strings.Builder
+	usage(&b)
+	if out := b.String(); strings.Contains(out, "⣰⣿") {
+		t.Error("DRAFT_SHOW_LOGO=0 should suppress the logo in usage")
+	} else if !strings.Contains(out, "USAGE") {
+		t.Error("usage text must still render without the logo")
+	}
+}
+
 func TestRunFrontmatterFlagConflicts(t *testing.T) {
 	dir := t.TempDir()
 	draftPath := filepath.Join(dir, "2026-07-27-conflict.md")

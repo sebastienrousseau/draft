@@ -5,7 +5,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/pipeline"
 	"github.com/sebastienrousseau/draft/rules"
 )
@@ -21,70 +21,31 @@ import (
 // cmd/draft; the "dev" fallback makes an un-injected build obvious.
 var Version = "dev"
 
-// Palette — mirrors the corral UI language: one coral accent over a quiet
-// ramp of grays, green and red reserved for final outcomes.
-const (
-	coral     = "#F56B5E"
-	coralSoft = "#FF8A7A"
-)
-
+// Palette, logo, and styles come from the shared brand package so the
+// dashboard and the command-line surface present the same face.
 var (
-	accentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(coral)).Bold(true)
-	titleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(coral)).Bold(true)
-	valueStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	subtleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	helpStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("243"))
-	logStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	sepStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("239"))
-	ruleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-	okStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	errStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	accentStyle = brand.Accent
+	titleStyle  = brand.Title
+	valueStyle  = brand.Value
+	subtleStyle = brand.Subtle
+	helpStyle   = brand.Help
+	logStyle    = brand.Log
+	mutedStyle  = brand.Muted
+	sepStyle    = brand.Sep
+	ruleStyle   = brand.Rule
+	okStyle     = brand.OK
+	errStyle    = brand.Err
+
+	logoLines = brand.LogoLines
 )
 
-// The nib: a fountain-pen point — shoulders, vent hole, slit, and tip — in
-// the same braille art and red-gradient treatment as the corral logo.
-var logoLines = []string{
-	`   ⣰⣿⣿⣿⣿⣿⣿⣆   `,
-	`   ⣿⣿⣿⣿⣿⣿⣿⣿   `,
-	`   ⣿⣿⣿⠿⠿⣿⣿⣿   `,
-	`   ⠹⣿⣿⡇⢸⣿⣿⠏   `,
-	`    ⠻⣿⡇⢸⣿⠟    `,
-	`     ⠹⡇⢸⠏     `,
-	`      ⠘⠃      `,
-}
+const (
+	coral     = brand.Coral
+	coralSoft = brand.CoralSoft
+)
 
-var logoColors = []string{
-	"#F87171",
-	"#F25447",
-	"#D5473D",
-	"#C93F36",
-	"#B02E28",
-	"#A22030",
-	"#9F1239",
-}
-
-// styledLogo returns the gradient nib with the wordmark and tagline. When
-// compact, the tagline sits beside the wordmark and the surrounding blank
-// lines are dropped, so the block still fits a standard 24-row terminal.
-func styledLogo(compact bool) string {
-	var sb strings.Builder
-	if !compact {
-		sb.WriteString("\n")
-	}
-	for i, line := range logoLines {
-		sb.WriteString("  " + lipgloss.NewStyle().Foreground(lipgloss.Color(logoColors[i])).Render(line) + "\n")
-	}
-	sb.WriteString("\n")
-	if compact {
-		sb.WriteString("  " + accentStyle.Render("Draft.") + "  " +
-			subtleStyle.Render("From paper to post. Grounded.") + "\n")
-		return sb.String()
-	}
-	sb.WriteString("  " + accentStyle.Render("Draft.") + "\n")
-	sb.WriteString("  " + valueStyle.Render("From paper to post. Grounded.") + "\n\n")
-	return sb.String()
-}
+// styledLogo renders the brand logo block.
+func styledLogo(compact bool) string { return brand.Logo(compact) }
 
 // View implements tea.Model.
 func (m Model) View() string {
@@ -135,7 +96,7 @@ func (m Model) View() string {
 // it can appear without crowding out the queue and pipeline; anything shorter
 // falls back to the one-line masthead. DRAFT_SHOW_LOGO=0 opts out entirely.
 func (m Model) showLogo() bool {
-	return os.Getenv("DRAFT_SHOW_LOGO") != "0" && m.height >= 24
+	return brand.ShowLogo() && m.height >= 24
 }
 
 // compactLogo reports whether the logo block drops its tagline line and
