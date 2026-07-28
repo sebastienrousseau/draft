@@ -12,6 +12,7 @@ path = [
   ".golangci.yml",
   "LICENSE-MIT",
   "LICENSE-APACHE",
+  "internal/pdf/testdata/*.pdf",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Sebastien Rousseau"

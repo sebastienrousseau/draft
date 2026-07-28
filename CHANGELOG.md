@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.27] - 2026-07-28
+
+### Fixed
+
+- **Two-column papers are no longer read across the columns.** Extraction
+  passed `-layout` to `pdftotext`, which preserves the *visual* arrangement:
+  on a two-column paper the left and right columns were spliced onto shared
+  lines, so sentences broke mid-thought and merged with unrelated text. Since
+  a claim survives verification only when its `SOURCE_QUOTE` appears verbatim
+  in the source, this quietly undermined grounding on exactly the documents
+  the tool is built for. Poppler's default reading order is now used. Measured
+  on a real corpus, spliced lines fell from 158 and 59 on two papers to **zero
+  on all of them**.
+- **A contents listing no longer truncates the whole paper.** Sectioning cut
+  the document at the *first* line matching `references|bibliography|
+  acknowledgements|appendix`, which in a paper with a contents page is the
+  entry "References … 4" in the front matter, not the bibliography. A 62-page
+  paper was reduced to its first 8kB — the claim ledger was built from the
+  table of contents. The last such heading is now used, which also keeps the
+  degenerate case right: a document that is only a bibliography still yields
+  no sections. The same paper now retains **97.3% of its text, up from 3.9%**.
+
+### Added
+
+- **A clear diagnosis for PDFs with no text layer.** A scan or image export
+  previously produced empty text and a late, vague failure. `pdf.ErrNoTextLayer`
+  now explains what happened and what to do — run OCR, or supply a text source.
+- **Real PDF fixtures.** `internal/pdf/testdata` holds a generated two-column
+  paper — complete with a contents listing naming "References" in its front
+  matter — and a page with no text layer, both built by a committed script so
+  they are reproducible and license-clean. Regression tests assert that no
+  output line carries text from two columns, that body claims survive
+  sectioning, that the real bibliography is still dropped, and that a
+  text-less PDF is diagnosed.
+
 ## [0.0.26] - 2026-07-28
 
 ### Fixed

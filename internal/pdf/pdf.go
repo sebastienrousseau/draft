@@ -12,6 +12,7 @@ package pdf
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,11 +44,20 @@ func Extract(ctx context.Context, path string) (string, error) {
 		}
 		return NormaliseSpace(string(b)), nil
 	case ".pdf":
-		out, err := runTool(ctx, 120*time.Second, "pdftotext", "-layout", path, "-")
+		// Reading order, not physical layout. `-layout` preserves the visual
+		// arrangement, which on a two-column paper splices the left and right
+		// columns onto shared lines — sentences then break mid-thought and
+		// merge with unrelated text, so a claim's SOURCE_QUOTE can never match
+		// the source verbatim. Poppler's default flows each column in turn.
+		out, err := runTool(ctx, 120*time.Second, "pdftotext", path, "-")
 		if err != nil {
 			return "", fmt.Errorf("pdftotext: %w", err)
 		}
-		return NormaliseSpace(out), nil
+		text := NormaliseSpace(out)
+		if text == "" {
+			return "", ErrNoTextLayer
+		}
+		return text, nil
 	case ".docx":
 		// textutil is macOS-only; elsewhere DOCX is unsupported rather than a
 		// confusing "command not found".
@@ -64,6 +74,14 @@ func Extract(ctx context.Context, path string) (string, error) {
 	}
 }
 
+// ErrNoTextLayer reports a PDF that carries no extractable text — typically a
+// scan or an export of page images. Nothing downstream can ground a claim in
+// it, so the run stops here with an explanation rather than failing later with
+// an empty ledger.
+var ErrNoTextLayer = errors.New(
+	"no text could be extracted; the PDF appears to be a scan or image export. " +
+		"Run it through OCR first (for example: ocrmypdf in.pdf out.pdf), or supply a text or Markdown source")
+
 // Section is a labelled slice of source text.
 type Section struct {
 	Label string
@@ -78,8 +96,8 @@ func SplitSections(name, text string) []Section {
 	if text == "" {
 		return nil
 	}
-	if loc := stopSection.FindStringIndex(text); loc != nil {
-		text = strings.TrimSpace(text[:loc[0]])
+	if cut := lastStopIndex(text); cut >= 0 {
+		text = strings.TrimSpace(text[:cut])
 	}
 	if text == "" {
 		return nil
@@ -110,6 +128,20 @@ func SplitSections(name, text string) []Section {
 		}
 	}
 	return sections
+}
+
+// lastStopIndex reports where the trailing reference or appendix matter
+// begins, or -1 if there is none. It takes the LAST such heading rather than
+// the first, because a contents list names "References" in the front matter
+// and cutting there discards the entire paper. Taking the last match also
+// keeps the degenerate case right: a document that is nothing but a
+// bibliography has its single heading at the start, so everything is cut.
+func lastStopIndex(text string) int {
+	locs := stopSection.FindAllStringIndex(text, -1)
+	if len(locs) == 0 {
+		return -1
+	}
+	return locs[len(locs)-1][0]
 }
 
 // NormaliseSpace canonicalises line endings and collapses runs of blank lines.
