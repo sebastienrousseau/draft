@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.24] - 2026-07-28
+
+### Added
+
+- **Signed releases with SBOMs and build provenance.** Every archive now
+  ships a CycloneDX SBOM, `checksums.txt` is signed keylessly with Sigstore
+  cosign (certificate and signature published alongside), and GitHub build
+  provenance is attested for each artefact. Consumers can verify what they
+  downloaded and where it was built.
+- **`--json`** runs headless and emits one JSON object per job (JSON Lines)
+  on stdout — source, output path, engine, mode, word count, and status —
+  leaving stderr for human progress, so runs can be piped into other tools.
+- **`--completion <bash|zsh|fish>`** prints a shell completion script,
+  completing flags, engine names, and file arguments.
+- **Runnable examples on pkg.go.dev** for `config`, `frontmatter`,
+  `pipeline`, `prompt`, and `rules`, so every public package now documents
+  itself with compiled, verified code.
+- **An API stability note** in the README: while the module is `0.0.x` the
+  Go API may change between releases, the CLI surface is the stable one, and
+  breaking changes are always listed in this file.
+
+### Changed
+
+- **The version has one source of truth.** It was a hand-maintained literal
+  in `cmd/draft/main.go` *and* an ldflags injection — the duplication is how
+  v0.0.22 once shipped mislabelled. It is now derived from the build info,
+  overridden by ldflags for releases, and `make build`/`make install` stamp
+  it from `git describe`, so a local build reports exactly what it is.
+
+### Fixed
+
+- **`rules` coverage** rose from 81.1% to 94.6%: `MetricForms`, which decides
+  whether an abbreviation and its expansion count as the same metric during
+  the faithfulness check, had no test at all.
+
 ## [0.0.23] - 2026-07-28
 
 ### Added

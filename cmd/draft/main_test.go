@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -279,5 +280,58 @@ func TestRunFrontmatterFlag(t *testing.T) {
 	}
 	if _, err := os.Stat(finalFile); err != nil {
 		t.Errorf("final file missing: %v", err)
+	}
+}
+
+func TestVersionDerivedFromBuildInfo(t *testing.T) {
+	// The version must not be a hand-maintained literal: it is released from a
+	// tag, and a second source of truth is what let v0.0.22 ship mislabelled.
+	if version == "" {
+		t.Fatal("version is empty")
+	}
+	// A go-install build reports the module version; a plain `go build` or
+	// `go test` has none, and must fall back to a readable placeholder rather
+	// than a stale hardcoded number.
+	if version != "dev" && !strings.HasPrefix(version, "v") && !strings.HasPrefix(version, "0.") {
+		t.Errorf("unexpected version form %q", version)
+	}
+}
+
+func TestRunHeadlessJSON(t *testing.T) {
+	cfg, full := tmpSource(t, "paper.txt")
+	jobs := []pipeline.Job{{Sources: []string{full}}}
+	var out strings.Builder
+	if failures := runHeadlessJSON(context.Background(), cfg, []engine.Engine{stubEngine{}}, jobs, &out, io.Discard); failures != 0 {
+		t.Fatalf("expected success, got %d failures", failures)
+	}
+	// One JSON object per line, machine-readable.
+	var rec struct {
+		Source, Output, Engine, Mode string
+		Words                        int
+		OK                           bool
+	}
+	line := strings.TrimSpace(out.String())
+	if err := json.Unmarshal([]byte(line), &rec); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, line)
+	}
+	if !rec.OK || rec.Words == 0 || rec.Engine == "" || !strings.HasSuffix(rec.Output, "-final.md") {
+		t.Errorf("unexpected record: %+v", rec)
+	}
+}
+
+func TestCompletionScripts(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		var out strings.Builder
+		if code := run([]string{"--completion", shell}, &out, io.Discard); code != 0 {
+			t.Errorf("--completion %s exited %d", shell, code)
+		}
+		// fish spells long options as "-l frontmatter", bash/zsh as "--frontmatter".
+		if !strings.Contains(out.String(), "frontmatter") || !strings.Contains(out.String(), "draft") {
+			t.Errorf("%s completion does not mention the flags", shell)
+		}
+	}
+	var errb strings.Builder
+	if code := run([]string{"--completion", "nonsense"}, io.Discard, &errb); code != 2 {
+		t.Error("an unknown shell should exit 2")
 	}
 }

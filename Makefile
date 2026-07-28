@@ -1,17 +1,20 @@
 BINARY := draft
 BIN_DIR := bin
 PKG := ./...
+# Local builds carry the same version a release would, derived from git.
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
 .DEFAULT_GOAL := build
 
 .PHONY: build
 build: ## Compile the binary to ./bin/draft
 	@mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/$(BINARY) ./cmd/draft
+	go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/draft
 
 .PHONY: install
 install: ## Install the binary into GOPATH/bin
-	go install ./cmd/draft
+	go install -ldflags '$(LDFLAGS)' ./cmd/draft
 
 .PHONY: run
 run: ## Run the CLI, e.g. make run ARGS='--help'
