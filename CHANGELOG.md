@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.22] - 2026-07-28
+
+### Changed
+
+- **The command-line surface is branded too.** Until now the corral restyle
+  only reached the full-screen dashboard, so `draft` and `draft --help` —
+  the surface most people see most often — still printed plain, unstyled
+  text. Help now opens with the gradient nib logo, wordmark, and tagline,
+  with coral section headings and flag names over the reference text.
+  Colour is dropped automatically when the output is piped, and
+  `DRAFT_SHOW_LOGO=0` suppresses the logo. The logo, palette, and styles
+  moved into a shared `internal/brand` package so the CLI and the dashboard
+  cannot drift apart.
+
+### Fixed
+
+- **Help documents every flag.** `--frontmatter`, `--combine`,
+  `DRAFT_EXTRACT_CONCURRENCY`, `DRAFT_SITE_*`, and `DRAFT_SHOW_LOGO` were
+  missing from the reference text, and the OUTPUT section still described
+  the pre-0.0.16 single-file layout instead of the day-folder set.
+
 ## [0.0.21] - 2026-07-28
 
 ### Added

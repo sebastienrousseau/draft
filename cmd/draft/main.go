@@ -26,13 +26,14 @@ import (
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/frontmatter"
+	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/internal/tui"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
 // version is the build version, overridden at release time via -ldflags
 // "-X main.version=…" (see .goreleaser.yaml).
-var version = "0.0.21"
+var version = "0.0.22"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
@@ -192,67 +193,99 @@ func resolveSource(cfg config.Config, arg string) (string, error) {
 	return "", fmt.Errorf("research file not found: %s", arg)
 }
 
+// usage prints the branded help: the logo and wordmark, then coral section
+// headings over the reference text. Colour is dropped automatically when the
+// output is not a terminal, and DRAFT_SHOW_LOGO=0 suppresses the logo.
 func usage(w io.Writer) {
-	fmt.Fprint(w, `draft `+version+` — research PDFs into grounded Markdown drafts
+	head := func(s string) string { return brand.Title.Render(s) }
+	flag := func(s string) string { return brand.Accent.Render(s) }
+	dim := func(s string) string { return brand.Help.Render(s) }
 
-USAGE
-  draft [flags] <source> [more-sources...]
+	if brand.ShowLogo() {
+		fmt.Fprint(w, brand.Logo(false))
+	} else {
+		fmt.Fprint(w, "  "+brand.Accent.Render("Draft.")+"  "+brand.Subtle.Render(brand.Tagline)+"\n\n")
+	}
+	fmt.Fprintf(w, "  %s\n\n", dim("draft "+version+" — research PDFs into grounded Markdown drafts"))
 
-  Bare filenames resolve against ~/Drop/Drafts/Sources.
-  Each source becomes its own draft, processed as a queue.
+	fmt.Fprintf(w, "%s\n  draft [flags] <source> [more-sources...]\n\n", head("USAGE"))
+	fmt.Fprintf(w, "  %s\n  %s\n\n",
+		dim("Bare filenames resolve against ~/Drop/Drafts/Sources."),
+		dim("Each source becomes its own draft, processed as a queue."))
 
-EXAMPLES
-  draft "2603.23420.pdf"                 # one paper
-  draft a.pdf b.pdf c.pdf                # three drafts, queued
-  draft --merge notes.md paper.pdf       # combine into a single draft
-  draft --engine ollama paper.pdf        # force the local model
-  draft --engine codex paper.pdf         # force a specific session provider
-  draft --model opus paper.pdf           # override the session model
+	fmt.Fprintf(w, "%s\n", head("EXAMPLES"))
+	for _, ex := range [][2]string{
+		{`draft "2603.23420.pdf"`, "one paper"},
+		{"draft a.pdf b.pdf c.pdf", "three drafts, queued"},
+		{"draft --merge notes.md paper.pdf", "combine into a single draft"},
+		{"draft --engine ollama paper.pdf", "force the local model"},
+		{"draft --review draft.md paper.pdf", "enhance an existing draft"},
+		{"draft --frontmatter source/x-body.md", "regenerate the yaml + final set"},
+	} {
+		fmt.Fprintf(w, "  %-40s %s\n", ex[0], dim("# "+ex[1]))
+	}
+	fmt.Fprintln(w)
 
-ENGINE
-  In auto mode (default) draft writes with the first installed AI coding-agent
+	fmt.Fprintf(w, "%s\n", head("ENGINE"))
+	fmt.Fprintf(w, `  In auto mode (default) draft writes with the first installed AI coding-agent
   CLI, using that tool's own logged-in session — no API token. Supported
   providers, in preference order:
 
-    `+strings.Join(engine.ProviderNames(), ", ")+`
+    %s
 
   claude, copilot, codex, grok, agy, and cursor-agent are verified end to end and
   used by auto mode; the rest are experimental (invocation correct, output
   unverified) and used by auto only with --experimental. Force any by name.
 
   If a session call fails because the machine is offline, draft fails over to a
-  local Ollama model and stays there for the rest of the run. Force any backend
-  with --engine.
+  local Ollama model and stays there for the rest of the run.
 
-FLAGS
-  --engine <mode>        auto (default), ollama, or a provider name
-  --model <name>         session-provider model override (e.g. opus)
-  --experimental         let auto mode use experimental providers
-  --num-ctx <n>          Ollama context window (default 8192)
-  --num-predict <n>      Ollama max output tokens (default 6000)
-  --force-new            draft even if today's folder already has one
-  --merge                combine all sources into one draft
-  --review <draft.md>    enhance an existing draft with surgical edits
-  --keep-artifacts       keep prompt/ledger files beside a successful draft
-  --print                run without the TUI; print draft paths to stdout
-  --version              print version and exit
-  -h, --help             show this help
+`, strings.Join(engine.ProviderNames(), ", "))
 
-ENVIRONMENT
-  DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,
-  DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,
-  DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, OLLAMA_HOST
+	fmt.Fprintf(w, "%s\n", head("FLAGS"))
+	for _, f := range [][2]string{
+		{"--engine <mode>", "auto (default), ollama, or a provider name"},
+		{"--model <name>", "session-provider model override (e.g. opus)"},
+		{"--experimental", "let auto mode use experimental providers"},
+		{"--num-ctx <n>", "Ollama context window (default 8192)"},
+		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
+		{"--force-new", "draft even if today's folder already has one"},
+		{"--merge", "combine all sources into one draft"},
+		{"--review <draft.md>", "enhance an existing draft with surgical edits"},
+		{"--frontmatter <file>", "regenerate frontmatter and the final article"},
+		{"--combine <file>", "alias for --frontmatter"},
+		{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
+		{"--print", "run without the TUI; print draft paths to stdout"},
+		{"--version", "print version and exit"},
+		{"-h, --help", "show this help"},
+	} {
+		fmt.Fprintf(w, "  %s%s%s\n", flag(f[0]), strings.Repeat(" ", max(1, 23-len(f[0]))), dim(f[1]))
+	}
+	fmt.Fprintln(w)
 
-OUTPUT
-  A successful run leaves only the finished article in ~/Drop/Drafts/YYYY-MM-DD/
-  (prompt and ledger scratch files are removed unless --keep-artifacts). A
-  failed run keeps the raw output and any needs-review copy for inspection.
+	fmt.Fprintf(w, "%s\n", head("ENVIRONMENT"))
+	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n\n",
+		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
+		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
+		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
+		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
 
-REQUIREMENTS
-  pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI
-  (online) or a running Ollama server (offline).
+	fmt.Fprintf(w, "%s\n", head("OUTPUT"))
+	fmt.Fprintf(w, "  %s\n  %s\n  %s\n\n",
+		dim("Each draft is saved as a set under ~/Drop/Drafts/YYYY-MM-DD/:"),
+		dim("source/<stem>-body.md, yaml/<stem>-frontmatter.yaml, final/<stem>-final.md."),
+		dim("Scratch files are removed unless --keep-artifacts."))
 
-KEYS
-  q / esc quit · enter queue another source · j/k · arrows · pgup/pgdn scroll
-`)
+	fmt.Fprintf(w, "%s\n  %s\n\n", head("REQUIREMENTS"),
+		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline)."))
+
+	fmt.Fprintf(w, "%s\n  %s\n", head("KEYS"),
+		dim("q / esc quit · enter queue another source · j/k · arrows · pgup/pgdn scroll"))
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
