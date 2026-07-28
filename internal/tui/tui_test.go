@@ -222,8 +222,9 @@ func TestHelpers(t *testing.T) {
 	if generationPercent("# T <aside Executive Summary\n## a\n## b") < 0.5 {
 		t.Error("rich content should score higher")
 	}
-	_ = focusView(30*time.Second, 40)
-	_ = focusView(26*time.Minute, 40) // over-time branch
+	fm := newModel(t, 1)
+	_ = fm.focusView(30*time.Second, 40)
+	_ = fm.focusView(26*time.Minute, 40) // over-time branch
 }
 
 func TestEffectiveModel(t *testing.T) {
