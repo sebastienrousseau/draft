@@ -6,7 +6,8 @@
 <h1 align="center">draft</h1>
 
 <p align="center">
-  Turn research PDFs into grounded, publication-ready Markdown drafts — written by any token-free AI coding-agent session when you are online, by a local Ollama model when you are not.
+  Research papers in. Publication-ready Markdown out.<br/>
+  Every sentence grounded in a fact it can prove.
 </p>
 
 <p align="center">
@@ -31,12 +32,12 @@
 
 **Reference**
 
+- [Capabilities](#capabilities)
 - [Providers](#providers)
-- [Features](#features)
 - [Usage](#usage)
-- [Article sets & frontmatter](#article-sets--frontmatter)
-- [Configuration](#configuration)
+- [Article sets](#article-sets)
 - [Performance](#performance)
+- [Configuration](#configuration)
 - [Architecture](#architecture)
 - [Library usage](#library-usage)
 - [Examples](#examples)
@@ -53,72 +54,89 @@
 
 ## Why draft
 
-Small local models invent plausible facts. Cloud APIs cost tokens and need a
-network. `draft` gets the best of both: online, it writes with **whatever AI
-coding-agent CLI you already use** — Claude, Codex, Gemini, Copilot, Cursor,
-Amp, Crush, Goose, Grok, Qwen — through that tool's **own logged-in session, so
-there is no API token to manage**. Offline, it falls back to a **local Ollama
-model**. Either way, every draft is grounded in a **verified claim ledger**
-mined from your sources, so the writer arranges pre-checked facts instead of
-hallucinating new ones.
+**Grounded by construction.**
 
-Point it at one paper or a stack of them. Each PDF becomes its own draft,
-processed as a queue in a full-screen dashboard — online or offline.
+A small local model will invent a plausible number. A cloud API will charge you
+for the privilege and want a network. `draft` takes neither risk.
+
+Online, it writes through whichever AI coding-agent CLI you already have —
+Claude, Codex, Copilot, Cursor, Grok and more — using that tool's own logged-in
+session. No API key. No token budget. Offline, it falls back to a local Ollama
+model and stays there.
+
+Either way, the model never gets to invent. Before a word is written, your
+sources are mined for claims, and a claim survives only if its quote appears
+verbatim in the source and every number in it appears in that quote. That
+verified ledger is the only factual substrate the writer is given. It arranges
+facts. It does not source them.
+
+Point it at one paper or twenty. Each becomes its own draft, queued in a
+full-screen dashboard.
 
 ---
 
 ## Install
 
-**With `go install`** (requires Go 1.24+):
-
 ```sh
 go install github.com/sebastienrousseau/draft/cmd/draft@latest
 ```
 
-**From source:**
+Or build it yourself:
 
 ```sh
 git clone https://github.com/sebastienrousseau/draft
 cd draft
-make build          # builds ./bin/draft
+make build          # ./bin/draft
 ```
 
-**Runtime dependencies** (all optional depending on how you run):
+Signed binaries for macOS, Linux and Windows are attached to every
+[release](https://github.com/sebastienrousseau/draft/releases), each with a
+CycloneDX SBOM. Verify one:
 
-| Tool                     | Needed for                        | Install (macOS)              |
-| ------------------------ | --------------------------------- | ---------------------------- |
-| `pdftotext` (Poppler)    | reading PDFs                      | `brew install poppler`       |
-| `textutil`               | reading DOCX (macOS-only)         | built in                     |
-| a session CLI            | online writing via your session | [`claude`][claude], `codex`, `gemini`, … |
-| [`ollama`][ollama]       | offline writing                  | `brew install ollama`        |
+```sh
+cosign verify-blob --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/sebastienrousseau/draft/.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+```
 
-Runs on **macOS, Linux, and Windows** (release binaries for all three). PDF,
-Markdown, and text sources work everywhere; DOCX is macOS-only.
+**What you need at runtime**, depending on how you run:
+
+| Tool                  | Needed for                      | Install (macOS)        |
+| --------------------- | ------------------------------- | ---------------------- |
+| `pdftotext` (Poppler) | reading PDFs                    | `brew install poppler` |
+| `textutil`            | reading DOCX (macOS only)       | built in               |
+| a session CLI         | online writing, via your login  | [`claude`][claude], `codex`, … |
+| [`ollama`][ollama]    | offline writing                 | `brew install ollama`  |
+
+PDF, Markdown and text work everywhere. DOCX is macOS only.
 
 ---
 
 ## Quick start
 
 ```sh
-# One paper. Online → Claude; offline → Ollama. Bare names resolve
-# against ~/Drop/Drafts/Sources.
+# One paper. Online it picks your agent CLI; offline it uses Ollama.
+# Bare filenames resolve against ~/Drop/Drafts/Sources.
 draft "2603.23420.pdf"
 
-# A stack of papers — three separate drafts, processed as a queue.
+# Three papers, three drafts, one queue.
 draft a.pdf b.pdf c.pdf
 
-# See every flag and environment variable.
+# Everything else.
 draft --help
 ```
 
-The finished draft, the verified claim ledger, and any needs-review copies land
-in `~/Drop/Drafts/YYYY-MM-DD/`.
+Finished work lands in `~/Drop/Drafts/YYYY-MM-DD/`.
+
+Want to see the interface without spending a model call? Run
+`go run ./examples/dashboard` — the real TUI, driven by a fake engine.
 
 ---
 
 ## How it works
 
-Every run is a five-phase, engine-agnostic pipeline:
+**Five phases. One seam.**
 
 ```mermaid
 flowchart LR
@@ -130,81 +148,75 @@ flowchart LR
     E -. rule<br/>violations .-> D
 ```
 
-1. **Read & section.** `pdftotext -layout` extracts the text, which is split on
-   paper headings and hard-capped per section.
-2. **Extract claims.** Each section is mined for facts. A claim survives only if
-   its `SOURCE_QUOTE` is an exact substring of the section *and* every number in
-   the claim appears in that quote.
-3. **Write.** The compact claim ledger becomes the only permitted source of
-   facts. If the backend stops on a length limit, `draft` continues generation
-   rather than saving a truncated article.
-4. **Validate & save.** Structure, length, banned vocabulary, emoji,
-   truncation, and faithfulness are enforced; violations trigger a targeted
-   rewrite. On success only the finished article is kept — scratch files are
-   removed unless you pass `--keep-artifacts`.
+1. **Read and section.** Poppler extracts the text in reading order, so a
+   two-column paper stays readable rather than having its columns spliced
+   together. Trailing bibliography and appendix matter is dropped; the rest is
+   split on paper headings and capped per section.
+2. **Extract claims.** Each section is mined for facts. A claim survives only
+   if its `SOURCE_QUOTE` is an exact substring of that section, and every
+   number in the claim appears inside that quote.
+3. **Write.** The claim ledger is the only permitted source of facts. If the
+   backend stops on a length limit, `draft` continues generation rather than
+   saving half an article.
+4. **Validate and save.** Structure, length, banned vocabulary, emoji,
+   truncation and faithfulness are all enforced. A violation triggers a
+   targeted rewrite, not a shrug. Scratch files are removed unless you pass
+   `--keep-artifacts`.
+
+---
+
+## Capabilities
+
+**No API key. No model download. No network required.**
+
+- **Any agent you already have.** Ten CLIs supported, driven headlessly
+  through their own sessions.
+- **Offline that actually works.** No up-front network probe. When a session
+  call fails because you are on a plane, the chain advances to Ollama and
+  stays there for the rest of the run.
+- **Verbatim grounding.** Quote-checked claims, numeric cross-checks, and
+  metric-conversion detection. Unverifiable claims are dropped before writing.
+- **Truncation-proof.** Length-limited stops are detected and continued to a
+  clean ending.
+- **House style, enforced.** Banned words and phrases in every inflection,
+  British English, no emoji, sentence-rhythm and structure rules — checked,
+  not merely requested.
+- **Surgical review.** `--review` asks for exact find/replace edits, applies
+  only the unique non-overlapping ones, and re-checks the rules before saving.
+- **Publish-ready sets.** Body, frontmatter and combined document, written
+  side by side and regenerable without losing a single curated field.
+- **Fast where it counts.** A 62-page paper is read and sectioned in ~110 ms
+  by a 10 MB binary. See [Performance](#performance).
+- **A dashboard worth watching.** The article streams in token by token,
+  beside a pipeline view, a per-run log, and a focus timer.
+- **Scriptable.** `--print` emits paths; `--json` emits one JSON object per
+  job; `--completion` writes shell completions.
 
 ---
 
 ## Providers
 
-In `auto` mode `draft` uses the first installed **stable** CLI on your `PATH`,
-in order, driving it through its own logged-in session (no API token).
-**Experimental** providers — invocation correct per their `--help`, but article
-output not yet verified end to end — are used by auto only with
-`--experimental`; any provider can be forced by name with `--engine <name>`.
+In `auto` mode `draft` takes the first installed **stable** CLI on your `PATH`
+and drives it through its own login. No token is read, stored or logged.
 
-| Provider | Status | Headless invocation |
-| -------- | ------ | ------------------- |
-| `claude` | stable | `claude -p --output-format stream-json` (live-streamed) |
-| `copilot` | stable | `copilot -p --allow-all-tools` |
-| `codex` | stable | `codex exec` |
-| `agy` | stable | `agy -p` (Google Antigravity) |
-| `cursor-agent` | stable | `cursor-agent -p --output-format text --force` |
-| `amp` | experimental | `amp -x` |
-| `crush` | experimental | `crush run` |
-| `goose` | experimental | `goose run --no-session -t` |
-| `grok` | stable | `grok --output-format plain --single` |
-| `qwen` | experimental | `qwen -p` |
+**Experimental** providers are invoked correctly per their `--help`, but their
+article output has not been verified end to end. Auto mode skips them unless
+you pass `--experimental`. Any provider can be forced with `--engine <name>`.
 
-Run `go run ./examples/providers` to see status and which are installed.
+| Provider       | Status       | Headless invocation |
+| -------------- | ------------ | ------------------- |
+| `claude`       | stable       | `claude -p --output-format stream-json` (live-streamed) |
+| `copilot`      | stable       | `copilot -p --allow-all-tools` |
+| `codex`        | stable       | `codex exec` |
+| `agy`          | stable       | `agy -p` (Google Antigravity) |
+| `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` |
+| `grok`         | stable       | `grok --output-format plain --single` |
+| `amp`          | experimental | `amp -x` |
+| `crush`        | experimental | `crush run` |
+| `goose`        | experimental | `goose run --no-session -t` |
+| `qwen`         | experimental | `qwen -p` |
 
----
-
-## Features
-
-- **Zero-token, any-agent writing.** Drives whichever coding-agent CLI you have
-  in headless mode, authenticated by that tool's own session — no API key.
-- **Reliable offline fallback.** No up-front network probe: if a session call
-  fails because you are offline, `draft` advances along the chain and finally to
-  a local Ollama model, and stays there for the rest of the run.
-- **Grounded by construction.** A verbatim-quote-verified claim ledger is the
-  writer's only factual substrate.
-- **Bulk queue, online or offline.** Pass many PDFs; each becomes its own draft
-  with live queue progress, and each re-selects its engine independently.
-  `--merge` combines them into one.
-- **Fast, parallel grounding.** On a session provider, claim extraction runs
-  across sections concurrently (Ollama stays sequential); a failed worker retries
-  down the fallback chain.
-- **Live streaming.** The Claude backend uses the `stream-json` event format, so
-  the preview fills token-by-token instead of in one jump.
-- **Enhance, don't rewrite.** `--review <draft.md>` asks the model for exact
-  find/replace edits grounded in your sources, applies only unique non-overlapping
-  ones, and re-checks the house rules before saving.
-- **Truncation-proof.** Detects length-limited stops and continues to a clean
-  ending.
-- **House-style enforcement.** Banned words and phrases, British English, no
-  emoji, sentence-rhythm and structure rules — checked, not just requested.
-- **Fast where it counts.** A 62-page paper is extracted and sectioned in
-  ~110 ms by a 10 MB binary with no models to download — two to three orders
-  of magnitude quicker than ML document pipelines, because the time budget is
-  spent on grounding instead. See [Performance](#performance).
-- **Publish-ready output sets.** Every draft is saved three ways under the
-  dated folder — `source/` (body only), `yaml/` (adjacent frontmatter), and
-  `final/` (combined, ready to publish) — and `--frontmatter <file>`
-  regenerates a set from an edited body without losing curated metadata.
-- **Live dashboard.** A Bubble Tea TUI streams the article as it is written,
-  with a pipeline view, per-run log, and a 25-minute focus timer.
-- **Scriptable.** `--print` runs headless and emits draft paths to stdout.
+`go run ./examples/providers` shows which are installed on your machine.
 
 ---
 
@@ -214,128 +226,205 @@ Run `go run ./examples/providers` to see status and which are installed.
 draft [flags] <source> [more-sources...]
 ```
 
-| Flag                | Description                                              |
-| ------------------- | ------------------------------------------------------- |
-| `--engine <mode>`   | `auto` (default), `ollama`, or a provider name          |
-| `--model <name>`    | Session-provider model override (e.g. `opus`)           |
-| `--experimental`    | Let auto mode use experimental providers                |
-| `--num-ctx <n>`     | Ollama context window (default `8192`)                  |
-| `--num-predict <n>` | Ollama max output tokens (default `6000`)               |
-| `--force-new`       | Draft even if today's folder already has one            |
-| `--merge`           | Combine all sources into one draft                      |
-| `--review <draft>`  | Enhance an existing draft with surgical edits           |
-| `--frontmatter <f>` | Regenerate frontmatter + final doc from an article file |
-| `--combine <f>`     | Alias for `--frontmatter`                               |
-| `--keep-artifacts`  | Keep the claim ledger beside a successful draft         |
-| `--print`           | Run without the TUI; print draft paths to stdout        |
-| `--version`         | Print version and exit                                  |
-| `-h, --help`        | Show help                                               |
+| Flag                 | Description                                              |
+| -------------------- | -------------------------------------------------------- |
+| `--engine <mode>`    | `auto` (default), `ollama`, or a provider name           |
+| `--model <name>`     | Session-provider model override (e.g. `opus`)            |
+| `--experimental`     | Let auto mode use experimental providers                 |
+| `--num-ctx <n>`      | Ollama context window (default `8192`)                   |
+| `--num-predict <n>`  | Ollama max output tokens (default `6000`)                |
+| `--force-new`        | Draft even if today's folder already has one             |
+| `--merge`            | Combine all sources into one draft                       |
+| `--review <draft>`   | Enhance an existing draft with surgical edits            |
+| `--frontmatter <f>`  | Regenerate frontmatter + final document from an article  |
+| `--combine <f>`      | Alias for `--frontmatter`                                |
+| `--keep-artifacts`   | Keep the claim ledger beside a successful draft          |
+| `--print`            | Run without the TUI; print draft paths to stdout         |
+| `--json`             | Run without the TUI; one JSON object per job on stdout   |
+| `--completion <sh>`  | Print a completion script: `bash`, `zsh`, or `fish`      |
+| `--version`          | Print version and exit                                   |
+| `-h, --help`         | Show help                                                |
 
 ---
 
-## Article sets & frontmatter
+## Article sets
 
-A successful draft is saved as a three-file set under the dated output
-folder:
+**One article. Three files. Always in sync.**
 
 ```text
-2026-07-27/
-├── source/2026-07-27-<slug>-body.md         # article body only — edit this
-├── yaml/2026-07-27-<slug>-frontmatter.yaml  # adjacent YAML frontmatter
-└── final/2026-07-27-<slug>-final.md         # frontmatter + body, publishable
+2026-07-29/
+├── source/2026-07-29-<slug>-body.md         # the article — edit this
+├── yaml/2026-07-29-<slug>-frontmatter.yaml  # adjacent frontmatter
+└── final/2026-07-29-<slug>-final.md         # combined, ready to publish
 ```
 
-After editing a body file, regenerate its yaml and final documents in place:
+Edit the body, then regenerate the other two in place:
 
 ```sh
-draft --frontmatter 2026-07-27/source/2026-07-27-<slug>-body.md
+draft --frontmatter 2026-07-29/source/2026-07-29-<slug>-body.md
 ```
 
-Regeneration follows three rules:
+Three rules govern that regeneration, and they are what make it safe to run at
+any time:
 
-1. **The filename is the article's identity.** Its `YYYY-MM-DD` prefix and
-   slug drive every date and URL in the frontmatter, so regenerating later —
-   or after a retitle — never changes the permalink.
-2. **Existing frontmatter always wins.** Curated fields are preserved
-   verbatim; only missing fields are generated from the body. Delete a field
-   from the yaml file to have it regenerated.
+1. **The filename is the article's identity.** Its date and slug drive every
+   URL in the frontmatter. Retitle the article and the permalink holds.
+2. **Your edits always win.** Curated fields are preserved verbatim; only
+   missing ones are generated. Delete a field to have it rebuilt.
 3. **Unchanged input is a no-op.** Reprocessing a set that has not changed
-   rewrites every file byte-identically.
+   rewrites every file byte for byte identically.
 
-`--review` respects the same boundaries: the model only ever sees the article
-body, the frontmatter is re-attached on save, and reviewing one file of a set
+`--review` respects the same boundaries. The model sees the article body and
+never the YAML; frontmatter is re-attached on save; reviewing one file of a set
 resyncs its siblings.
+
+---
+
+## Performance
+
+**Extraction is not the bottleneck, and it is deliberately not where the time
+goes.**
+
+Measured on Apple silicon (macOS 26.5, Poppler 26.06, Go 1.26), five runs each,
+on a 62-page book chapter:
+
+| Stage                                     | Time |
+| ----------------------------------------- | ---- |
+| Text extraction (`pdftotext`)             | **107 ms** (≈580 pages/s) |
+| Sectioning                                | **2.1 ms** — 163,530 chars → 53 sections |
+| Claim parsing and verbatim verification   | 23 µs per claim block |
+| House-rule validation of a finished draft | 662 µs |
+| **The whole deterministic path**          | **~110 ms** |
+
+That rate is for a large document. A two-page paper is dominated by process
+startup instead, landing at 30–60 ms whatever its length.
+
+A **10 MB** binary. **29 ms** to start. **12 MB** peak RSS. No Python, no
+PyTorch, no model weights, no GPU, no network.
+
+Everything after that is model latency. On a 12-section paper against a local
+Ollama model, claim extraction runs to roughly ten minutes; the Go code
+accounts for well under a second of it. That ratio is the whole design.
+
+### How that compares
+
+Document-understanding toolkits do far more than pull out text — layout
+analysis, table structure, formula recognition, OCR — and their published
+figures reflect that work. This is a comparison of scope, not a race:
+
+| Tool                        | Throughput      | Hardware       | Source |
+| --------------------------- | --------------- | -------------- | ------ |
+| liteparse (PDFium, OCR off) | 1,721 pages/s   | B200 host      | [Datalab][dl] |
+| **draft (Poppler)**         | **≈580 pages/s**| Apple silicon  | measured, above |
+| Marker, fast, no OCR (CPU)  | 23.7 pages/s    | B200 host      | [Datalab][dl] |
+| Docling (pypdfium backend)  | 2.2–2.5 pages/s | Apple M3 Max   | [Docling report][dt] |
+| Docling                     | 0.32 pages/s    | x86 CPU        | [Docling paper][dp] |
+| Unstructured                | 0.24 pages/s    | x86 CPU        | [Docling paper][dp] |
+
+The trade is real, and worth stating plainly. On [olmocr-bench][dl] a
+PDFium-class text extractor scores 20.4% overall against Docling's 50.3% and
+Marker's 76.0%, because that benchmark rewards table structure, LaTeX maths and
+scanned pages. `draft` attempts none of them. If your sources need any of that,
+use one of the tools above and hand `draft` the Markdown it produces. For
+born-digital research papers — what this is built for — the cheap path is two
+to three orders of magnitude faster for the text that grounding consumes.
+
+Two failure modes used to eat that advantage. Both were found by measuring a
+real corpus, and both are now closed:
+
+- **Column splicing.** Preserving the visual layout merges the two columns of a
+  paper onto shared lines, so sentences break mid-thought and join unrelated
+  text — and a claim's quote can then never match its source. Reading order is
+  used instead. Spliced lines across the corpus went from 158 and 59 on two
+  papers to zero on all of them.
+- **Truncation at the contents page.** Sectioning cut at the first
+  `References`-like heading, which in a paper with a contents listing is the
+  front-matter entry, not the bibliography. One 62-page paper was reduced to
+  its first 8 kB. The last such heading is used now, and that paper keeps 97.3%
+  of its text instead of 3.9%.
+
+Regression tests cover both against generated PDF fixtures in
+[`internal/pdf/testdata`](internal/pdf/testdata) — a two-column paper with a
+contents listing, and a page with no text layer at all.
+
+[dl]: https://github.com/datalab-to/marker
+[dt]: https://arxiv.org/html/2408.09869v5
+[dp]: https://arxiv.org/html/2501.17887v1
 
 ---
 
 ## Configuration
 
-Flags win over environment variables, which win over defaults.
+Flags beat environment variables. Environment variables beat defaults.
 
-| Variable               | Default     | Purpose                                     |
-| ---------------------- | ----------- | ------------------------------------------- |
-| `DRAFT_ENGINE`         | `auto`      | Backend selection (auto, ollama, provider)  |
-| `DRAFT_MODEL_SESSION`  | —           | Session-provider model override             |
-| `DRAFT_MODEL`          | —           | Sets all Ollama models at once              |
-| `DRAFT_WRITE_MODEL`    | `gemma3:4b` | Ollama writing model                        |
-| `DRAFT_EXTRACT_MODEL`  | `gemma3:4b` | Ollama claim-extraction model               |
-| `DRAFT_EDIT_MODEL`     | `gemma3:4b` | Ollama surgical-review model                |
-| `DRAFT_NUM_CTX`        | `8192`      | Ollama context window                       |
-| `DRAFT_NUM_PREDICT`    | `6000`      | Ollama output-token ceiling (auto-scaled down per draft) |
-| `DRAFT_WRITE_RETRIES`  | `2`         | Rewrite attempts on rule violations         |
-| `DRAFT_MAX_CONTINUE`   | `3`         | Max continuations on a length-limited stop  |
-| `DRAFT_EXTRACT_CONCURRENCY` | `4`    | Parallel extraction workers (session engines) |
-| `DRAFT_EXPERIMENTAL`   | —           | `1` to let auto use experimental providers  |
-| `DRAFT_SITE_*`         | see below   | Frontmatter publisher identity overrides    |
-| `OLLAMA_HOST`          | `http://127.0.0.1:11434` | Ollama server address          |
+<details>
+<summary><strong>Environment variables</strong></summary>
 
-### Publisher identity
+| Variable                    | Default                  | Purpose |
+| --------------------------- | ------------------------ | ------- |
+| `DRAFT_ENGINE`              | `auto`                   | Backend selection (auto, ollama, provider) |
+| `DRAFT_MODEL_SESSION`       | —                        | Session-provider model override |
+| `DRAFT_MODEL`               | —                        | Sets all Ollama models at once |
+| `DRAFT_WRITE_MODEL`         | `gemma3:4b`              | Ollama writing model |
+| `DRAFT_EXTRACT_MODEL`       | `gemma3:4b`              | Ollama claim-extraction model |
+| `DRAFT_EDIT_MODEL`          | `gemma3:4b`              | Ollama surgical-review model |
+| `DRAFT_NUM_CTX`             | `8192`                   | Ollama context window |
+| `DRAFT_NUM_PREDICT`         | `6000`                   | Ollama output-token ceiling (auto-scaled per draft) |
+| `DRAFT_WRITE_RETRIES`       | `2`                      | Rewrite attempts on rule violations |
+| `DRAFT_MAX_CONTINUE`        | `3`                      | Max continuations on a length-limited stop |
+| `DRAFT_EXTRACT_CONCURRENCY` | `4`                      | Parallel extraction workers (session engines) |
+| `DRAFT_EXPERIMENTAL`        | —                        | `1` to let auto use experimental providers |
+| `DRAFT_SHOW_LOGO`           | —                        | `0` to suppress the logo in the CLI and dashboard |
+| `DRAFT_SITE_*`              | see below                | Frontmatter publisher identity |
+| `OLLAMA_HOST`               | `http://127.0.0.1:11434` | Ollama server address |
 
-Generated frontmatter stamps a publisher identity (author, URLs, social
-handles, analytics ID). Override any part of it with `DRAFT_SITE_*`
-environment variables — unset variables keep the defaults, and curated
-frontmatter fields always win over generated ones regardless:
+</details>
 
-| Variable | Overrides |
-| -------- | --------- |
-| `DRAFT_SITE_BASE_URL` | Canonical site root for permalinks and URLs |
-| `DRAFT_SITE_CDN` | Asset host for banners, logos, images |
-| `DRAFT_SITE_NAME` | Display name |
-| `DRAFT_SITE_SHORT_NAME` | Slug-like identity used in asset paths |
-| `DRAFT_SITE_EMAIL` | Contact address for author/webmaster fields |
-| `DRAFT_SITE_TWITTER` | Twitter/X handle |
-| `DRAFT_SITE_LOCATION` | Humans.txt location |
+<details>
+<summary><strong>Publisher identity</strong> — make the frontmatter yours</summary>
+
+Generated frontmatter carries an author, URLs, social handles and an analytics
+ID. Override any part of it. Unset variables keep their defaults, and curated
+frontmatter fields still win over generated ones.
+
+| Variable                    | Overrides |
+| --------------------------- | --------- |
+| `DRAFT_SITE_BASE_URL`       | Canonical site root for permalinks and URLs |
+| `DRAFT_SITE_CDN`            | Asset host for banners, logos, images |
+| `DRAFT_SITE_NAME`           | Display name |
+| `DRAFT_SITE_SHORT_NAME`     | Slug-like identity used in asset paths |
+| `DRAFT_SITE_EMAIL`          | Contact address for author and webmaster fields |
+| `DRAFT_SITE_TWITTER`        | Twitter/X handle |
+| `DRAFT_SITE_LOCATION`       | Humans.txt location |
 | `DRAFT_SITE_MEASUREMENT_ID` | Analytics measurement ID |
 | `DRAFT_SITE_COPYRIGHT_FROM` | First year of the copyright range |
 
-### Offline performance
+</details>
 
-The offline path is tuned for a memory-constrained laptop (8 GB) and gets most of
-its speed from three things:
+<details>
+<summary><strong>Tuning the offline path</strong> — 8 GB laptops welcome</summary>
+
+The offline path is tuned for a memory-constrained machine, and gets most of
+its speed from four things:
 
 - **One shared model.** Extraction and writing both use `gemma3:4b`, so the
-  server never swaps a second 4B model in and out mid-run. gemma also follows the
-  writing brief closely — it keeps to the word budget and does not leak planning
-  text into the article, so drafts usually pass the house rules on the first try.
-- **Length scaled to the evidence.** The target word count is derived from the
-  number of verified claims, and the output-token limit is sized to match. A thin
-  ledger produces a short, fully-grounded piece instead of a padded one — faster
-  to generate and less likely to trip the faithfulness checks.
-- **Deterministic style repair.** Banned cliché words and phrases are swapped for
-  neutral equivalents in place, so a single stray "furthermore" no longer costs a
-  full regeneration.
+  server never swaps a second 4B model in and out mid-run. gemma also follows
+  the brief closely: it keeps to the word budget and does not leak planning
+  text into the article, so drafts usually pass the house rules first time.
+- **Length scaled to the evidence.** The target word count derives from the
+  number of verified claims, and the output-token limit is sized to match. A
+  thin ledger produces a short, fully grounded piece instead of a padded one.
+- **Deterministic style repair.** Banned cliché words are swapped for neutral
+  equivalents in place, so one stray "furthermore" no longer costs a full
+  regeneration.
+- **Parallel extraction.** Claims are mined two sections at a time. One request
+  does not saturate a small GPU, so two concurrent extractions run at roughly
+  1.8× the throughput of one — provided the server has two slots. A server
+  pinned to one simply queues the second call, so this is always safe.
 
-- **Parallel extraction.** Claims are mined two sections at a time. On a single
-  small GPU one request does not saturate the hardware, so two concurrent
-  extractions run at roughly 1.8x the throughput of one — provided the server is
-  started with `OLLAMA_NUM_PARALLEL=2` (below). A server pinned to one slot simply
-  queues the second call, so this is always safe. Raise or lower it with
-  `DRAFT_EXTRACT_CONCURRENCY` (capped at 2 for Ollama).
-
-Biggest single win, though, is how the Ollama **server** is launched. The default
-configuration is slow on 8 GB; start it with a quantised KV cache, flash
-attention, and two parallel slots and a cold run drops from minutes to well under
-two:
+The biggest single win is how the Ollama **server** is launched. The default
+configuration is slow on 8 GB. Give it a quantised KV cache, flash attention
+and two parallel slots, and a cold run drops from minutes to under two:
 
 ```sh
 # Quit the Ollama desktop app first, then:
@@ -348,118 +437,41 @@ OLLAMA_KEEP_ALIVE=10m \
 ```
 
 On a base 8 GB Apple-silicon machine a two-section source drafts in roughly two
-minutes end to end. A full multi-section paper is dominated by extraction: on a
-measured 12-section paper the two parallel slots cut it from ~825s to ~645s
-(about a quarter faster — less than the raw ~1.8× per-request gain, because the
-first section runs alone and uneven section sizes bound each pair by its slower
-half). Set `DRAFT_NUM_CTX=2048` to trade a little context headroom for an even
-smaller memory footprint.
+minutes end to end. A full paper is dominated by extraction: on a measured
+12-section paper, two parallel slots cut it from ~825 s to ~645 s — about a
+quarter faster, less than the raw 1.8× per-request gain, because the first
+section runs alone and uneven sections bound each pair by their slower half.
+`DRAFT_NUM_CTX=2048` trades a little context headroom for a smaller footprint.
+
+</details>
 
 ---
 
-## Performance
-
-Extraction is not the bottleneck, and it is deliberately not where the time
-budget goes. `draft` shells out to Poppler for text and spends the run on
-grounding and generation instead.
-
-Measured on Apple silicon (macOS 26.5, Poppler 26.06, Go 1.26), five runs
-each, on a 62-page book chapter:
-
-| Stage | Time |
-| ----- | ---- |
-| Text extraction (`pdftotext`) | **107 ms** (≈580 pages/s) |
-| Sectioning (`SplitSections`) | **2.1 ms** — 163,530 chars → 53 sections |
-| Claim parsing + verbatim verification | 23 µs/claim block |
-| House-rule validation of a finished draft | 662 µs |
-| **Whole deterministic path** | **~110 ms** |
-
-That rate is for a large document. A two- or three-page paper is dominated by
-process startup instead, landing at 30–60 ms regardless of length, so the
-practical floor per source is a few tens of milliseconds.
-
-Runtime footprint: a **10 MB** static binary, **29 ms** startup, **12 MB**
-peak RSS. No Python, no PyTorch, no model weights, no GPU, no network.
-
-Everything after that is model latency. On a 12-section paper against a local
-Ollama model, claim extraction dominates at roughly ten minutes; the Go code
-accounts for well under a second of it. That is the ratio the design optimises
-for — see [Offline performance](#offline-performance) for the Ollama tuning
-that actually moves the needle.
-
-### How that compares
-
-Document-understanding toolkits do considerably more than pull out text —
-layout analysis, table structure, formula recognition, OCR — and their
-published figures reflect that extra work. The comparison is one of *scope*,
-not a like-for-like race:
-
-| Tool | Throughput | Hardware | Source |
-| ---- | ---------- | -------- | ------ |
-| liteparse (PDFium, OCR off) | 1,721 pages/s | B200 host | [Datalab benchmark][dl] |
-| **draft (Poppler)** | **≈580 pages/s** | Apple silicon | measured, above |
-| Marker, fast, no OCR (CPU) | 23.7 pages/s | B200 host | [Datalab benchmark][dl] |
-| Docling (pypdfium backend) | 2.2–2.5 pages/s | Apple M3 Max | [Docling report][dt] |
-| Docling | 0.32 pages/s | x86 CPU | [Docling paper][dp] |
-| Unstructured | 0.24 pages/s | x86 CPU | [Docling paper][dp] |
-
-The trade is real and worth stating plainly: on
-[olmocr-bench][dl], a PDFium-class text extractor scores 20.4% overall against
-Docling's 50.3% and Marker's 76.0%, because that benchmark rewards table
-structure, LaTeX math, and scanned pages — none of which `draft` attempts. If
-your sources need any of those, reach for one of the tools above and feed
-`draft` the Markdown it produces. For born-digital research papers, which is
-what this is built for, the cheap path is two to three orders of magnitude
-faster for the text that grounding actually consumes.
-
-Two failure modes that used to eat that advantage are now closed, both caught
-by measuring a real corpus rather than by a test:
-
-- **Column splicing.** `pdftotext -layout` preserves the visual arrangement,
-  which merges the two columns of a paper onto shared lines. Sentences then
-  break mid-thought and join unrelated text, so a claim's `SOURCE_QUOTE` can
-  never match its source verbatim. Reading order is used instead; spliced
-  lines across the test corpus went from 158 and 59 on two papers to zero on
-  all of them.
-- **Truncation at the contents page.** Sectioning cut at the first
-  `References`-like heading, which in a paper with a contents listing is the
-  front-matter entry rather than the bibliography. One 62-page paper was
-  reduced to its first 8 kB. The last such heading is used now, and that paper
-  retains 97.3% of its text instead of 3.9%.
-
-Both are covered by regression tests against generated PDF fixtures in
-[`internal/pdf/testdata`](internal/pdf/testdata) — a two-column paper with a
-contents listing, and a page with no text layer.
-
-[dl]: https://github.com/datalab-to/marker
-[dt]: https://arxiv.org/html/2408.09869v5
-[dp]: https://arxiv.org/html/2501.17887v1
-
 ## Architecture
 
-Standard Go layout: a thin `cmd/` entrypoint over focused `internal/` packages,
-each with a single responsibility. The `Engine` interface is the key seam — the
-pipeline is identical whether a session provider or Ollama runs behind it.
+A thin `cmd/` entrypoint over focused packages, each with one responsibility.
+The `Engine` interface is the seam that matters: the pipeline is identical
+whether a session provider or Ollama sits behind it.
 
 ```text
-cmd/draft/          CLI entrypoint, flag parsing, headless mode
+cmd/draft/          CLI entrypoint, flag parsing, headless and JSON modes
 config/             flag + env + default resolution
 rules/              shared editorial constants (banned words, limits)
 prompt/             grounded claim / writing / review prompts
 claims/             claim parsing, verbatim verification, ledger
 validate/           house-rule and faithfulness checks
-frontmatter/        metadata extraction, YAML generation, article-set regeneration
-engine/             Engine interface, session-provider registry, Ollama, routing
+frontmatter/        metadata extraction, YAML generation, set regeneration
+engine/             Engine interface, provider registry, Ollama, routing
 pipeline/           orchestration, retries, continuation, fallback chain
 internal/
   pdf/              text extraction and section splitting
+  brand/            logo, palette, shared styles
   tui/              Bubble Tea dashboard and queue
-examples/           runnable, network-free demos of each capability
+examples/           runnable, network-free demos of every capability
 ```
 
-The backend abstraction is a small, mockable interface — *accept interfaces,
-return structs* — which is exactly how the test suite drives the whole pipeline
-without touching a model:
+Accept interfaces, return structs. That is how the test suite drives the entire
+pipeline without touching a model:
 
 ```go
 // Engine is the single seam every backend implements.
@@ -480,23 +492,20 @@ type Result struct {
 
 ## Library usage
 
-`draft` is a CLI first, but every capability is an importable Go package —
-`claims`, `config`, `engine`, `frontmatter`, `pipeline`, `prompt`, `rules`,
-and `validate` live at the module root (only the PDF extractor and the TUI
-stay internal):
+`draft` is a command-line tool first. But every capability is an importable Go
+package — `claims`, `config`, `engine`, `frontmatter`, `pipeline`, `prompt`,
+`rules` and `validate` all live at the module root. Only the PDF extractor, the
+brand assets and the TUI stay internal.
 
 ```sh
 go get github.com/sebastienrousseau/draft@latest
 ```
 
-The [examples](#examples) exercise each package directly; the synopses below
-are the shapes you will actually call.
-
-> **API stability.** While the module is in `0.0.x` the exported API may change
+> **API stability.** While the module is `0.0.x`, the exported Go API may change
 > between releases without a deprecation cycle. Pin an exact version if you
 > depend on it, and read the [CHANGELOG](CHANGELOG.md) before upgrading —
 > breaking changes are always listed there. The CLI's flags and output layout
-> are treated as the stable surface; the Go packages are not yet.
+> are the stable surface; the Go packages are not yet.
 
 <details>
 <summary><strong>Run the pipeline in-process</strong> — one Job, streamed events</summary>
@@ -518,9 +527,8 @@ for e := range events {
 }
 ```
 
-A `Job` with several sources is one merged draft (`--merge`); setting
-`Job.ReviewPath` enhances that draft instead of writing a new one
-(`--review`).
+A `Job` with several sources is one merged draft (`--merge`). Setting
+`Job.ReviewPath` enhances that draft instead of writing a new one (`--review`).
 
 </details>
 
@@ -543,14 +551,14 @@ for _, e := range validate.Errors(draftText) { // house rules + faithfulness
 <summary><strong>Generate and regenerate frontmatter</strong> — article sets</summary>
 
 ```go
-meta := frontmatter.ExtractMetadata(body)             // title, subtitle, keywords, category
+meta := frontmatter.ExtractMetadata(body)   // title, subtitle, keywords, category
 fm := frontmatter.GenerateWithOptions(body, frontmatter.Options{
-    Date: date,
-    Slug: "my-canonical-slug",   // filename identity beats the headline
-    Site: &mySite,               // publisher identity; nil = DefaultSite
-    Existing: parsedFields,      // curated fields always win
+    Date:     date,
+    Slug:     "my-canonical-slug", // filename identity beats the headline
+    Site:     &mySite,             // publisher identity; nil = DefaultSite
+    Existing: parsedFields,        // curated fields always win
 })
-doc := frontmatter.Combine(fm, body)                  // publishable document
+doc := frontmatter.Combine(fm, body)        // publishable document
 bodyPath, yamlPath, finalPath, err := frontmatter.ProcessFile(path, time.Now())
 ```
 
@@ -576,56 +584,53 @@ against in-process engines — no network, no model.
 
 ## Examples
 
-Every capability has a runnable, network-free demo in [`examples/`](examples)
-— no model, no session CLI, no API key needed. Start with `dashboard` to see
-the interface itself.
+Every capability has a runnable demo. No model, no session CLI, no API key, no
+network. Start with `dashboard` to see the interface itself.
 
 | Example | Run | What it shows |
 | ------- | --- | ------------- |
-| [`dashboard`](examples/dashboard/main.go) | `go run ./examples/dashboard` | The real full-screen TUI driven by an in-process engine — watch the queue, phases, live preview, and focus timer animate; resize to see the responsive layout |
+| [`dashboard`](examples/dashboard/main.go) | `go run ./examples/dashboard` | The real full-screen TUI driven by an in-process engine — queue, phases, live preview and focus timer, all animating; resize to watch the layout adapt |
 | [`providers`](examples/providers/main.go) | `go run ./examples/providers` | Session providers in auto-selection order, install status, default models |
 | [`grounding`](examples/grounding/main.go) | `go run ./examples/grounding` | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation |
-| [`pipeline`](examples/pipeline/main.go) | `go run ./examples/pipeline` | The full five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output set |
+| [`pipeline`](examples/pipeline/main.go) | `go run ./examples/pipeline` | The five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output |
 | [`review`](examples/review/main.go) | `go run ./examples/review` | Surgical-edit enhancement: body-only prompting, frontmatter re-attachment, set resync |
 | [`frontmatter`](examples/frontmatter/main.go) | `go run ./examples/frontmatter` | Metadata extraction, custom `Site` identity, Split/Combine round trip, the three regeneration rules |
 
-CLI recipes for day-to-day use:
+Recipes for day-to-day use:
 
-| Command                                          | What it does                                     |
-| ------------------------------------------------ | ------------------------------------------------ |
-| `draft "2603.23420.pdf"`                         | Draft one paper, engine auto-selected            |
-| `draft a.pdf b.pdf c.pdf`                        | Queue three papers, one draft each               |
-| `draft --merge notes.md paper.pdf`               | One draft from combined sources                  |
-| `draft --engine ollama paper.pdf`                | Force the local model (offline)                  |
-| `draft --engine codex paper.pdf`                 | Force a specific session provider                |
-| `draft --model opus paper.pdf`                   | Override the session model                        |
-| `draft --review draft.md paper.pdf`              | Enhance an existing draft from the source         |
-| `draft --frontmatter source/x-body.md`           | Regenerate the yaml + final set after a body edit |
-| `draft --print paper.pdf > path.txt`             | Headless; capture the output path                |
-| `DRAFT_NUM_CTX=2048 draft paper.pdf`             | Low-memory Ollama profile                        |
+| Command                                | What it does |
+| -------------------------------------- | ------------ |
+| `draft "2603.23420.pdf"`               | Draft one paper, engine auto-selected |
+| `draft a.pdf b.pdf c.pdf`              | Queue three papers, one draft each |
+| `draft --merge notes.md paper.pdf`     | One draft from combined sources |
+| `draft --engine ollama paper.pdf`      | Force the local model |
+| `draft --engine codex paper.pdf`       | Force a specific session provider |
+| `draft --model opus paper.pdf`         | Override the session model |
+| `draft --review draft.md paper.pdf`    | Enhance an existing draft from its sources |
+| `draft --frontmatter source/x-body.md` | Regenerate the yaml and final set |
+| `draft --json paper.pdf`               | One JSON object per job, for scripting |
+| `DRAFT_NUM_CTX=2048 draft paper.pdf`   | Low-memory Ollama profile |
 
 ---
 
 ## When not to use draft
 
-Honesty about the edges saves you an evening:
+Honesty here saves you an evening.
 
-- **You need a general-purpose summariser.** `draft` deliberately drops any
-  claim it cannot verify verbatim against your sources. Thin or scanned-image
-  PDFs yield thin ledgers and short drafts — that is the design, not a bug.
-- **You have no agent CLI and no Ollama.** There is no direct API mode; online
-  writing rides an installed session CLI's login, offline writing needs a
-  local Ollama model.
-- **Your house style is not this house style.** Structure, length bands,
-  banned vocabulary, and British English are enforced by
-  `internal/rules` and `internal/validate` — configurable in code, not yet by
-  flag.
-- **You publish with a different frontmatter schema.** The generated YAML
-  follows one opinionated schema; the publisher identity is swappable
-  (`DRAFT_SITE_*` variables or `frontmatter.Site` in code) but the field set
-  is not.
-- **DOCX sources on Linux or Windows.** DOCX extraction uses macOS `textutil`;
-  PDF, Markdown, and plain text work everywhere.
+- **You want a general-purpose summariser.** `draft` drops any claim it cannot
+  verify verbatim. A thin source yields a thin ledger and a short draft. That
+  is the design, not a defect.
+- **You have no agent CLI and no Ollama.** There is no direct API mode.
+- **Your sources are scans.** A PDF with no text layer is reported as such,
+  with a suggestion to run OCR first. `draft` does not OCR.
+- **You need tables, figures or LaTeX maths.** Text is extracted; structure is
+  not. Use a document-understanding toolkit and feed `draft` its Markdown.
+- **Your house style is not this house style.** Structure, length bands, banned
+  vocabulary and British English live in the `rules` and `validate` packages —
+  configurable in code, not yet by flag.
+- **You publish a different frontmatter schema.** The identity is swappable;
+  the field set is not.
+- **DOCX on Linux or Windows.** That path needs macOS `textutil`.
 
 ---
 
@@ -633,46 +638,54 @@ Honesty about the edges saves you an evening:
 
 ```sh
 make build     # compile to ./bin/draft
-make install   # go install into GOPATH/bin
-make test      # run the unit + pipeline tests
+make install   # install into GOPATH/bin
+make test      # unit + pipeline tests
 make race      # tests under the race detector
 make cover     # coverage report (≥95% gate, demos excluded)
-make bench     # run benchmarks
-make vet       # go vet ./...
-make lint      # golangci-lint (config in .golangci.yml)
-make fmt       # gofmt -s -w
-make check     # fmt + vet + test in one go
+make bench     # benchmarks
+make fuzz      # each fuzz target briefly (FUZZTIME=30s make fuzz)
+make vuln      # govulncheck, the same scan CI runs
+make lint      # golangci-lint
+make check     # fmt + vet + test
 make run ARGS='--help'
 ```
 
-The suite covers **≥95% of statements**. The pipeline is tested end to end
-against a deterministic fake `Engine` — extraction, grounding,
-truncation-continuation, and multi-provider fallback are verified without any
-network call or LLM — and provider CLIs are faked via the `TestHelperProcess`
-pattern, so even the session backends are covered without spawning real agents.
+The suite holds **≥95% of statements** and CI fails below it. The pipeline is
+tested end to end against a deterministic fake `Engine`, so grounding,
+truncation-continuation and multi-provider fallback are all verified without a
+network call. Provider CLIs are faked via the `TestHelperProcess` pattern, so
+even the session backends are covered without spawning real agents. The parsers
+that read untrusted input — claim extraction, frontmatter splitting, metadata,
+surgical edits — are fuzzed against invariants, the most important being that a
+surviving claim must quote its source verbatim.
+
+Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.24,
+`govulncheck`, CodeQL and REUSE compliance.
 
 ---
 
 ## Security
 
-- **No tokens on disk.** Session backends shell out to an already-authenticated
-  CLI; `draft` never reads, stores, or logs an API key.
+- **No tokens on disk.** Session backends shell out to an already
+  authenticated CLI. `draft` never reads, stores or logs an API key.
 - **Prompt-injection aware.** Template and source text are quoted as untrusted
-  evidence, and the writing prompt explicitly instructs the model to ignore any
-  instructions found inside them.
-- **Agent trust surface.** Session providers run in their non-interactive modes,
-  some of which auto-approve tool use (for example `copilot --allow-all-tools`,
-  `cursor-agent --force`, `amp -x`). `draft` asks only for text and quotes your
-  sources as untrusted, but
-  you are still handing a research PDF to an agent that *can* act — treat sources
-  as you would any untrusted input, and prefer Ollama for material you do not
+  evidence, and the writing prompt tells the model to ignore any instructions
+  found inside them.
+- **Know your agent's trust surface.** Session providers run in
+  non-interactive modes, some of which auto-approve tool use — for example
+  `copilot --allow-all-tools`, `cursor-agent --force`, `amp -x`. `draft` asks
+  only for text, but you are still handing a PDF to an agent that *can* act.
+  Treat sources as untrusted input, and prefer Ollama for material you do not
   trust.
-- **Cancellation.** Quitting the dashboard (or Ctrl+C in `--print`) cancels the
-  run's context, terminating any in-flight provider subprocess or Ollama request.
 - **Grounding as a safety control.** Ungrounded numbers and silent metric
-  conversions are flagged; unverifiable claims are dropped before writing.
-- **Bounded external calls.** Extraction shells out only to `pdftotext` /
-  `textutil` (macOS) with context timeouts and no shell interpolation.
+  conversions are flagged. Unverifiable claims never reach the writer.
+- **Cancellation means cancellation.** Quitting the dashboard, or Ctrl+C in
+  headless mode, cancels the run's context and terminates any in-flight
+  subprocess or Ollama request.
+- **Bounded external calls.** Extraction shells out only to `pdftotext` and
+  `textutil`, with context timeouts and no shell interpolation.
+- **Verifiable releases.** Signed with keyless Sigstore cosign, published with
+  a CycloneDX SBOM per archive and GitHub build provenance.
 
 ---
 
@@ -684,7 +697,7 @@ pattern, so even the session backends are covered without spawning real agents.
 | [CONTRIBUTING](CONTRIBUTING.md) | How to propose changes and what CI expects |
 | [SECURITY](SECURITY.md) | Vulnerability disclosure policy |
 | [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) | Community standards |
-| [`examples/`](examples) | Runnable, network-free demo per capability |
+| [`examples/`](examples) | A runnable demo per capability |
 | [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation |
 
 ---
@@ -692,10 +705,10 @@ pattern, so even the session backends are covered without spawning real agents.
 ## License
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
-[MIT License](LICENSE-MIT) at your option. © Sebastien Rousseau.
+[MIT License](LICENSE-MIT), at your option. © Sebastien Rousseau.
 
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you shall be dual licensed as above, without any
+Unless you state otherwise, any contribution intentionally submitted for
+inclusion in this work by you shall be dual licensed as above, without any
 additional terms or conditions.
 
 [claude]: https://docs.claude.com/en/docs/claude-code
