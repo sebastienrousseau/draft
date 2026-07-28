@@ -335,3 +335,51 @@ func TestCompletionScripts(t *testing.T) {
 		t.Error("an unknown shell should exit 2")
 	}
 }
+
+func TestBuildVersionFallback(t *testing.T) {
+	// Under `go test` the module has no released version, so the fallback
+	// must be a readable placeholder rather than an empty string.
+	if got := buildVersion(); got == "" {
+		t.Error("buildVersion must never return an empty string")
+	}
+}
+
+func TestMaxHelper(t *testing.T) {
+	if max(3, 7) != 7 || max(7, 3) != 7 || max(4, 4) != 4 {
+		t.Error("max is wrong")
+	}
+}
+
+func TestRunHeadlessJSONReportsFailure(t *testing.T) {
+	cfg, full := tmpSource(t, "paper.txt")
+	jobs := []pipeline.Job{{Sources: []string{full}}}
+	// An ollama-only chain with no server: the job must fail, and the JSON
+	// record must say so rather than claiming success.
+	chain := engine.Chain(config.Config{Engine: config.EngineOllama, OllamaHost: "http://127.0.0.1:0"})
+	var out strings.Builder
+	if failures := runHeadlessJSON(context.Background(), cfg, chain, jobs, &out, io.Discard); failures == 0 {
+		t.Fatal("expected a failure with no reachable engine")
+	}
+	var rec struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &rec); err != nil {
+		t.Fatalf("failure output is not valid JSON: %v", err)
+	}
+	if rec.OK || rec.Error == "" {
+		t.Errorf("a failed job must report ok=false with an error: %+v", rec)
+	}
+}
+
+func TestRunJSONFlagViaRun(t *testing.T) {
+	_, full := tmpSource(t, "paper.txt")
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:0")
+	var out, errb strings.Builder
+	if code := run([]string{"--json", "--engine", "ollama", full}, &out, &errb); code != 1 {
+		t.Errorf("--json failure exit = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), `"ok":false`) {
+		t.Errorf("--json should emit a record even on failure: %q", out.String())
+	}
+}
