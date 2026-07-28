@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.28] - 2026-07-29
+
+### Changed
+
+- **The README has been rewritten.** It now follows the structure used across
+  these projects — grouped contents, a capabilities section, collapsible
+  reference material, and an honest comparison — in a plainer, more direct
+  voice. Claims lead with what the tool does for you; the numbers behind them
+  follow.
+
+### Fixed
+
+- **Two stale statements in the README.** "How it works" still described
+  extraction as `pdftotext -layout`, which 0.0.27 replaced with reading-order
+  extraction, and the limitations section still pointed at `internal/rules`
+  and `internal/validate`, which became public packages in 0.0.18. Also
+  documents `--json`, `--completion` and `DRAFT_SHOW_LOGO`, which had no entry
+  in the flag or environment tables.
+
 ## [0.0.27] - 2026-07-28
 
 ### Fixed
