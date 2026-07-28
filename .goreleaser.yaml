@@ -47,12 +47,15 @@ sboms:
 signs:
   - id: checksums
     cmd: cosign
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
+    # cosign v3 emits a Sigstore bundle carrying both the signature and the
+    # signing certificate; verify with:
+    #   cosign verify-blob --bundle checksums.txt.bundle \
+    #     --certificate-identity-regexp 'https://github.com/sebastienrousseau/draft/.*' \
+    #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
+    signature: "${artifact}.bundle"
     args:
       - sign-blob
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
     artifacts: checksum
