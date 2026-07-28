@@ -36,6 +36,7 @@
 - [Usage](#usage)
 - [Article sets & frontmatter](#article-sets--frontmatter)
 - [Configuration](#configuration)
+- [Performance](#performance)
 - [Architecture](#architecture)
 - [Library usage](#library-usage)
 - [Examples](#examples)
@@ -193,6 +194,10 @@ Run `go run ./examples/providers` to see status and which are installed.
   ending.
 - **House-style enforcement.** Banned words and phrases, British English, no
   emoji, sentence-rhythm and structure rules — checked, not just requested.
+- **Fast where it counts.** A 62-page paper is extracted and sectioned in
+  ~110 ms by a 10 MB binary with no models to download — two to three orders
+  of magnitude quicker than ML document pipelines, because the time budget is
+  spent on grounding instead. See [Performance](#performance).
 - **Publish-ready output sets.** Every draft is saved three ways under the
   dated folder — `source/` (body only), `yaml/` (adjacent frontmatter), and
   `final/` (combined, ready to publish) — and `--frontmatter <file>`
@@ -351,6 +356,84 @@ half). Set `DRAFT_NUM_CTX=2048` to trade a little context headroom for an even
 smaller memory footprint.
 
 ---
+
+## Performance
+
+Extraction is not the bottleneck, and it is deliberately not where the time
+budget goes. `draft` shells out to Poppler for text and spends the run on
+grounding and generation instead.
+
+Measured on Apple silicon (macOS 26.5, Poppler 26.06, Go 1.26), five runs
+each, on a 62-page book chapter:
+
+| Stage | Time |
+| ----- | ---- |
+| Text extraction (`pdftotext`) | **107 ms** (≈580 pages/s) |
+| Sectioning (`SplitSections`) | **2.1 ms** — 163,530 chars → 53 sections |
+| Claim parsing + verbatim verification | 23 µs/claim block |
+| House-rule validation of a finished draft | 662 µs |
+| **Whole deterministic path** | **~110 ms** |
+
+That rate is for a large document. A two- or three-page paper is dominated by
+process startup instead, landing at 30–60 ms regardless of length, so the
+practical floor per source is a few tens of milliseconds.
+
+Runtime footprint: a **10 MB** static binary, **29 ms** startup, **12 MB**
+peak RSS. No Python, no PyTorch, no model weights, no GPU, no network.
+
+Everything after that is model latency. On a 12-section paper against a local
+Ollama model, claim extraction dominates at roughly ten minutes; the Go code
+accounts for well under a second of it. That is the ratio the design optimises
+for — see [Offline performance](#offline-performance) for the Ollama tuning
+that actually moves the needle.
+
+### How that compares
+
+Document-understanding toolkits do considerably more than pull out text —
+layout analysis, table structure, formula recognition, OCR — and their
+published figures reflect that extra work. The comparison is one of *scope*,
+not a like-for-like race:
+
+| Tool | Throughput | Hardware | Source |
+| ---- | ---------- | -------- | ------ |
+| liteparse (PDFium, OCR off) | 1,721 pages/s | B200 host | [Datalab benchmark][dl] |
+| **draft (Poppler)** | **≈580 pages/s** | Apple silicon | measured, above |
+| Marker, fast, no OCR (CPU) | 23.7 pages/s | B200 host | [Datalab benchmark][dl] |
+| Docling (pypdfium backend) | 2.2–2.5 pages/s | Apple M3 Max | [Docling report][dt] |
+| Docling | 0.32 pages/s | x86 CPU | [Docling paper][dp] |
+| Unstructured | 0.24 pages/s | x86 CPU | [Docling paper][dp] |
+
+The trade is real and worth stating plainly: on
+[olmocr-bench][dl], a PDFium-class text extractor scores 20.4% overall against
+Docling's 50.3% and Marker's 76.0%, because that benchmark rewards table
+structure, LaTeX math, and scanned pages — none of which `draft` attempts. If
+your sources need any of those, reach for one of the tools above and feed
+`draft` the Markdown it produces. For born-digital research papers, which is
+what this is built for, the cheap path is two to three orders of magnitude
+faster for the text that grounding actually consumes.
+
+Two failure modes that used to eat that advantage are now closed, both caught
+by measuring a real corpus rather than by a test:
+
+- **Column splicing.** `pdftotext -layout` preserves the visual arrangement,
+  which merges the two columns of a paper onto shared lines. Sentences then
+  break mid-thought and join unrelated text, so a claim's `SOURCE_QUOTE` can
+  never match its source verbatim. Reading order is used instead; spliced
+  lines across the test corpus went from 158 and 59 on two papers to zero on
+  all of them.
+- **Truncation at the contents page.** Sectioning cut at the first
+  `References`-like heading, which in a paper with a contents listing is the
+  front-matter entry rather than the bibliography. One 62-page paper was
+  reduced to its first 8 kB. The last such heading is used now, and that paper
+  retains 97.3% of its text instead of 3.9%.
+
+Both are covered by regression tests against generated PDF fixtures in
+[`internal/pdf/testdata`](internal/pdf/testdata) — a two-column paper with a
+contents listing, and a page with no text layer.
+
+[dl]: https://github.com/datalab-to/marker
+[dt]: https://arxiv.org/html/2408.09869v5
+[dp]: https://arxiv.org/html/2501.17887v1
 
 ## Architecture
 
