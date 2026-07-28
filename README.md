@@ -487,10 +487,12 @@ against in-process engines — no network, no model.
 ## Examples
 
 Every capability has a runnable, network-free demo in [`examples/`](examples)
-— no model, no session CLI, no API key needed.
+— no model, no session CLI, no API key needed. Start with `dashboard` to see
+the interface itself.
 
 | Example | Run | What it shows |
 | ------- | --- | ------------- |
+| [`dashboard`](examples/dashboard/main.go) | `go run ./examples/dashboard` | The real full-screen TUI driven by an in-process engine — watch the queue, phases, live preview, and focus timer animate; resize to see the responsive layout |
 | [`providers`](examples/providers/main.go) | `go run ./examples/providers` | Session providers in auto-selection order, install status, default models |
 | [`grounding`](examples/grounding/main.go) | `go run ./examples/grounding` | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation |
 | [`pipeline`](examples/pipeline/main.go) | `go run ./examples/pipeline` | The full five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output set |
