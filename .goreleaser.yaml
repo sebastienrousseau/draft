@@ -49,10 +49,10 @@ signs:
     cmd: cosign
     # cosign v3 emits a Sigstore bundle carrying both the signature and the
     # signing certificate; verify with:
-    #   cosign verify-blob --bundle checksums.txt.bundle \
+    #   cosign verify-blob --bundle checksums.txt.sigstore.json \
     #     --certificate-identity-regexp 'https://github.com/sebastienrousseau/draft/.*' \
     #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
-    signature: "${artifact}.bundle"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
       - "--bundle=${signature}"
