@@ -10,9 +10,16 @@ series until `0.0.999`.
 
 - **Signed releases with SBOMs and build provenance.** Every archive now
   ships a CycloneDX SBOM, `checksums.txt` is signed keylessly with Sigstore
-  cosign (certificate and signature published alongside), and GitHub build
-  provenance is attested for each artefact. Consumers can verify what they
-  downloaded and where it was built.
+  cosign (published as `checksums.txt.bundle`, carrying both the signature
+  and the signing certificate), and GitHub build provenance is attested for
+  each artefact. Verify with:
+
+  ```sh
+  cosign verify-blob --bundle checksums.txt.bundle \
+    --certificate-identity-regexp 'https://github.com/sebastienrousseau/draft/.*' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    checksums.txt
+  ```
 - **`--json`** runs headless and emits one JSON object per job (JSON Lines)
   on stdout — source, output path, engine, mode, word count, and status —
   leaving stderr for human progress, so runs can be piped into other tools.
