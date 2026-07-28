@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.21] - 2026-07-28
+
+### Added
+
+- **`examples/dashboard`** runs the real full-screen TUI against an in-process
+  demo engine — no model, no network, no source of your own. The article
+  streams in word by word, so the queue, phase markers, live preview,
+  progress bar, and focus timer animate exactly as they do on a real run.
+  It is the quickest way to see the interface or check the layout at a
+  given terminal size.
+
 ## [0.0.20] - 2026-07-28
 
 ### Fixed
