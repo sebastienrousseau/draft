@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.23] - 2026-07-28
+
+### Added
+
+- **Vulnerability scanning in CI.** A `govulncheck` job now fails the build on
+  any known vulnerability reachable from this code, and `make vuln` runs the
+  same check locally. This was added because a scan found GO-2026-5856
+  (`crypto/tls`) reachable from `engine/ollama.go` via `http.Client.Do`, with
+  nothing in CI to catch it.
+- **Fuzz targets for every untrusted-input parser.** `claims.Parse`,
+  `frontmatter.Split`, `frontmatter.ExtractMetadata`, and the review-mode
+  `parseSurgicalEdits` are now fuzzed against invariants rather than mere
+  absence of panics: a surviving claim's quote must appear verbatim in the
+  source (the grounding guarantee), splitting must be stable and lossless,
+  metadata must stay valid UTF-8 with a URL-safe bounded slug, and an
+  accepted edit set must never empty or corrupt a draft. `make fuzz` runs
+  them all.
+- **An MSRV job** builds and tests on Go 1.24, so the minimum version the
+  README advertises stays verified now that the other jobs track `stable`.
+
+### Changed
+
+- **Builds and releases use a supported Go toolchain.** Every job pinned
+  `go-version: "1.24"`, but Go only patches its two most recent releases, so
+  released binaries were built with a toolchain that no longer receives
+  security fixes. Build, test, lint, and release now use `stable`.
+
 ## [0.0.22] - 2026-07-28
 
 ### Changed

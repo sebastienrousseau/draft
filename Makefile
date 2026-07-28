@@ -33,6 +33,17 @@ cover: ## Report test coverage (app + library packages; demos excluded)
 bench: ## Run benchmarks
 	go test -run=NONE -bench=. -benchmem $(PKG)
 
+.PHONY: fuzz
+fuzz: ## Run each fuzz target briefly (FUZZTIME=30s make fuzz)
+	@go test ./claims/ -run FuzzParse -fuzz FuzzParse -fuzztime $(or $(FUZZTIME),20s)
+	@go test ./frontmatter/ -run FuzzSplit -fuzz FuzzSplit -fuzztime $(or $(FUZZTIME),20s)
+	@go test ./frontmatter/ -run FuzzExtractMetadata -fuzz FuzzExtractMetadata -fuzztime $(or $(FUZZTIME),20s)
+	@go test ./pipeline/ -run FuzzParseSurgicalEdits -fuzz FuzzParseSurgicalEdits -fuzztime $(or $(FUZZTIME),20s)
+
+.PHONY: vuln
+vuln: ## Scan for known vulnerabilities (same check as CI)
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
 .PHONY: vet
 vet: ## Run go vet
 	go vet $(PKG)
