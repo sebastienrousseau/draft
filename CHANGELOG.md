@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.19] - 2026-07-28
+
+### Changed
+
+- **The dashboard now speaks corral.** The TUI adopts the same design
+  language as [corral](https://github.com/sebastienrousseau/corral): a
+  red-gradient braille logo (a fountain-pen nib) with the `Draft.` wordmark
+  and tagline, a single coral accent (`#F56B5E`) over a quiet gray ramp,
+  flat divider-underlined sections instead of boxed panels, a coral-gradient
+  progress bar, a `[key] action • …` shortcut bar, and the
+  "Made with ❤️ in London, UK (vX)" footer. The logo collapses to a one-line
+  masthead on short terminals and can be disabled with `DRAFT_SHOW_LOGO=0`;
+  the activity line drops detail progressively so narrow terminals never
+  wrap.
+
 ## [0.0.18] - 2026-07-28
 
 ### Added
