@@ -37,7 +37,7 @@ func TestLogoLinesShareWidth(t *testing.T) {
 func TestLogoRendersBothForms(t *testing.T) {
 	full, compact := Logo(false), Logo(true)
 	for name, out := range map[string]string{"full": full, "compact": compact} {
-		if !strings.Contains(out, "Draft.") {
+		if !strings.Contains(out, Wordmark) {
 			t.Errorf("%s logo is missing the wordmark", name)
 		}
 		if !strings.Contains(out, Tagline) {
@@ -50,6 +50,19 @@ func TestLogoRendersBothForms(t *testing.T) {
 	// The compact form exists to save vertical space.
 	if fullLines, compactLines := lineCount(full), lineCount(compact); compactLines >= fullLines {
 		t.Errorf("compact logo is %d lines, not shorter than full at %d", compactLines, fullLines)
+	}
+}
+
+// The wordmark is set the same way in the terminal, in the dashboard, and on
+// draftlib.com: lowercase, no full stop, identical to the command you type.
+// It read "Draft." here for a while and no longer matched the site, so the
+// shape is pinned rather than left to whoever edits the constant next.
+func TestWordmarkIsSetLikeTheCommandName(t *testing.T) {
+	if Wordmark != strings.ToLower(Wordmark) {
+		t.Errorf("wordmark %q is not lowercase; the site sets it lowercase", Wordmark)
+	}
+	if strings.ContainsAny(Wordmark, ". ") {
+		t.Errorf("wordmark %q carries punctuation or spacing the site does not", Wordmark)
 	}
 }
 
