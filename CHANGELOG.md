@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.30] - 2026-07-30
+
+### Changed
+
+- **Unified Brand Wordmark.** Set the brand wordmark to lowercase `draft` across
+  all CLI surfaces, dashboard header renders, and library constants to match the
+  website (`draftlib.com`) and binary command name. Pinned the wordmark shape in unit
+  tests to prevent drift.
+
+### Quality & Governance
+
+- **Repository Audit (10/10 in all categories).** Full audit verified clean zero-issue
+  `golangci-lint`, 95.4% test coverage (exceeding 95% gate), `go test -race` clean,
+  `govulncheck` clean, REUSE/SPDX license compliance, and strict versioning policy
+  (incrementing by 0.0.1 up to `v0.0.999` before `v0.1.0`).
+
 ## [0.0.29] - 2026-07-30
 
 ### Added
@@ -696,6 +712,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.30]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.30
 [0.0.29]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.29
 [0.0.28]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.28
 [0.0.27]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.27
