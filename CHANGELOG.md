@@ -6,6 +6,15 @@ series until `0.0.999`.
 
 ## [0.0.30] - 2026-07-30
 
+### Added
+
+- **Interactive LLM Provider Selection.** Running `draft` without specifying an
+  explicit `--engine` flag now presents a branded interactive LLM selection screen
+  prior to starting generation. Users can select from `auto`, session CLIs (`claude`,
+  `agy`, `codex`, `copilot`, `cursor-agent`, `grok`, etc.), or local offline `ollama`.
+  Each provider indicates installation status (`[installed]`, `[local / offline]`, `[auto]`).
+  Explicit `--engine <name>` usage and non-interactive modes bypass selection directly.
+
 ### Changed
 
 - **Unified Brand Wordmark.** Set the brand wordmark to lowercase `draft` across
@@ -16,7 +25,7 @@ series until `0.0.999`.
 ### Quality & Governance
 
 - **Repository Audit (10/10 in all categories).** Full audit verified clean zero-issue
-  `golangci-lint`, 95.4% test coverage (exceeding 95% gate), `go test -race` clean,
+  `golangci-lint`, 95.0% test coverage (exceeding 95% gate), `go test -race` clean,
   `govulncheck` clean, REUSE/SPDX license compliance, and strict versioning policy
   (incrementing by 0.0.1 up to `v0.0.999` before `v0.1.0`).
 

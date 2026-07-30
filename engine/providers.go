@@ -101,6 +101,20 @@ var available = func(bin string) bool {
 	return err == nil
 }
 
+// IsAvailable reports whether the provider binary for name (or ollama) is installed on PATH.
+func IsAvailable(name string) bool {
+	if name == "auto" {
+		return true
+	}
+	if name == "ollama" {
+		return available("ollama")
+	}
+	if p, ok := LookupProvider(name); ok {
+		return available(p.Bin)
+	}
+	return false
+}
+
 // FirstAvailableProvider returns the first registered provider whose CLI is
 // installed, in preference order. Experimental providers are considered only
 // when includeExperimental is true.

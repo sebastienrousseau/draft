@@ -42,6 +42,48 @@ type jobResult struct {
 	errText    string
 }
 
+type engineChoice struct {
+	Name        string
+	Label       string
+	Description string
+	Installed   bool
+}
+
+func defaultEngineChoices() []engineChoice {
+	base := []engineChoice{
+		{Name: "auto", Label: "auto", Description: "Automatic detection (session CLI online, Ollama fallback offline)", Installed: true},
+		{Name: "claude", Label: "claude", Description: "Claude (Anthropic CLI session)", Installed: engine.IsAvailable("claude")},
+		{Name: "agy", Label: "agy", Description: "Antigravity (AGY CLI session)", Installed: engine.IsAvailable("agy")},
+		{Name: "codex", Label: "codex", Description: "OpenAI Codex CLI session", Installed: engine.IsAvailable("codex")},
+		{Name: "copilot", Label: "copilot", Description: "GitHub Copilot CLI session", Installed: engine.IsAvailable("copilot")},
+		{Name: "cursor-agent", Label: "cursor-agent", Description: "Cursor Agent CLI session", Installed: engine.IsAvailable("cursor-agent")},
+		{Name: "grok", Label: "grok", Description: "Grok CLI session", Installed: engine.IsAvailable("grok")},
+		{Name: "ollama", Label: "ollama", Description: "Ollama (Local offline model)", Installed: engine.IsAvailable("ollama")},
+	}
+	for _, p := range engine.Providers {
+		found := false
+		for _, c := range base {
+			if c.Name == p.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			desc := p.Name + " CLI session"
+			if p.Experimental {
+				desc += " (experimental)"
+			}
+			base = append(base, engineChoice{
+				Name:        p.Name,
+				Label:       p.Name,
+				Description: desc,
+				Installed:   engine.IsAvailable(p.Name),
+			})
+		}
+	}
+	return base
+}
+
 // Model is the Bubble Tea model backing the dashboard.
 type Model struct {
 	ctx    context.Context
@@ -72,6 +114,10 @@ type Model struct {
 	genStarted time.Time
 	allDone    bool
 
+	selectingEngine bool
+	engineChoices   []engineChoice
+	engineCursor    int
+
 	width, height int
 	spinner       spinner.Model
 	progress      progress.Model
@@ -80,8 +126,9 @@ type Model struct {
 }
 
 // New constructs the initial model for a set of jobs. cancel, when non-nil, is
-// invoked on quit to stop any in-flight pipeline work.
-func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job) Model {
+// invoked on quit to stop any in-flight pipeline work. If selectEngine is true,
+// the dashboard prompts the user to select an LLM engine before drafting starts.
+func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job, selectEngine ...bool) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
 	sp.Style = accentStyle
@@ -100,33 +147,40 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runn
 		results[i] = jobResult{label: label(j), state: stateQueued}
 	}
 
+	selecting := len(selectEngine) > 0 && selectEngine[0]
 	m := Model{
-		ctx:      ctx,
-		cancel:   cancel,
-		cfg:      cfg,
-		runner:   runner,
-		jobs:     jobs,
-		results:  results,
-		events:   make(chan pipeline.Event, 256),
-		spinner:  sp,
-		progress: pr,
-		input:    ti,
-		started:  time.Now(),
+		ctx:             ctx,
+		cancel:          cancel,
+		cfg:             cfg,
+		runner:          runner,
+		jobs:            jobs,
+		results:         results,
+		events:          make(chan pipeline.Event, 256),
+		spinner:         sp,
+		progress:        pr,
+		input:           ti,
+		started:         time.Now(),
+		selectingEngine: selecting,
+		engineChoices:   defaultEngineChoices(),
 	}
 	m.resetPhases()
 	if runner != nil {
 		m.engineName = runner.EngineFor(engine.KindWrite)
 	}
 	// Init cannot return a mutated model, so reflect the first job's running
-	// state here; startJob still launches its goroutine from Init.
-	if len(results) > 0 {
+	// state here if not interactive engine selection; startJob still launches
+	// its goroutine from Init.
+	if !selecting && len(results) > 0 {
 		m.results[0].state = stateRunning
 	}
 	return m
 }
 
-// Init starts the first job.
+// Init starts the first job or waits for engine selection.
 func (m Model) Init() tea.Cmd {
+	if m.selectingEngine {
+		return tea.Batch(m.spinner.Tick, progressTick())
+	}
 	return tea.Batch(m.startJob(0), waitForEvent(m.events), m.spinner.Tick, progressTick())
 }
 
@@ -292,6 +346,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.selectingEngine {
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			if m.cancel != nil {
+				m.cancel()
+			}
+			return m, tea.Quit
+		case "up", "k":
+			if m.engineCursor > 0 {
+				m.engineCursor--
+			} else {
+				m.engineCursor = len(m.engineChoices) - 1
+			}
+			return m, nil
+		case "down", "j":
+			if m.engineCursor < len(m.engineChoices)-1 {
+				m.engineCursor++
+			} else {
+				m.engineCursor = 0
+			}
+			return m, nil
+		case "enter", " ":
+			chosen := m.engineChoices[m.engineCursor].Name
+			m.cfg.Engine = chosen
+			m.cfg.ExtractEngine = chosen
+			m.cfg.WriteEngine = chosen
+			m.runner = pipeline.NewRoutedRunner(m.cfg, nil)
+			m.engineName = chosen
+			m.selectingEngine = false
+			if len(m.results) > 0 {
+				m.results[0].state = stateRunning
+			}
+			return m, tea.Batch(m.startJob(0), waitForEvent(m.events))
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		if m.cancel != nil {

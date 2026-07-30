@@ -61,6 +61,10 @@ func (m Model) View() string {
 	b.WriteString(m.renderHeader(contentWidth))
 	b.WriteString("\n")
 
+	if m.selectingEngine {
+		return m.renderEngineSelectView(contentWidth)
+	}
+
 	if m.allDone {
 		b.WriteString(m.renderSummary(contentWidth))
 		b.WriteString("\n\n" + m.renderFooter(contentWidth))
@@ -456,4 +460,54 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+func (m Model) renderEngineSelectView(width int) string {
+	var b strings.Builder
+	b.WriteString(m.renderHeader(width))
+	b.WriteString("\n")
+
+	b.WriteString("  " + titleStyle.Render("Select LLM Provider / Model Engine:") + "\n\n")
+
+	for i, choice := range m.engineChoices {
+		prefix := "    "
+		style := subtleStyle
+		if i == m.engineCursor {
+			prefix = "  › "
+			style = accentStyle
+		}
+
+		var statusBadge string
+		switch {
+		case choice.Name == "auto":
+			statusBadge = okStyle.Render("[auto]")
+		case choice.Name == "ollama":
+			if choice.Installed {
+				statusBadge = okStyle.Render("[local / offline]")
+			} else {
+				statusBadge = mutedStyle.Render("[offline]")
+			}
+		case choice.Installed:
+			statusBadge = okStyle.Render("[installed]")
+		default:
+			statusBadge = mutedStyle.Render("[not found]")
+		}
+
+		nameCol := style.Render(fmt.Sprintf("%-14s", choice.Name))
+		descCol := subtleStyle.Render(choice.Description)
+
+		fmt.Fprintf(&b, "%s%s  %s  %s\n", prefix, nameCol, descCol, statusBadge)
+	}
+
+	b.WriteString("\n  " + helpStyle.Render("Press ") + accentStyle.Render("↑/↓") + helpStyle.Render(" or ") + accentStyle.Render("j/k") + helpStyle.Render(" to select an engine, then press ") + accentStyle.Render("Enter") + helpStyle.Render(" to begin.") + "\n")
+
+	chrome := "\n\n"
+	if m.tight() {
+		chrome = "\n"
+	}
+	b.WriteString(chrome + shortcutBar([][2]string{
+		{"[q]", "quit"}, {"[↑/↓]", "select LLM"}, {"[enter]", "confirm & start"},
+	}))
+	b.WriteString(chrome + m.renderFooter(width))
+	return m.scrollView(b.String())
 }

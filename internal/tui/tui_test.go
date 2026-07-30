@@ -276,3 +276,35 @@ func TestHandleKeyUpAndPageUp(t *testing.T) {
 		t.Error("up/pgup should decrease scroll")
 	}
 }
+
+func TestEngineSelectionInteractive(t *testing.T) {
+	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	cfg := config.Config{HomeDir: "/home/seb"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := New(ctx, cancel, cfg, pipeline.NewRunner(cfg, nil, nil), js, true)
+	if !m.selectingEngine {
+		t.Error("expected selectingEngine to be true when selectEngine flag is passed")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Select LLM Provider") {
+		t.Errorf("view missing selection title: %s", view)
+	}
+
+	// Navigate down
+	m = upd(m, tea.KeyMsg{Type: tea.KeyDown})
+	if m.engineCursor != 1 {
+		t.Errorf("expected cursor 1, got %d", m.engineCursor)
+	}
+
+	// Press enter to confirm selection
+	m = upd(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.selectingEngine {
+		t.Error("expected selectingEngine to become false after enter")
+	}
+	if m.engineName == "" {
+		t.Error("expected engineName to be populated after confirmation")
+	}
+}

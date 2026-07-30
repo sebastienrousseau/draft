@@ -128,6 +128,23 @@ func TestResolveModel(t *testing.T) {
 	}
 }
 
+func TestIsAvailable(t *testing.T) {
+	if !IsAvailable("auto") {
+		t.Error("auto should always be available")
+	}
+	withAvailable(map[string]bool{"claude": true, "ollama": true}, func() {
+		if !IsAvailable("claude") {
+			t.Error("claude should be available when installed")
+		}
+		if !IsAvailable("ollama") {
+			t.Error("ollama should be available when installed")
+		}
+		if IsAvailable("codex") {
+			t.Error("codex should not be available when not installed")
+		}
+	})
+}
+
 func names(engs []Engine) []string {
 	out := make([]string, len(engs))
 	for i, e := range engs {
