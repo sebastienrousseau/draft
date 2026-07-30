@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -53,9 +54,17 @@ type Model struct {
 	current int
 	events  chan pipeline.Event
 
-	phases     [pipeline.NumPhases]string
-	logs       []string
-	output     string
+	phases [pipeline.NumPhases]string
+	logs   []string
+	// out accumulates the streamed article; tail is a bounded window over its
+	// end. Concatenating into a string and re-splitting the whole article on
+	// every streamed chunk made the cost of a token grow with the length of
+	// the article already written.
+	//
+	// These are []byte and not strings.Builder deliberately: Bubble Tea passes
+	// Model by value, and a Builder panics when it is copied after first use.
+	out        []byte
+	tail       []byte
 	preview    string
 	words      int
 	engineName string
@@ -129,9 +138,7 @@ func (m *Model) startJob(i int) tea.Cmd {
 	m.results[i].state = stateRunning
 	m.resetPhases()
 	m.logs = nil
-	m.output = ""
-	m.preview = ""
-	m.words = 0
+	m.resetOutput()
 	m.started = time.Now()
 	m.genStarted = time.Time{}
 	job := m.jobs[i]
@@ -147,6 +154,82 @@ func (m *Model) resetPhases() {
 	for i := range m.phases {
 		m.phases[i] = "queued"
 	}
+}
+
+// previewLines is how many lines the live preview shows, and so how many the
+// tail needs to keep. previewTailBytes is a backstop for output that arrives
+// with few or no line breaks, where there is nothing to trim on.
+const (
+	previewLines     = 16
+	previewTailBytes = 8 << 10
+)
+
+// appendToken accumulates a streamed chunk and refreshes the preview.
+//
+// Its cost is bounded by the preview window rather than by the length of the
+// article already written, which matters because it runs once per streamed
+// chunk — thousands of times per draft. Appending to a buffer and previewing
+// from a bounded tail replaced a whole-article copy plus a whole-article line
+// split per chunk: ~76 MB of allocation for one article's stream became ~23 MB,
+// and the time halved (see BenchmarkTokenAppend).
+func (m *Model) appendToken(chunk string) {
+	m.out = append(m.out, chunk...)
+	m.tail = append(m.tail, chunk...)
+	m.trimTail()
+	m.preview = previewText(string(m.tail), previewLines)
+	m.words = wordCount(m.preview)
+}
+
+// trimTail keeps the tail to the last previewLines lines. Bounding by lines
+// rather than by bytes is what keeps the per-chunk cost genuinely constant:
+// the preview can only ever show that many lines, so anything older is copied
+// and re-scanned for nothing.
+func (m *Model) trimTail() {
+	// Walk back to the newline that opens the oldest line still visible.
+	seen := 0
+	for i := len(m.tail) - 1; i >= 0; i-- {
+		if m.tail[i] != '\n' {
+			continue
+		}
+		seen++
+		if seen > previewLines {
+			m.tail = append(m.tail[:0], m.tail[i+1:]...) // copy handles the overlap
+			return
+		}
+	}
+	// Backstop for output with few or no line breaks, where the scan above
+	// finds nothing to trim on.
+	if len(m.tail) > previewTailBytes {
+		trimmed := m.tail[len(m.tail)-previewTailBytes:]
+		// Never open the preview mid-rune.
+		for len(trimmed) > 0 && !utf8.RuneStart(trimmed[0]) {
+			trimmed = trimmed[1:]
+		}
+		m.tail = append(m.tail[:0], trimmed...)
+	}
+}
+
+// maxLogLines is how many progress lines the log pane keeps.
+const maxLogLines = 8
+
+// appendLog adds a progress line, keeping only the most recent ones.
+func (m *Model) appendLog(line string) {
+	m.logs = append(m.logs, line)
+	if len(m.logs) > maxLogLines {
+		m.logs = m.logs[len(m.logs)-maxLogLines:]
+	}
+}
+
+// article returns everything streamed so far.
+func (m Model) article() string { return string(m.out) }
+
+// resetOutput clears the accumulated article between jobs. The buffers are
+// re-sliced rather than dropped so the next job reuses the capacity.
+func (m *Model) resetOutput() {
+	m.out = m.out[:0]
+	m.tail = m.tail[:0]
+	m.preview = ""
+	m.words = 0
 }
 
 // Update implements tea.Model.
@@ -176,15 +259,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, waitForEvent(m.events)
 	case pipeline.LogEvent:
-		m.logs = append(m.logs, string(msg))
-		if len(m.logs) > 8 {
-			m.logs = m.logs[len(m.logs)-8:]
-		}
+		m.appendLog(string(msg))
+		return m, waitForEvent(m.events)
+	case pipeline.WarnEvent:
+		// Marked so a fallback or a failed save is visibly different from
+		// ordinary progress in the log pane.
+		m.appendLog("! " + string(msg))
 		return m, waitForEvent(m.events)
 	case pipeline.TokenEvent:
-		m.output += string(msg)
-		m.preview = previewText(m.output, 16)
-		m.words = wordCount(m.preview)
+		m.appendToken(string(msg))
 		return m, waitForEvent(m.events)
 	case pipeline.EngineEvent:
 		m.engineName = string(msg)

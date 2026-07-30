@@ -231,7 +231,7 @@ func (m Model) renderPreviewPanel(width, height int) string {
 	var b strings.Builder
 	b.WriteString(m.section("Live Draft", width-4))
 	b.WriteString(m.spinner.View() + " " + helpStyle.Render(m.statusText()) + "\n")
-	pct := generationPercent(m.output)
+	pct := generationPercent(m.article())
 	m.progress.Width = clamp(width-13, 12, 48) // leave room for the appended " 100%"
 	bar := m.progress.ViewAs(pct)
 	b.WriteString(bar + accentStyle.Render(fmt.Sprintf(" %3.0f%%", pct*100)) + "\n\n")
