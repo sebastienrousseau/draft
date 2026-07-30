@@ -1,7 +1,11 @@
 <!-- markdownlint-disable MD013 -->
 # Spec: engine routing, resume, and run planning
 
-Status: **proposed** · Target: `0.0.29` · Author: drafted for review
+Status: **shipped in 0.0.29**, except [extraction batching](#not-doing-yet-extraction-batching),
+which remains proposed and is gated on the experiment described there.
+
+Kept as the design record for what was built and why — including the option
+deliberately not taken.
 
 This specifies five changes aimed at the only thing that actually costs time in
 a `draft` run — model calls — plus the one bug found while designing them.
@@ -36,13 +40,14 @@ That has two consequences:
 
 Ranked by value ÷ effort:
 
-| # | Change | Lever | Effort |
+| # | Change | Lever | Status |
 | - | ------ | ----- | ------ |
-| 1 | Per-`Kind` engine routing | ~13 session calls per paper → 1 | Medium |
-| 2 | Ledger resume | A failed run costs seconds, not 10 minutes | Medium |
-| 3 | `--dry-run` | Stop committing to a long run blind | Small |
-| 4 | Queue-sticky fallback | Removes N× repeated dead-provider retries | Small |
-| 5 | Extraction ETA | Tells you if this is 2 or 20 minutes | Small |
+| 1 | Per-`Kind` engine routing | ~13 session calls per paper → 1 | shipped 0.0.29 |
+| 2 | Ledger resume | A failed run costs seconds, not 10 minutes | shipped 0.0.29 |
+| 3 | `--dry-run` | Stop committing to a long run blind | shipped 0.0.29 |
+| 4 | Queue-sticky fallback | Removes N× repeated dead-provider retries | shipped 0.0.29 |
+| 5 | Extraction ETA | Tells you if this is 2 or 20 minutes | shipped 0.0.29 |
+| 6 | Extraction batching | 3–4× off the dominant cost | **proposed** — needs the recall experiment |
 
 ---
 
@@ -383,7 +388,7 @@ only if recall holds within a few percent. Ship behind
 
 ## Rollout
 
-Five independent commits, each green on its own:
+Shipped as two squashed merges (#37, #38). The original five-commit plan was:
 
 1. `fix(pipeline)`: per-source ledger filename *(bug fix, ships regardless)*
 2. `feat(engine)`: per-`Kind` routing

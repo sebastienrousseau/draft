@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
-## [Unreleased]
+## [0.0.29] - 2026-07-30
 
 ### Added
 
