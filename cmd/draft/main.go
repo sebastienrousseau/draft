@@ -115,6 +115,19 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 
 	cfg := config.Load(flags)
+	// Resolution problems that were recovered from — an unreadable home
+	// directory, an out-of-range tunable, a non-loopback Ollama host — are
+	// reported rather than applied in silence.
+	for _, w := range cfg.Warnings {
+		fmt.Fprintln(stderr, "draft: warning:", w)
+	}
+	// A misspelled provider name would otherwise degrade to Ollama without a
+	// word, producing a local-model draft the user believes came from Claude.
+	if err := engine.Validate(cfg); err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
+		return 2
+	}
+
 	args := fs.Args()
 	if len(args) == 0 {
 		usage(stderr)

@@ -11,6 +11,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,6 +38,8 @@ const (
 	extractTemperature  = 0.15
 	writeTemperature    = 0.6
 	editTemperature     = 0.3
+	// maxStemAttempts bounds the search for a free output filename.
+	maxStemAttempts = 1000
 )
 
 // Phase indices for progress reporting, in execution order.
@@ -74,10 +77,25 @@ type (
 	}
 	// LogEvent is a human-readable progress line.
 	LogEvent string
+	// WarnEvent is a human-readable line reporting something that went wrong
+	// but did not stop the run: a backend that failed and was fallen back from,
+	// an artefact that could not be saved, an advisory faithfulness warning.
+	//
+	// It is a distinct type rather than a level field on LogEvent so that
+	// existing consumers keep compiling, and so a script can filter on the
+	// type it already type-switches over.
+	WarnEvent string
 	// TokenEvent is a chunk of the article as it streams in.
 	TokenEvent string
 	// EngineEvent reports which backend is now doing the work.
 	EngineEvent string
+	// PhaseTiming is how long one phase took and how it ended.
+	PhaseTiming struct {
+		Index    int
+		Name     string
+		Status   string // "done" or "failed"
+		Duration time.Duration
+	}
 	// DoneEvent is the terminal success event.
 	DoneEvent struct {
 		OutputPath string
@@ -85,6 +103,11 @@ type (
 		Words      int
 		Mode       string
 		Engine     string
+		// Duration is the wall-clock time for the whole job, and Timings the
+		// per-phase breakdown, so --json output can be compared across runs
+		// rather than only read.
+		Duration time.Duration
+		Timings  []PhaseTiming
 	}
 	// ErrEvent is the terminal failure event.
 	ErrEvent string
@@ -111,6 +134,16 @@ type Runner struct {
 	// styleText is the style-calibration block embedded in the writing prompt, kept
 	// so any of it the model echoes verbatim into the draft can be stripped back out.
 	styleText string
+	// done mirrors the running job's ctx.Done so emit can abandon a send whose
+	// consumer has gone away. Set at the top of Run; nil outside a run, which
+	// is a valid never-ready channel in a select.
+	done <-chan struct{}
+	// started, phaseStart and timings record how long the run and each phase
+	// took, reported on DoneEvent so a run's cost is measurable rather than
+	// merely felt.
+	started    time.Time
+	phaseStart time.Time
+	timings    []PhaseTiming
 }
 
 // finalize applies the standard post-processing to a raw generation: clean it,
@@ -131,6 +164,12 @@ func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) 
 // Run executes one job, reporting progress and a terminal Done/Err event. It
 // never closes the events channel; the caller owns its lifecycle.
 func (r *Runner) Run(ctx context.Context, job Job) {
+	// Bind emit to this run's cancellation before anything can be emitted, so
+	// a consumer that stops draining cannot wedge this goroutine.
+	r.done = ctx.Done()
+	r.started = time.Now()
+	r.timings = nil
+
 	if len(r.engines) == 0 {
 		r.emit(ErrEvent("no generation engine available"))
 		return
@@ -218,7 +257,14 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	r.cleanupArtifacts()
 	r.log("saved " + shortPath(r.cfg, outputPath))
 	r.phase(PhaseSave, "done")
-	r.emit(DoneEvent{OutputPath: outputPath, Words: words, Mode: "draft", Engine: r.engineName})
+	r.emit(DoneEvent{
+		OutputPath: outputPath,
+		Words:      words,
+		Mode:       "draft",
+		Engine:     r.engineName,
+		Duration:   time.Since(r.started),
+		Timings:    append([]PhaseTiming(nil), r.timings...),
+	})
 	return nil
 }
 
@@ -234,16 +280,44 @@ func (r *Runner) cleanupArtifacts() {
 	}
 }
 
-// sections reads and splits every source file.
+// sections reads and splits every source file. A source that cannot be read is
+// skipped with a note rather than failing the run, but if nothing at all could
+// be read the reason is returned — and when every failure was a missing text
+// layer, the returned error preserves pdf.ErrNoTextLayer so the caller can
+// surface its OCR advice instead of a generic "no text" message.
 func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section, error) {
 	var all []pdf.Section
+	var firstErr error
+	scanned := 0
+	failed := 0
+
 	for _, src := range sources {
 		text, err := pdf.Extract(ctx, src)
 		if err != nil {
-			r.log(fmt.Sprintf("skipped %s: %v", filepath.Base(src), err))
+			// Cancellation is not a skippable per-file problem.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			failed++
+			if errors.Is(err, pdf.ErrNoTextLayer) {
+				scanned++
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+			r.warn(fmt.Sprintf("skipped %s: %v", filepath.Base(src), err))
 			continue
 		}
 		all = append(all, pdf.SplitSections(filepath.Base(src), text)...)
+	}
+
+	if len(all) == 0 && failed > 0 {
+		if scanned == failed {
+			// Every source was a scan: %w keeps errors.Is working for callers
+			// and keeps the remediation text in the message.
+			return nil, fmt.Errorf("no readable text extracted from the source(s): %w", pdf.ErrNoTextLayer)
+		}
+		return nil, fmt.Errorf("no readable text extracted from the source(s): %w", firstErr)
 	}
 	return all, nil
 }
@@ -333,8 +407,15 @@ func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outp
 		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
 		records = deduped
 	}
-	_ = os.WriteFile(ledgerPath, []byte(claims.RenderLedger(records, dropped)+"\n"), 0o644)
-	r.log("claims saved to " + shortPath(r.cfg, ledgerPath))
+	// Report what actually happened. Logging "claims saved" unconditionally
+	// after a discarded write tells the user a fact-checking artefact exists
+	// when it may not.
+	if err := os.WriteFile(ledgerPath, []byte(claims.RenderLedger(records, dropped)+"\n"), 0o644); err != nil {
+		r.ledgerPath = ""
+		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
+	} else {
+		r.log("claims saved to " + shortPath(r.cfg, ledgerPath))
+	}
 	return records, dropped, nil
 }
 
@@ -415,10 +496,27 @@ func (r *Runner) write(ctx context.Context, writePrompt string) (string, error) 
 		return "", fmt.Errorf("generation failed: %w", err)
 	}
 	text := r.finalize(res.Text)
-	if res.Truncated {
+	if looksTruncated(res, text) {
 		text = r.continueGeneration(ctx, text)
 	}
 	return text, nil
+}
+
+// looksTruncated reports whether a generation needs continuing.
+//
+// Result.Truncated is authoritative when a backend can set it, but only Ollama
+// and the stream-json providers can — every other session provider returns
+// plain text with no stop reason attached. Relying on the flag alone left the
+// continuation machinery dead for most backends, so a length-limited stop
+// surfaced far later as a "article appears truncated" rule violation costing a
+// whole rewrite. An ending that does not close a sentence is the same signal
+// the validator uses, available to every backend, so use it as the fallback.
+func looksTruncated(res engine.Result, text string) bool {
+	if res.Truncated {
+		return true
+	}
+	trimmed := strings.TrimRight(text, " \t\r\n")
+	return trimmed != "" && !validate.EndsSentence(trimmed)
 }
 
 // continuePredictTokens bounds each continuation call. A continuation only has
@@ -448,7 +546,7 @@ func (r *Runner) continueGeneration(ctx context.Context, partial string) string 
 			OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
 		})
 		if err != nil {
-			r.log("continuation failed: " + err.Error())
+			r.warn("continuation failed: " + err.Error())
 			break
 		}
 		cont := r.finalize(res.Text)
@@ -475,7 +573,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 	var errs []string
 	for attempt := 0; attempt <= r.cfg.WriteRetries; attempt++ {
 		if attempt > 0 {
-			r.log(fmt.Sprintf("write retry %d: %d violation(s)", attempt, len(errs)))
+			r.warn(fmt.Sprintf("write retry %d: %d violation(s)", attempt, len(errs)))
 			retryPrompt := basePrompt + "\n\n## FIX THESE PROBLEMS FROM YOUR PREVIOUS DRAFT\nRewrite the whole article so none of these remain. Change only what is needed.\n- " + strings.Join(errs, "\n- ") + "\n"
 			res, err := r.generate(ctx, engine.Request{
 				Kind:        engine.KindWrite,
@@ -488,7 +586,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 				return markdown, fmt.Errorf("generation failed: %w", err)
 			}
 			markdown = r.finalize(res.Text)
-			if res.Truncated {
+			if looksTruncated(res, markdown) {
 				markdown = r.continueGeneration(ctx, markdown)
 			}
 		}
@@ -497,7 +595,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 		errs = append(append([]string{}, styleErrs...), factErrs...)
 		if len(errs) == 0 {
 			for _, w := range warnings {
-				r.log("review: " + w)
+				r.warn("review: " + w)
 			}
 			return markdown, nil
 		}
@@ -513,6 +611,12 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
 	var lastErr error
 	for r.cur < len(r.engines) {
+		// A cancelled run must not keep walking the chain. Without this check
+		// Ctrl+C makes every remaining engine fail in turn, each logging a
+		// misleading "falling back to ..." on the way out.
+		if err := ctx.Err(); err != nil {
+			return engine.Result{}, err
+		}
 		e := r.engines[r.cur]
 		res, err := e.Generate(ctx, req)
 		if err == nil {
@@ -522,17 +626,22 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 			}
 			return res, nil
 		}
+		// Cancellation and timeout are the caller's decision, not a sick
+		// backend. Failing over would retry work the user just abandoned.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return engine.Result{}, err
+		}
 		lastErr = err
-		r.log(fmt.Sprintf("%s failed (%v)", e.Name(), err))
+		r.warn(fmt.Sprintf("%s failed (%v)", e.Name(), err))
 		r.cur++
 		if r.cur < len(r.engines) {
 			r.engineName = r.engines[r.cur].Name()
 			r.emit(EngineEvent(r.engineName))
-			r.log("falling back to " + r.engineName)
+			r.warn("falling back to " + r.engineName)
 		}
 	}
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no engine available")
+		lastErr = errors.New("no engine available")
 	}
 	return engine.Result{}, lastErr
 }
@@ -558,10 +667,19 @@ func (r *Runner) save(outputDir, markdown string) (string, int, error) {
 		}
 	}
 
-	// Uniquify the trio as a set: a leftover in any one folder bumps all
-	// three names together, so the files can never desync.
+	// Uniquify the trio as a set: a leftover in any one folder bumps all three
+	// names together, so the files can never desync.
+	//
+	// The body file is claimed with O_EXCL rather than a bare existence check,
+	// so two runs racing on the same title cannot both pick the same stem
+	// between the check and the write. The loop is bounded: an unbounded
+	// search would spin forever against an undeletable path.
 	var stem, bodyPath, fmPath, finalPath string
+	var bodyFile *os.File
 	for i := 1; ; i++ {
+		if i > maxStemAttempts {
+			return "", 0, fmt.Errorf("could not find a free filename for %q after %d attempts", base, maxStemAttempts)
+		}
 		stem = base
 		if i > 1 {
 			stem = fmt.Sprintf("%s-%d", base, i)
@@ -569,12 +687,25 @@ func (r *Runner) save(outputDir, markdown string) (string, int, error) {
 		bodyPath = filepath.Join(srcDir, stem+"-body.md")
 		fmPath = filepath.Join(yamlDir, stem+"-frontmatter.yaml")
 		finalPath = filepath.Join(finalDir, stem+"-final.md")
-		if !fileExists(bodyPath) && !fileExists(fmPath) && !fileExists(finalPath) {
-			break
+		if fileExists(fmPath) || fileExists(finalPath) {
+			continue
 		}
+		f, err := os.OpenFile(bodyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return "", 0, err
+		}
+		bodyFile = f
+		break
 	}
 
-	if err := os.WriteFile(bodyPath, []byte(body+"\n"), 0o644); err != nil {
+	if _, err := bodyFile.WriteString(body + "\n"); err != nil {
+		_ = bodyFile.Close()
+		return "", 0, err
+	}
+	if err := bodyFile.Close(); err != nil {
 		return "", 0, err
 	}
 	site := frontmatter.SiteFromEnv()
@@ -599,29 +730,85 @@ func (r *Runner) save(outputDir, markdown string) (string, int, error) {
 
 // saveFailure preserves the raw output and, if it still looks like an article,
 // a needs-review copy, then returns an error describing where they went.
+// It reports only the files it actually managed to write: telling the user
+// where to find a rescued draft that was never saved sends them looking for a
+// path that does not exist.
 func (r *Runner) saveFailure(outputDir, markdown string, verr error) error {
+	var note strings.Builder
 	rawPath := filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-failed-output.txt")
-	_ = os.WriteFile(rawPath, []byte(markdown+"\n"), 0o644)
-	note := "\nRaw output saved: " + rawPath
+	if err := os.WriteFile(rawPath, []byte(markdown+"\n"), 0o644); err != nil {
+		note.WriteString("\nRaw output could not be saved: " + err.Error())
+	} else {
+		note.WriteString("\nRaw output saved: " + rawPath)
+	}
 	if validate.LooksLikeArticle(markdown) {
 		reviewPath := uniquePath(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+slugify(extractTitle(markdown))+"-needs-review.md"))
-		_ = os.WriteFile(reviewPath, []byte(markdown+"\n"), 0o644)
-		note += "\nNeeds-review Markdown saved: " + reviewPath
+		if err := os.WriteFile(reviewPath, []byte(markdown+"\n"), 0o644); err != nil {
+			note.WriteString("\nNeeds-review Markdown could not be saved: " + err.Error())
+		} else {
+			note.WriteString("\nNeeds-review Markdown saved: " + reviewPath)
+		}
 	}
-	return fmt.Errorf("%v%s", verr, note)
+	return fmt.Errorf("%w%s", verr, note.String())
 }
 
 func (r *Runner) datedDir() string {
 	return filepath.Join(r.cfg.DraftsDir, time.Now().Format("2006-01-02"))
 }
 
-// emit sends an event without blocking the pipeline if the UI is slow.
+// emit delivers an event to the caller's channel.
+//
+// Structural and terminal events block until they are accepted — dropping a
+// DoneEvent would strand the caller waiting for an outcome that never comes —
+// but every send races the run's context, so a consumer that stops draining
+// (the dashboard quitting, a caller abandoning the channel) can no longer wedge
+// this goroutine forever.
+//
+// TokenEvents are different: they are emitted from inside the engine's read
+// loop, one per streamed chunk, and exist only to animate a preview. They are
+// dropped when the buffer is full rather than applying backpressure, because a
+// renderer that cannot keep up must slow the preview, never the generation.
+// The complete text is returned by the engine regardless of what is dropped.
 func (r *Runner) emit(e Event) {
 	if r.events == nil {
 		return
 	}
-	r.events <- e
+	if _, lossy := e.(TokenEvent); lossy {
+		select {
+		case r.events <- e:
+		case <-r.done:
+		default: // preview frame dropped; the article itself is unaffected
+		}
+		return
+	}
+	select {
+	case r.events <- e:
+	case <-r.done:
+	}
 }
 
-func (r *Runner) phase(index int, status string) { r.emit(PhaseEvent{Index: index, Status: status}) }
-func (r *Runner) log(msg string)                 { r.emit(LogEvent(msg)) }
+// phase reports a phase transition and records how long the phase took. The
+// timings ride out on DoneEvent, which previously carried no notion of cost at
+// all — so "which stage was slow?" could only be answered by watching.
+func (r *Runner) phase(index int, status string) {
+	switch status {
+	case "running":
+		r.phaseStart = time.Now()
+	case "done", "failed":
+		if !r.phaseStart.IsZero() {
+			r.timings = append(r.timings, PhaseTiming{
+				Index:    index,
+				Name:     PhaseNames[index],
+				Status:   status,
+				Duration: time.Since(r.phaseStart),
+			})
+			r.phaseStart = time.Time{}
+		}
+	}
+	r.emit(PhaseEvent{Index: index, Status: status})
+}
+
+func (r *Runner) log(msg string) { r.emit(LogEvent(msg)) }
+
+// warn reports something that went wrong without stopping the run.
+func (r *Runner) warn(msg string) { r.emit(WarnEvent(msg)) }

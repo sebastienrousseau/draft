@@ -226,18 +226,27 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// uniquePath returns path, or the first numbered variant of it that does not
+// already exist.
+//
+// The loop is bounded and treats any Stat error other than "does not exist" as
+// good enough to use the candidate. Testing only os.IsNotExist meant a
+// directory we cannot stat into — no execute permission, a dead network mount —
+// made every candidate look occupied and span the loop forever. Failing to
+// write the file afterwards is a reported error; spinning is not.
 func uniquePath(path string) string {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if !fileExists(path) {
 		return path
 	}
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
-	for i := 2; ; i++ {
+	for i := 2; i <= maxStemAttempts; i++ {
 		candidate := fmt.Sprintf("%s-%d%s", base, i, ext)
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		if !fileExists(candidate) {
 			return candidate
 		}
 	}
+	return fmt.Sprintf("%s-%d%s", base, maxStemAttempts+1, ext)
 }
 
 func shortPath(cfg config.Config, path string) string {

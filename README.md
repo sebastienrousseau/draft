@@ -148,20 +148,26 @@ flowchart LR
     E -. rule<br/>violations .-> D
 ```
 
-1. **Read and section.** Poppler extracts the text in reading order, so a
+1. **Resolve sources.** Bare filenames resolve against `~/Drop/Drafts/Sources`;
+   paths are taken as given. Unreadable and scanned-only files are reported
+   here rather than halfway through a run.
+2. **Read and section.** Poppler extracts the text in reading order, so a
    two-column paper stays readable rather than having its columns spliced
    together. Trailing bibliography and appendix matter is dropped; the rest is
    split on paper headings and capped per section.
-2. **Extract claims.** Each section is mined for facts. A claim survives only
+3. **Extract claims.** Each section is mined for facts. A claim survives only
    if its `SOURCE_QUOTE` is an exact substring of that section, and every
    number in the claim appears inside that quote.
-3. **Write.** The claim ledger is the only permitted source of facts. If the
+4. **Write.** The claim ledger is the only permitted source of facts. If the
    backend stops on a length limit, `draft` continues generation rather than
    saving half an article.
-4. **Validate and save.** Structure, length, banned vocabulary, emoji,
+5. **Validate and save.** Structure, length, banned vocabulary, emoji,
    truncation and faithfulness are all enforced. A violation triggers a
    targeted rewrite, not a shrug. Scratch files are removed unless you pass
    `--keep-artifacts`.
+
+Those five phases are `pipeline.PhaseNames`, in that order, and each one emits
+a `pipeline.PhaseEvent` as it starts and finishes.
 
 ---
 
@@ -203,18 +209,23 @@ and drives it through its own login. No token is read, stored or logged.
 article output has not been verified end to end. Auto mode skips them unless
 you pass `--experimental`. Any provider can be forced with `--engine <name>`.
 
-| Provider       | Status       | Headless invocation |
-| -------------- | ------------ | ------------------- |
-| `claude`       | stable       | `claude -p --output-format stream-json` (live-streamed) |
-| `copilot`      | stable       | `copilot -p --allow-all-tools` |
-| `codex`        | stable       | `codex exec` |
-| `agy`          | stable       | `agy -p` (Google Antigravity) |
-| `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` |
-| `grok`         | stable       | `grok --output-format plain --single` |
-| `amp`          | experimental | `amp -x` |
-| `crush`        | experimental | `crush run` |
-| `goose`        | experimental | `goose run --no-session -t` |
-| `qwen`         | experimental | `qwen -p` |
+Rows are in auto-selection preference order — the same order
+`engine.ProviderNames()` returns. Auto mode walks the list top to bottom and
+takes the first installed provider, skipping experimental rows unless
+`--experimental` is set.
+
+| # | Provider       | Status       | Headless invocation |
+| - | -------------- | ------------ | ------------------- |
+| 1 | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (live-streamed, prompt on stdin) |
+| 2 | `copilot`      | stable       | `copilot -p --allow-all-tools` |
+| 3 | `codex`        | stable       | `codex exec` (prompt on stdin) |
+| 4 | `agy`          | stable       | `agy -p` (Google Antigravity) |
+| 5 | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (prompt on stdin) |
+| 6 | `amp`          | experimental | `amp -x` |
+| 7 | `crush`        | experimental | `crush run` |
+| 8 | `goose`        | experimental | `goose run --no-session -t` |
+| 9 | `grok`         | stable       | `grok --output-format plain --single` |
+| 10 | `qwen`        | experimental | `qwen -p` |
 
 `go run ./examples/providers` shows which are installed on your machine.
 
@@ -244,6 +255,9 @@ draft [flags] <source> [more-sources...]
 | `--completion <sh>`  | Print a completion script: `bash`, `zsh`, or `fish`      |
 | `--version`          | Print version and exit                                   |
 | `-h, --help`         | Show help                                                |
+
+`--claude-model` is a deprecated alias for `--model`. It still parses, is
+absent from `draft --help`, and may be removed in a future release.
 
 ---
 
@@ -373,10 +387,21 @@ Flags beat environment variables. Environment variables beat defaults.
 | `DRAFT_WRITE_RETRIES`       | `2`                      | Rewrite attempts on rule violations |
 | `DRAFT_MAX_CONTINUE`        | `3`                      | Max continuations on a length-limited stop |
 | `DRAFT_EXTRACT_CONCURRENCY` | `4`                      | Parallel extraction workers (session engines) |
+| `DRAFT_CALL_TIMEOUT`        | `1800`                   | Seconds bounding a single generation call; `0` disables |
 | `DRAFT_EXPERIMENTAL`        | —                        | `1` to let auto use experimental providers |
 | `DRAFT_SHOW_LOGO`           | —                        | `0` to suppress the logo in the CLI and dashboard |
 | `DRAFT_SITE_*`              | see below                | Frontmatter publisher identity |
 | `OLLAMA_HOST`               | `http://127.0.0.1:11434` | Ollama server address |
+
+Every numeric variable is clamped at both ends. A value outside its range is
+not silently ignored: the default is used and a warning is printed to stderr,
+because a tunable you believe took effect but did not is worse than one that
+was rejected. The same applies to `OLLAMA_HOST` — a value that is not a valid
+`http`/`https` URL is refused, and one that is not loopback is reported, since
+a remote host means your source text leaves the machine.
+
+`DRAFT_CLAUDE_MODEL` is a deprecated alias for `DRAFT_MODEL_SESSION`, read only
+when the latter is unset.
 
 </details>
 
@@ -501,6 +526,19 @@ brand assets and the TUI stay internal.
 go get github.com/sebastienrousseau/draft@latest
 ```
 
+Each has its own README with a runnable quick start and an API table:
+
+| Package | What it does |
+| ------- | ------------ |
+| [`claims`](claims) | Claim parsing, the verbatim-quote gate, ledger rendering |
+| [`config`](config) | Flag + environment + default resolution |
+| [`engine`](engine) | The `Engine` seam, provider registry, Ollama, fallback chain |
+| [`frontmatter`](frontmatter) | Metadata, YAML generation, article-set regeneration |
+| [`pipeline`](pipeline) | Five-phase orchestration, retries, continuation, events |
+| [`prompt`](prompt) | Grounded claim, writing and review prompts |
+| [`rules`](rules) | Shared editorial constants |
+| [`validate`](validate) | House-rule and faithfulness checks |
+
 > **API stability.** While the module is `0.0.x`, the exported Go API may change
 > between releases without a deprecation cycle. Pin an exact version if you
 > depend on it, and read the [CHANGELOG](CHANGELOG.md) before upgrading —
@@ -511,21 +549,62 @@ go get github.com/sebastienrousseau/draft@latest
 <summary><strong>Run the pipeline in-process</strong> — one Job, streamed events</summary>
 
 ```go
-cfg := config.Config{HomeDir: dir, DraftsDir: dir, MaxContinue: 3}
-events := make(chan pipeline.Event, 256)
-go func() {
-    pipeline.NewRunner(cfg, []engine.Engine{myEngine}, events).
-        Run(ctx, pipeline.Job{Sources: []string{"paper.txt"}})
-    close(events)
-}()
-for e := range events {
-    switch ev := e.(type) {
-    case pipeline.LogEvent:  // progress line
-    case pipeline.DoneEvent: // ev.OutputPath, ev.Words, ev.Engine
-    case pipeline.ErrEvent:  // failure text
-    }
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/pipeline"
+)
+
+func main() {
+	dir, err := os.MkdirTemp("", "draft-*")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	// Job.Sources are absolute paths; only the CLI resolves bare names.
+	src := filepath.Join(dir, "paper.txt")
+	if err := os.WriteFile(src, []byte("Router-S used 5x fewer FLOPs."), 0o644); err != nil {
+		log.Fatal(err)
+	}
+
+	cfg := config.Config{HomeDir: dir, DraftsDir: dir, MaxContinue: 3}
+	events := make(chan pipeline.Event, 256)
+
+	// Run is synchronous and never closes the events channel: the caller owns
+	// its lifecycle, so drive it from a goroutine and close on return.
+	go func() {
+		defer close(events)
+		pipeline.NewRunner(cfg, engine.Chain(cfg), events).
+			Run(context.Background(), pipeline.Job{Sources: []string{src}})
+	}()
+
+	for e := range events {
+		switch ev := e.(type) {
+		case pipeline.LogEvent:
+			fmt.Println("·", string(ev))
+		case pipeline.PhaseEvent:
+			fmt.Printf("  [%s] %s\n", pipeline.PhaseNames[ev.Index], ev.Status)
+		case pipeline.DoneEvent:
+			fmt.Printf("✓ %d words via %s → %s\n", ev.Words, ev.Engine, ev.OutputPath)
+		case pipeline.ErrEvent:
+			fmt.Println("×", string(ev)) // terminal failure; the loop ends next
+		}
+	}
 }
 ```
+
+`engine.Chain(cfg)` resolves the configured fallback chain and does call a real
+backend. Pass `[]engine.Engine{myEngine}` instead to run entirely in-process —
+that is how the test suite and `go run ./examples/pipeline` work.
 
 A `Job` with several sources is one merged draft (`--merge`). Setting
 `Job.ReviewPath` enhances that draft instead of writing a new one (`--review`).
@@ -536,12 +615,48 @@ A `Job` with several sources is one merged draft (`--merge`). Setting
 <summary><strong>Verify claims and build a grounded prompt</strong> — claims, prompt, validate</summary>
 
 ```go
-records, dropped := claims.Parse(rawExtraction, sourceText) // verbatim-quote gate
-ledger := claims.RenderPromptLedger(records, 45, 14000)
-p := prompt.Writing(styleSample, ledger, rules.MinWords, rules.MaxWords)
+package main
 
-for _, e := range validate.Errors(draftText) { // house rules + faithfulness
-    fmt.Println(e)
+import (
+	"fmt"
+
+	"github.com/sebastienrousseau/draft/claims"
+	"github.com/sebastienrousseau/draft/prompt"
+	"github.com/sebastienrousseau/draft/rules"
+	"github.com/sebastienrousseau/draft/validate"
+)
+
+func main() {
+	source := "Router-S used 5x fewer FLOPs than the dense baseline on the same corpus."
+
+	// What a model returns from prompt.Claim. The second block is invented:
+	// its quote does not occur in the source, so Parse drops it.
+	extraction := `CLAIM: Router-S used 5x fewer FLOPs
+SOURCE_QUOTE: "used 5x fewer FLOPs than the dense baseline"
+TYPE: result
+STRENGTH: demonstrated
+---
+CLAIM: Router-S halved training cost
+SOURCE_QUOTE: "training cost fell by half"
+TYPE: result
+STRENGTH: demonstrated
+---`
+
+	records, dropped := claims.Parse(extraction, source)
+	fmt.Printf("kept %d claim(s), dropped %d unverifiable\n", len(records), dropped)
+	// Output: kept 1 claim(s), dropped 1 unverifiable
+
+	// The compact ledger is the only factual substrate the writer is given,
+	// capped by claim count and character budget so a small model is not swamped.
+	ledger := claims.RenderPromptLedger(records, 45, 14000)
+	writePrompt := prompt.Writing("", ledger, rules.MinWords, rules.MaxWords)
+	fmt.Printf("writing prompt: %d chars, %d-%d words requested\n",
+		len(writePrompt), rules.MinWords, rules.MaxWords)
+
+	// Errors returns the hard violations that must block a save. Empty is clean.
+	for _, e := range validate.Errors("# Too short\n\nA draft that breaks the rules.") {
+		fmt.Println("✗", e)
+	}
 }
 ```
 
@@ -551,15 +666,55 @@ for _, e := range validate.Errors(draftText) { // house rules + faithfulness
 <summary><strong>Generate and regenerate frontmatter</strong> — article sets</summary>
 
 ```go
-meta := frontmatter.ExtractMetadata(body)   // title, subtitle, keywords, category
-fm := frontmatter.GenerateWithOptions(body, frontmatter.Options{
-    Date:     date,
-    Slug:     "my-canonical-slug", // filename identity beats the headline
-    Site:     &mySite,             // publisher identity; nil = DefaultSite
-    Existing: parsedFields,        // curated fields always win
-})
-doc := frontmatter.Combine(fm, body)        // publishable document
-bodyPath, yamlPath, finalPath, err := frontmatter.ProcessFile(path, time.Now())
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/sebastienrousseau/draft/frontmatter"
+)
+
+func main() {
+	body := "# Router-S Cuts Compute\n\n**One number tells the story.**\n\nRouter-S used 5x fewer FLOPs.\n"
+
+	meta := frontmatter.ExtractMetadata(body) // title, subtitle, keywords, category
+	fmt.Println("title:", meta.Title)
+
+	site := frontmatter.DefaultSite
+	site.Name = "My Site"
+
+	yaml := frontmatter.GenerateWithOptions(body, frontmatter.Options{
+		Date:     time.Date(2026, 7, 29, 0, 0, 0, 0, time.UTC),
+		Slug:     "router-s-cuts-compute",                     // the filename is the identity, not the headline
+		Site:     &site,                                       // nil selects frontmatter.DefaultSite
+		Existing: map[string]string{"author": "Ada Lovelace"}, // curated fields always win
+	})
+	doc := frontmatter.Combine(yaml, body) // publishable document
+	fmt.Printf("combined document: %d bytes\n", len(doc))
+
+	// ProcessFile writes the body/yaml/final set beside the input and is a
+	// byte-level no-op when re-run on unchanged input.
+	dir, err := os.MkdirTemp("", "draft-*")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	path := filepath.Join(dir, "2026-07-29-router-s-cuts-compute-body.md")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		log.Fatal(err)
+	}
+
+	bodyPath, yamlPath, finalPath, err := frontmatter.ProcessFile(path, time.Now())
+	if err != nil {
+		log.Fatalf("regenerating the article set: %v", err)
+	}
+	fmt.Println(filepath.Base(bodyPath), filepath.Base(yamlPath), filepath.Base(finalPath))
+}
 ```
 
 </details>
@@ -568,15 +723,53 @@ bodyPath, yamlPath, finalPath, err := frontmatter.ProcessFile(path, time.Now())
 <summary><strong>Bring your own backend</strong> — implement <code>engine.Engine</code></summary>
 
 ```go
-type Engine interface {
-    Name() string
-    Generate(ctx context.Context, req Request) (Result, error)
+package main
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/sebastienrousseau/draft/engine"
+)
+
+// echoEngine satisfies engine.Engine. Accept interfaces, return structs: the
+// pipeline is identical whichever backend sits behind this seam.
+type echoEngine struct{ maxChars int }
+
+func (echoEngine) Name() string { return "echo" }
+
+func (e echoEngine) Generate(ctx context.Context, req engine.Request) (engine.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return engine.Result{}, err // honour cancellation before doing work
+	}
+	text := strings.ToUpper(req.Prompt)
+	if e.maxChars > 0 && len(text) > e.maxChars {
+		// Truncated tells the pipeline to continue generation rather than
+		// save a mid-sentence article.
+		return engine.Result{Text: text[:e.maxChars], Truncated: true}, nil
+	}
+	return engine.Result{Text: text}, nil
+}
+
+func main() {
+	var eng engine.Engine = echoEngine{maxChars: 12}
+
+	res, err := eng.Generate(context.Background(), engine.Request{
+		Kind:   engine.KindWrite, // KindExtract, KindWrite or KindEdit
+		Prompt: "write something grounded",
+	})
+	if err != nil {
+		fmt.Println("generate failed:", err)
+		return
+	}
+	fmt.Printf("%s: %q truncated=%v\n", eng.Name(), res.Text, res.Truncated)
+	// Output: echo: "WRITE SOMETH" truncated=true
 }
 ```
 
-Return `Result{Truncated: true}` and the pipeline continues generation instead
-of saving a mid-sentence article. The whole test suite and every example run
-against in-process engines — no network, no model.
+The whole test suite and every example run against in-process engines like this
+one — no network, no model.
 
 </details>
 
@@ -668,6 +861,12 @@ Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.24,
 
 - **No tokens on disk.** Session backends shell out to an already
   authenticated CLI. `draft` never reads, stores or logs an API key.
+- **Prompts go over stdin where the CLI supports it.** A prompt passed as a
+  command-line argument is visible in a process listing for the duration of the
+  call, along with the source excerpts it quotes. `claude`, `codex` and
+  `cursor-agent` are driven over stdin and are not affected. The rest were
+  confirmed not to read stdin — their prompt flags require a value — so they
+  still use an argument. On a shared host, prefer one of those three, or Ollama.
 - **Prompt-injection aware.** Template and source text are quoted as untrusted
   evidence, and the writing prompt tells the model to ignore any instructions
   found inside them.
@@ -681,9 +880,13 @@ Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.24,
   conversions are flagged. Unverifiable claims never reach the writer.
 - **Cancellation means cancellation.** Quitting the dashboard, or Ctrl+C in
   headless mode, cancels the run's context and terminates any in-flight
-  subprocess or Ollama request.
+  subprocess or Ollama request. A cancelled run stops there rather than failing
+  over to the next backend, and never blocks waiting for a consumer that has
+  gone away.
 - **Bounded external calls.** Extraction shells out only to `pdftotext` and
-  `textutil`, with context timeouts and no shell interpolation.
+  `textutil`, with context timeouts, absolute paths (so a filename beginning
+  with `-` cannot be read as a flag), capped output, and no shell
+  interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`.
 - **Verifiable releases.** Signed with keyless Sigstore cosign, published with
   a CycloneDX SBOM per archive and GitHub build provenance.
 
@@ -710,6 +913,8 @@ Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
 Unless you state otherwise, any contribution intentionally submitted for
 inclusion in this work by you shall be dual licensed as above, without any
 additional terms or conditions.
+
+<p align="right"><a href="#contents">Back to top ↑</a></p>
 
 [claude]: https://docs.claude.com/en/docs/claude-code
 [ollama]: https://ollama.com

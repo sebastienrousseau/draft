@@ -47,12 +47,23 @@ type Provider struct {
 // Experimental: their invocation is correct per --help, but their output has not
 // been verified for a full article, so auto-selection skips them unless
 // --experimental is set.
+//
+// PromptViaStdin is set only where stdin delivery was confirmed by running the
+// CLI, because a prompt passed as an argument is visible in a process listing
+// along with the source text it quotes. Confirmed reading stdin: claude, codex
+// ("Reading prompt from stdin..."), cursor-agent (answered a stdin prompt).
+// Confirmed NOT to: copilot (ignored a stdin prompt entirely), agy and grok and
+// goose (their prompt flags require a value, so there is nothing to read stdin
+// into). Unverifiable when checked: amp (out of credits), qwen (no auth
+// configured), crush (no provider configured) — their documentation suggests
+// stdin support, but guessing here would break a working provider, so they keep
+// argument delivery until someone can run them.
 var Providers = []Provider{
 	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
 	{Name: "copilot", Bin: "copilot", Args: []string{"-p", "--allow-all-tools"}},
-	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model"},
+	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
 	{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
-	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text", "--force"}, ModelFlag: "--model"},
+	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text", "--force"}, ModelFlag: "--model", PromptViaStdin: true},
 	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
 	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
 	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}, Experimental: true},
@@ -60,19 +71,18 @@ var Providers = []Provider{
 	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
 }
 
-// providerByName indexes Providers for O(1) lookup.
-var providerByName = func() map[string]Provider {
-	m := make(map[string]Provider, len(Providers))
-	for _, p := range Providers {
-		m[p.Name] = p
-	}
-	return m
-}()
-
 // LookupProvider returns the provider spec for name and whether it exists.
+//
+// It scans Providers rather than consulting an index built at init: Providers
+// is exported and therefore mutable, and an index would silently disagree with
+// it the moment a caller appended a provider. Ten entries make the scan free.
 func LookupProvider(name string) (Provider, bool) {
-	p, ok := providerByName[name]
-	return p, ok
+	for _, p := range Providers {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return Provider{}, false
 }
 
 // ProviderNames returns every registered provider name in preference order.

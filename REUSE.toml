@@ -13,6 +13,10 @@ path = [
   "LICENSE-MIT",
   "LICENSE-APACHE",
   "internal/pdf/testdata/*.pdf",
+  # Go fuzz corpus entries. Their format is fixed by the toolchain
+  # ("go test fuzz v1" plus typed literals) and admits no comment syntax, so
+  # they are annotated here rather than in-file.
+  "**/testdata/fuzz/**",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Sebastien Rousseau"

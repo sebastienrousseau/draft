@@ -129,6 +129,10 @@ func drain(t *testing.T, cfg config.Config, engines []engine.Engine, job Job) (D
 				errText = string(ev)
 			case LogEvent:
 				logs = append(logs, string(ev))
+			case WarnEvent:
+				// Warnings are progress lines too, just severity-tagged, so
+				// they belong in the same slice the assertions read.
+				logs = append(logs, string(ev))
 			}
 		}
 		close(done)

@@ -10,10 +10,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+)
+
+// Bounds on how much of a response body is read for purposes other than the
+// generated text itself, so a misbehaving server cannot make either unbounded.
+const (
+	maxErrorBodyBytes = 64 << 10
+	maxDrainBytes     = 1 << 20
 )
 
 // Ollama generates text through a local Ollama server's /api/generate endpoint.
@@ -24,7 +33,28 @@ type Ollama struct {
 	edit    string
 	numCtx  int
 	numPred int
+	timeout time.Duration
 	client  *http.Client
+}
+
+// newOllamaClient builds the HTTP client used for generation. It deliberately
+// does not use http.DefaultClient: that client is process-global (so any
+// setting we changed would leak into unrelated code) and has no timeout at all.
+//
+// Client.Timeout is also wrong here, because it bounds the whole exchange
+// including the streamed body — and a legitimate article can stream for
+// minutes. What must be bounded is the server going silent, so the limits sit
+// on the dial and on the wait for response headers, and the overall call is
+// bounded by the context instead.
+func newOllamaClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+			ResponseHeaderTimeout: 60 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+			MaxIdleConnsPerHost:   2,
+		},
+	}
 }
 
 // NewOllama builds an Ollama engine from configuration.
@@ -36,7 +66,8 @@ func NewOllama(cfg config.Config) *Ollama {
 		edit:    cfg.EditModel,
 		numCtx:  cfg.ContextLength,
 		numPred: cfg.PredictLength,
-		client:  http.DefaultClient,
+		timeout: cfg.CallTimeout,
+		client:  newOllamaClient(),
 	}
 }
 
@@ -47,6 +78,12 @@ func (o *Ollama) Name() string { return "ollama" }
 // a length limit (done_reason == "length"), which the pipeline uses to continue
 // generation rather than fail on a mid-sentence cut.
 func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
+	if o.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, o.timeout)
+		defer cancel()
+	}
+
 	numPred := o.numPred
 	if req.NumPredict > 0 && req.NumPredict < numPred {
 		numPred = req.NumPredict
@@ -80,9 +117,15 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("ollama unreachable at %s: %w", o.host, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Drain what is left before closing so the connection can be reused;
+		// the early break on done would otherwise abandon it mid-body. The cap
+		// keeps a misbehaving server from making the drain itself unbounded.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxDrainBytes))
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		return Result{}, fmt.Errorf("ollama http %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}
 

@@ -7,10 +7,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/sebastienrousseau/draft/config"
 )
@@ -25,6 +27,7 @@ var execCommand = exec.CommandContext
 type Session struct {
 	provider Provider
 	model    string
+	timeout  time.Duration
 }
 
 // NewSession builds a Session for a named provider, applying the configured
@@ -39,7 +42,7 @@ func NewSession(name string, cfg config.Config) (*Session, bool) {
 	if model == "" {
 		model = p.DefaultModel
 	}
-	return &Session{provider: p, model: model}, true
+	return &Session{provider: p, model: model, timeout: cfg.CallTimeout}, true
 }
 
 // Name implements Engine, returning the provider name.
@@ -50,6 +53,15 @@ func (s *Session) Name() string { return s.provider.Name }
 // on stdin when the provider supports it (avoiding ARG_MAX limits) and as a
 // positional argument otherwise.
 func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
+	// Bound the call so a wedged provider CLI cannot hang the run forever.
+	// The ceiling is generous (see config.DefaultCallTimeout); it exists to
+	// catch a hang, not to cut short a slow but healthy generation.
+	if s.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+
 	args := append([]string{}, s.provider.Args...)
 	if s.provider.ModelFlag != "" && s.model != "" && s.model != "default" {
 		args = append(args, s.provider.ModelFlag, s.model)
@@ -76,11 +88,12 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	}
 
 	var out string
+	var truncated bool
 	var streamErr error
 	if s.provider.StreamJSON {
-		out, streamErr = parseStreamJSON(stdout, req.OnChunk)
+		out, truncated, streamErr = parseStreamJSON(stdout, req.OnChunk)
 	} else {
-		out = streamAll(stdout, req.OnChunk)
+		out, streamErr = streamAll(stdout, req.OnChunk)
 	}
 
 	if err := cmd.Wait(); err != nil {
@@ -93,14 +106,20 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	if streamErr != nil {
 		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(streamErr.Error()))
 	}
-	return Result{Text: strings.TrimSpace(out)}, nil
+	return Result{Text: strings.TrimSpace(out), Truncated: truncated}, nil
 }
 
 // parseStreamJSON reads the Claude Code stream-json event stream, forwarding
 // each text delta to onChunk as it arrives (for a live preview) and returning
 // the complete assistant text. The authoritative final `result` is preferred
 // over the accumulated deltas; an error result is surfaced as an error.
-func parseStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
+//
+// It also reports whether the model stopped on a length limit, read from the
+// message_delta event's stop_reason. Without that the pipeline's continuation
+// machinery could never fire for a session provider, and a length-limited stop
+// would surface much later as a "article appears truncated" rule violation
+// costing a full rewrite.
+func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated bool, err error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var acc strings.Builder
@@ -112,8 +131,9 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
 			Event struct {
 				Type  string `json:"type"`
 				Delta struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
+					Type       string `json:"type"`
+					Text       string `json:"text"`
+					StopReason string `json:"stop_reason"`
 				} `json:"delta"`
 			} `json:"event"`
 			Subtype string `json:"subtype"`
@@ -125,10 +145,17 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
 		}
 		switch ev.Type {
 		case "stream_event":
-			if ev.Event.Type == "content_block_delta" && ev.Event.Delta.Type == "text_delta" && ev.Event.Delta.Text != "" {
-				acc.WriteString(ev.Event.Delta.Text)
-				if onChunk != nil {
-					onChunk(ev.Event.Delta.Text)
+			switch ev.Event.Type {
+			case "content_block_delta":
+				if ev.Event.Delta.Type == "text_delta" && ev.Event.Delta.Text != "" {
+					acc.WriteString(ev.Event.Delta.Text)
+					if onChunk != nil {
+						onChunk(ev.Event.Delta.Text)
+					}
+				}
+			case "message_delta":
+				if isLengthStop(ev.Event.Delta.StopReason) {
+					truncated = true
 				}
 			}
 		case "result":
@@ -141,28 +168,41 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return acc.String(), err
+		return acc.String(), truncated, err
 	}
 	if isError {
 		if result == "" {
 			result = "provider reported an error"
 		}
-		return "", fmt.Errorf("%s", result)
+		return "", truncated, fmt.Errorf("%s", result)
 	}
 	if haveResult && strings.TrimSpace(result) != "" {
-		return result, nil
+		return result, truncated, nil
 	}
-	return acc.String(), nil
+	return acc.String(), truncated, nil
 }
 
-// streamAll reads r to completion, forwarding each chunk to onChunk if set, and
-// returns the accumulated text.
-func streamAll(r io.Reader, onChunk func(string)) string {
+// isLengthStop reports whether a stop reason means the model ran out of room
+// rather than finishing. Providers spell it differently; match all the forms
+// in use so a new one degrades to "not truncated" rather than misreporting.
+func isLengthStop(reason string) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "max_tokens", "max_output_tokens", "length":
+		return true
+	}
+	return false
+}
+
+// streamAll reads r to completion, forwarding each chunk to onChunk if set,
+// and returns the accumulated text. A read error other than EOF is returned
+// rather than swallowed: silently treating a broken pipe as a complete
+// response is how a half-written article reaches the validator looking whole.
+func streamAll(r io.Reader, onChunk func(string)) (string, error) {
 	var out strings.Builder
 	buf := make([]byte, 4096)
 	reader := bufio.NewReader(r)
 	for {
-		n, err := reader.Read(buf)
+		n, readErr := reader.Read(buf)
 		if n > 0 {
 			chunk := string(buf[:n])
 			out.WriteString(chunk)
@@ -170,11 +210,13 @@ func streamAll(r io.Reader, onChunk func(string)) string {
 				onChunk(chunk)
 			}
 		}
-		if err != nil {
-			break
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return out.String(), nil
+			}
+			return out.String(), readErr
 		}
 	}
-	return out.String()
 }
 
 func firstLine(s string) string {
