@@ -16,6 +16,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
@@ -73,7 +74,7 @@ func TestPipelineEventsAndView(t *testing.T) {
 	if m.words == 0 {
 		t.Error("tokens should update word count")
 	}
-	if v := m.View(); !strings.Contains(v, "Draft.") || !strings.Contains(v, "Live Draft") {
+	if v := m.View(); !strings.Contains(v, brand.Wordmark) || !strings.Contains(v, "Live Draft") {
 		t.Error("running view should render header and preview")
 	}
 	// Percentage must appear on the progress bar.

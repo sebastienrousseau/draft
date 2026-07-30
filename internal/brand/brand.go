@@ -35,6 +35,12 @@ var (
 	Err    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
 )
 
+// Wordmark is the name as it is set everywhere draft presents itself —
+// lowercase, no full stop, matching the command you actually type and the
+// wordmark on draftlib.com. It lives here as a constant because it was once
+// copied as a literal into four files and drifted out of step with the site.
+const Wordmark = "draft"
+
 // Tagline is the one-line description shown under the wordmark.
 const Tagline = "From paper to post. Grounded."
 
@@ -78,10 +84,10 @@ func Logo(compact bool) string {
 	}
 	sb.WriteString("\n")
 	if compact {
-		sb.WriteString("  " + Accent.Render("Draft.") + "  " + Subtle.Render(Tagline) + "\n")
+		sb.WriteString("  " + Accent.Render(Wordmark) + "  " + Subtle.Render(Tagline) + "\n")
 		return sb.String()
 	}
-	sb.WriteString("  " + Accent.Render("Draft.") + "\n")
+	sb.WriteString("  " + Accent.Render(Wordmark) + "\n")
 	sb.WriteString("  " + Value.Render(Tagline) + "\n\n")
 	return sb.String()
 }

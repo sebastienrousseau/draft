@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
@@ -27,7 +28,7 @@ func TestRenderAllPhaseStates(t *testing.T) {
 	}
 	m.phases[pipeline.PhaseWrite] = "failed"
 	v := m.View()
-	if !strings.Contains(v, "Draft.") {
+	if !strings.Contains(v, brand.Wordmark) {
 		t.Error("view should render")
 	}
 }

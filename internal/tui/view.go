@@ -126,9 +126,9 @@ func (m Model) renderHeader(width int) string {
 		return styledLogo(m.compactLogo()) + "  " + subtleStyle.Render("⧇ "+activity) + "\n" + divider + "\n"
 	}
 
-	line := "  " + accentStyle.Render("Draft.") + "  " + subtleStyle.Render(activity)
+	line := "  " + accentStyle.Render(brand.Wordmark) + "  " + subtleStyle.Render(activity)
 	if lipgloss.Width(line) > width {
-		line = "  " + accentStyle.Render("Draft.")
+		line = "  " + accentStyle.Render(brand.Wordmark)
 	}
 	return line + "\n" + divider + "\n"
 }

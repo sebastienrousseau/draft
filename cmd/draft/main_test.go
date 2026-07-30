@@ -14,6 +14,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
@@ -209,7 +210,7 @@ func TestUsageIsBranded(t *testing.T) {
 	out := b.String()
 
 	// The command's own surface carries the same identity as the dashboard.
-	for _, want := range []string{"⣰⣿", "Draft.", "From paper to post. Grounded."} {
+	for _, want := range []string{"⣰⣿", brand.Wordmark, "From paper to post. Grounded."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("usage is missing branding %q", want)
 		}

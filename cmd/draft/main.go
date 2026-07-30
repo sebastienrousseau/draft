@@ -259,7 +259,7 @@ func usage(w io.Writer) {
 	if brand.ShowLogo() {
 		fmt.Fprint(w, brand.Logo(false))
 	} else {
-		fmt.Fprint(w, "  "+brand.Accent.Render("Draft.")+"  "+brand.Subtle.Render(brand.Tagline)+"\n\n")
+		fmt.Fprint(w, "  "+brand.Accent.Render(brand.Wordmark)+"  "+brand.Subtle.Render(brand.Tagline)+"\n\n")
 	}
 	fmt.Fprintf(w, "  %s\n\n", dim("draft "+version+" — research PDFs into grounded Markdown drafts"))
 
