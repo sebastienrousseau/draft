@@ -49,9 +49,13 @@ type engineChoice struct {
 	Installed   bool
 }
 
-func defaultEngineChoices() []engineChoice {
+func defaultEngineChoices(online bool) []engineChoice {
+	autoDesc := "Automatic detection (session CLI online, Ollama fallback offline)"
+	if !online {
+		autoDesc = "Automatic detection (offline: defaults to local Ollama)"
+	}
 	base := []engineChoice{
-		{Name: "auto", Label: "auto", Description: "Automatic detection (session CLI online, Ollama fallback offline)", Installed: true},
+		{Name: "auto", Label: "auto", Description: autoDesc, Installed: true},
 		{Name: "claude", Label: "claude", Description: "Claude (Anthropic CLI session)", Installed: engine.IsAvailable("claude")},
 		{Name: "agy", Label: "agy", Description: "Antigravity (AGY CLI session)", Installed: engine.IsAvailable("agy")},
 		{Name: "codex", Label: "codex", Description: "OpenAI Codex CLI session", Installed: engine.IsAvailable("codex")},
@@ -148,6 +152,18 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runn
 	}
 
 	selecting := len(selectEngine) > 0 && selectEngine[0]
+	online := engine.IsOnline()
+	choices := defaultEngineChoices(online)
+	initialCursor := 0
+	if !online {
+		for i, c := range choices {
+			if c.Name == "ollama" {
+				initialCursor = i
+				break
+			}
+		}
+	}
+
 	m := Model{
 		ctx:             ctx,
 		cancel:          cancel,
@@ -161,15 +177,13 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runn
 		input:           ti,
 		started:         time.Now(),
 		selectingEngine: selecting,
-		engineChoices:   defaultEngineChoices(),
+		engineChoices:   choices,
+		engineCursor:    initialCursor,
 	}
 	m.resetPhases()
 	if runner != nil {
 		m.engineName = runner.EngineFor(engine.KindWrite)
 	}
-	// Init cannot return a mutated model, so reflect the first job's running
-	// state here if not interactive engine selection; startJob still launches
-	// its goroutine from Init.
 	if !selecting && len(results) > 0 {
 		m.results[0].state = stateRunning
 	}
@@ -369,6 +383,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "enter", " ":
 			chosen := m.engineChoices[m.engineCursor].Name
+			if chosen == "ollama" {
+				if err := engine.EnsureOllamaRunning(m.cfg.OllamaHost); err != nil {
+					m.appendLog("! " + err.Error())
+				}
+			}
 			m.cfg.Engine = chosen
 			m.cfg.ExtractEngine = chosen
 			m.cfg.WriteEngine = chosen

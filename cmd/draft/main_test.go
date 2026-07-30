@@ -384,3 +384,12 @@ func TestRunJSONFlagViaRun(t *testing.T) {
 		t.Errorf("--json should emit a record even on failure: %q", out.String())
 	}
 }
+
+func TestRunTUIEngineSelectOption(t *testing.T) {
+	cfg, full := tmpSource(t, "paper.txt")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately so runTUI exits cleanly
+	runner := pipeline.NewRunner(cfg, nil, nil)
+	jobs := []pipeline.Job{{Sources: []string{full}}}
+	_ = runTUI(ctx, func() {}, cfg, runner, jobs, true)
+}

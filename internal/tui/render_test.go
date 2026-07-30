@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
@@ -118,5 +119,25 @@ func TestEnterWithEmptyInputIsNoop(t *testing.T) {
 	m = upd(m, tea.KeyMsg{Type: tea.KeyEnter}) // empty input
 	if len(m.jobs) != before {
 		t.Error("empty enter should not queue a job")
+	}
+}
+
+func TestRenderEngineSelectViewOnlineAndOffline(t *testing.T) {
+	m := newModel(t, 1)
+	m.selectingEngine = true
+	m = upd(m, tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	vOnline := m.View()
+	if !strings.Contains(vOnline, "Select LLM Provider") || !strings.Contains(vOnline, "[Online]") {
+		t.Errorf("online view missing expected content: %s", vOnline)
+	}
+
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return false }
+	defer func() { engine.IsOnline = orig }()
+
+	vOffline := m.View()
+	if !strings.Contains(vOffline, "[Offline - Zero Network]") {
+		t.Errorf("offline view missing offline header: %s", vOffline)
 	}
 }

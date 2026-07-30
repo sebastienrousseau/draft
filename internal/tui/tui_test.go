@@ -308,3 +308,28 @@ func TestEngineSelectionInteractive(t *testing.T) {
 		t.Error("expected engineName to be populated after confirmation")
 	}
 }
+
+func TestEngineSelectionOfflineDefault(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return false }
+	defer func() { engine.IsOnline = orig }()
+
+	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	cfg := config.Config{HomeDir: "/home/seb"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := New(ctx, cancel, cfg, pipeline.NewRunner(cfg, nil, nil), js, true)
+	if m.engineChoices[m.engineCursor].Name != "ollama" {
+		t.Errorf("offline mode should default cursor to ollama, got %s", m.engineChoices[m.engineCursor].Name)
+	}
+
+	// Confirm selecting ollama while offline
+	m = upd(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.selectingEngine {
+		t.Error("expected selectingEngine to become false after enter on ollama")
+	}
+	if m.engineName != "ollama" {
+		t.Errorf("expected engineName to be ollama, got %s", m.engineName)
+	}
+}

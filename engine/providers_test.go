@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/sebastienrousseau/draft/config"
@@ -141,6 +143,39 @@ func TestIsAvailable(t *testing.T) {
 		}
 		if IsAvailable("codex") {
 			t.Error("codex should not be available when not installed")
+		}
+	})
+}
+
+func TestNetworkAndOllamaHelpers(t *testing.T) {
+	_ = IsOnline() // exercise real call
+
+	orig := IsOnline
+	IsOnline = func() bool { return false }
+	defer func() { IsOnline = orig }()
+
+	if IsOnline() {
+		t.Error("mocked IsOnline should return false")
+	}
+
+	if IsOllamaRunning("http://127.0.0.1:59999") {
+		t.Error("unreachable host should return false for IsOllamaRunning")
+	}
+}
+
+func TestEnsureOllamaRunning(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	if err := EnsureOllamaRunning(ts.URL); err != nil {
+		t.Errorf("EnsureOllamaRunning on running host failed: %v", err)
+	}
+
+	withAvailable(map[string]bool{"ollama": false}, func() {
+		if err := EnsureOllamaRunning("http://127.0.0.1:59998"); err == nil {
+			t.Error("EnsureOllamaRunning without binary should return error")
 		}
 	})
 }

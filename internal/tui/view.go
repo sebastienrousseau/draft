@@ -467,7 +467,14 @@ func (m Model) renderEngineSelectView(width int) string {
 	b.WriteString(m.renderHeader(width))
 	b.WriteString("\n")
 
-	b.WriteString("  " + titleStyle.Render("Select LLM Provider / Model Engine:") + "\n\n")
+	online := engine.IsOnline()
+	statusHeader := "Select LLM Provider / Model Engine:"
+	if !online {
+		statusHeader += "  " + errStyle.Render("[Offline - Zero Network]")
+	} else {
+		statusHeader += "  " + okStyle.Render("[Online]")
+	}
+	b.WriteString("  " + titleStyle.Render(statusHeader) + "\n\n")
 
 	for i, choice := range m.engineChoices {
 		prefix := "    "
@@ -480,15 +487,25 @@ func (m Model) renderEngineSelectView(width int) string {
 		var statusBadge string
 		switch {
 		case choice.Name == "auto":
-			statusBadge = okStyle.Render("[auto]")
-		case choice.Name == "ollama":
-			if choice.Installed {
-				statusBadge = okStyle.Render("[local / offline]")
+			if !online {
+				statusBadge = okStyle.Render("[auto -> ollama]")
 			} else {
-				statusBadge = mutedStyle.Render("[offline]")
+				statusBadge = okStyle.Render("[auto]")
+			}
+		case choice.Name == "ollama":
+			if engine.IsOllamaRunning(m.cfg.OllamaHost) {
+				statusBadge = okStyle.Render("[running / ready]")
+			} else if choice.Installed {
+				statusBadge = subtleStyle.Render("[local / auto-start]")
+			} else {
+				statusBadge = mutedStyle.Render("[not installed]")
 			}
 		case choice.Installed:
-			statusBadge = okStyle.Render("[installed]")
+			if !online {
+				statusBadge = mutedStyle.Render("[cloud - offline]")
+			} else {
+				statusBadge = okStyle.Render("[installed]")
+			}
 		default:
 			statusBadge = mutedStyle.Render("[not found]")
 		}
