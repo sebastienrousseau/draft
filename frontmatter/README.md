@@ -4,6 +4,7 @@ Metadata extraction, YAML frontmatter generation, and identity-preserving
 regeneration of an article set.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/frontmatter)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 ## Contents
 

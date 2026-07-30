@@ -4,6 +4,7 @@ The shared editorial constants the prompt builder and the validator both depend
 on.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/rules)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 Word limits, banned vocabulary, metric vocabulary and the accepted claim
 taxonomy live here and nowhere else. Keeping them in one place guarantees the
@@ -66,7 +67,7 @@ func main() {
 
 | Symbol | Kind | Purpose |
 | ------ | ---- | ------- |
-| `MinWords`, `MaxWords` | `const` | Word-count bounds for a finished body-only draft (500–3000). `MinWords` is enforced by `validate.Errors`; `MaxWords` is a target the pipeline sizes generation against, not a rejection threshold |
+| `MinWords`, `MaxWords` | `const` | Word-count bounds for a finished body-only draft (500–3000). Both are enforced by `validate.Errors`, and the pipeline sizes generation against `MaxWords` |
 | `MinQuoteChars` | `const` | Shortest verbatim source span a claim may cite (12) |
 | `PostLeadAsideMarker`, `ExecSummaryMarker`, `H1Prefix`, `H2Prefix` | `const` | Structural markers the writer emits and the validator checks |
 | `BannedWords`, `BannedPhrases` | `var []string` | Single tokens and multi-word clichés the house style forbids |

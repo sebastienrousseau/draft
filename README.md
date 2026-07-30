@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/sebastienrousseau/draft/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/draft/ci.yml?branch=main&style=for-the-badge&logo=github&label=build" alt="Build status" /></a>
+  <a href="https://draftlib.com"><img src="https://img.shields.io/badge/website-draftlib.com-ff6b5a?style=for-the-badge" alt="draftlib.com" /></a>
   <a href="https://pkg.go.dev/github.com/sebastienrousseau/draft"><img src="https://img.shields.io/badge/go.dev-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go reference" /></a>
   <a href="https://github.com/sebastienrousseau/draft/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-gated%20%E2%89%A595%25-brightgreen?style=for-the-badge" alt="Coverage gated at 95%" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/sebastienrousseau/draft"><img src="https://img.shields.io/ossf-scorecard/github.com/sebastienrousseau/draft?style=for-the-badge&label=openssf%20scorecard" alt="OpenSSF Scorecard" /></a>
@@ -917,6 +918,7 @@ Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.24,
 | [SECURITY](SECURITY.md) | Vulnerability disclosure policy |
 | [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) | Community standards |
 | [`examples/`](examples) | A runnable demo per capability |
+| [draftlib.com](https://draftlib.com) | Project website: guides, grounding explained, examples |
 | [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation |
 
 ---

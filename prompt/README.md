@@ -3,6 +3,7 @@
 Builds the grounded prompts sent to a generation backend.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/prompt)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 Three prompts, one per stage: per-section claim extraction, article writing
 (with an embedded output skeleton and the compact claim ledger), and surgical
