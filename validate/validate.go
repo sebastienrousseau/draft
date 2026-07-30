@@ -55,8 +55,14 @@ func Errors(md string) []string {
 	if placeholderPat.MatchString(md) {
 		errs = append(errs, "contains an unfilled skeleton placeholder (title, heading, or thesis)")
 	}
+	// Both bounds, not just the floor. The writing prompt asks for
+	// MinWords–MaxWords and rules declares that as the band for a finished
+	// draft, but only the minimum was ever checked — so a runaway draft was
+	// told one thing and held to another.
 	if w := WordCount(md); w < rules.MinWords {
 		errs = append(errs, fmt.Sprintf("article is %d words; minimum is %d", w, rules.MinWords))
+	} else if w > rules.MaxWords {
+		errs = append(errs, fmt.Sprintf("article is %d words; maximum is %d", w, rules.MaxWords))
 	}
 	if ContainsEmoji(md) {
 		errs = append(errs, "contains emoji")

@@ -7,6 +7,7 @@ package frontmatter
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,7 +16,14 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/sebastienrousseau/draft/internal/atomicfile"
 )
+
+// MaxArticleBytes bounds how large a Markdown file ProcessFile will read. An
+// article is prose; anything past this is a mistake, and reading it would cost
+// several times its size once metadata extraction runs over it.
+const MaxArticleBytes = 32 << 20
 
 var (
 	titlePat            = regexp.MustCompile(`(?m)^#\s+(.+)$`)
@@ -445,7 +453,7 @@ func ProcessFile(inputPath string, date time.Time) (bodyPath, frontmatterPath, f
 		return "", "", "", fmt.Errorf("%s is a frontmatter file, not an article body", inputPath)
 	}
 
-	data, err := os.ReadFile(inputPath)
+	data, err := readCapped(inputPath, MaxArticleBytes)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -515,13 +523,15 @@ func ProcessFile(inputPath string, date time.Time) (bodyPath, frontmatterPath, f
 			return "", "", "", err
 		}
 	}
-	if err := os.WriteFile(bodyPath, []byte(body+"\n"), 0o644); err != nil {
-		return "", "", "", err
-	}
-	if err := os.WriteFile(frontmatterPath, []byte(fmYAML+"\n"), 0o644); err != nil {
-		return "", "", "", err
-	}
-	if err := os.WriteFile(finalPath, []byte(finalMD+"\n"), 0o644); err != nil {
+	// Write the trio as a unit. Three sequential os.WriteFile calls truncate
+	// the user's existing files one at a time, so a failure after the first
+	// left the set disagreeing with itself — breaking the guarantee that the
+	// body, frontmatter and final document are always in step.
+	if err := atomicfile.WriteSet(map[string][]byte{
+		bodyPath:        []byte(body + "\n"),
+		frontmatterPath: []byte(fmYAML + "\n"),
+		finalPath:       []byte(finalMD + "\n"),
+	}, 0o644); err != nil {
 		return "", "", "", err
 	}
 
@@ -555,10 +565,48 @@ func Slugify(s string) string {
 	return out
 }
 
+// readCapped reads a file, refusing anything larger than limit rather than
+// pulling it all into memory first.
+func readCapped(path string, limit int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	if info, statErr := f.Stat(); statErr == nil && info.Size() > limit {
+		return nil, fmt.Errorf("%s is %d bytes; the limit is %d", filepath.Base(path), info.Size(), limit)
+	}
+	// LimitReader guards the case where Stat lied or the file grew after it.
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > limit {
+		return nil, fmt.Errorf("%s exceeds the %d byte limit", filepath.Base(path), limit)
+	}
+	return b, nil
+}
+
+// quoteYAML renders s as a YAML double-quoted scalar.
+//
+// Control characters are stripped rather than escaped: a double-quoted scalar
+// may not carry a raw control character, and a title or description that
+// somehow contains one has no business carrying it into published frontmatter.
+// Whitespace is folded to single spaces by strings.Fields, which already
+// covers tab and carriage return.
 func quoteYAML(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || r == '\r' {
+			return ' '
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.Join(strings.Fields(s), " ")
 	return `"` + s + `"`
 }

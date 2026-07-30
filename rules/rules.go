@@ -105,7 +105,7 @@ const (
 const MinQuoteChars = 12
 
 // Structural markers the writer must emit and the validator checks for. They live
-// here so the output template (internal/prompt) and the validator share a single
+// here so the output template (the prompt package) and the validator share a single
 // definition and cannot silently drift apart; TestSkeletonMatchesStructureMarkers
 // enforces that the skeleton embeds each one.
 const (
