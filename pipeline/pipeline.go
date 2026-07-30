@@ -117,11 +117,28 @@ var slugRepeat = regexp.MustCompile(`-{2,}`)
 
 // Runner executes jobs against an ordered chain of engines, advancing to the
 // next when one fails and sticking with the survivor.
-type Runner struct {
-	cfg     config.Config
+// chainState is one ordered engine chain plus the cursor into it. Each request
+// kind owns one, so extraction failing over to Ollama does not drag writing
+// down with it — the two are separately configurable and separately sticky.
+type chainState struct {
 	engines []engine.Engine
-	cur     int // index of the active engine in the chain
-	events  chan<- Event
+	cur     int
+}
+
+func (c *chainState) active() engine.Engine {
+	if c == nil || c.cur >= len(c.engines) {
+		return nil
+	}
+	return c.engines[c.cur]
+}
+
+type Runner struct {
+	cfg config.Config
+	// chains holds one chainState per request kind. A Runner built by
+	// NewRunner points every kind at the SAME chainState, preserving the
+	// single-chain behaviour (including a shared cursor) exactly.
+	chains map[engine.Kind]*chainState
+	events chan<- Event
 	// engineName tracks the backend that actually produced the current output.
 	engineName string
 	// ledgerPath is the verified-claim-ledger scratch file for the current run,
@@ -156,9 +173,61 @@ func (r *Runner) finalize(raw string) string {
 // Event is the sum type carried on the progress channel.
 type Event any
 
-// NewRunner constructs a Runner over an ordered engine chain (see engine.Chain).
+// NewRunner constructs a Runner over one ordered engine chain (see
+// engine.Chain), used for every request kind.
 func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) *Runner {
-	return &Runner{cfg: cfg, engines: engines, events: events}
+	shared := &chainState{engines: engines}
+	return &Runner{
+		cfg: cfg,
+		chains: map[engine.Kind]*chainState{
+			engine.KindExtract: shared,
+			engine.KindWrite:   shared,
+			engine.KindEdit:    shared,
+		},
+		events: events,
+	}
+}
+
+// NewRoutedRunner constructs a Runner that resolves a separate chain per
+// request kind from cfg, so claim extraction can run against a local model
+// while the article itself is written by a session provider.
+func NewRoutedRunner(cfg config.Config, events chan<- Event) *Runner {
+	chains := make(map[engine.Kind]*chainState, 3)
+	// Kinds configured to the same engine share one chainState, so a fallback
+	// discovered while extracting is not re-discovered when writing.
+	byName := map[string]*chainState{}
+	for _, k := range []engine.Kind{engine.KindExtract, engine.KindWrite, engine.KindEdit} {
+		name := engine.NameFor(cfg, k)
+		if existing, ok := byName[name]; ok {
+			chains[k] = existing
+			continue
+		}
+		cs := &chainState{engines: engine.ChainFor(cfg, k)}
+		byName[name] = cs
+		chains[k] = cs
+	}
+	return &Runner{cfg: cfg, chains: chains, events: events}
+}
+
+// SetEvents points the Runner at the channel for the next Run. A Runner is
+// reused across a queue so it keeps the backend it settled on, but each job
+// gets its own channel because the caller closes it when that job ends.
+func (r *Runner) SetEvents(events chan<- Event) { r.events = events }
+
+// EngineFor reports the backend currently serving a request kind, for display.
+func (r *Runner) EngineFor(k engine.Kind) string {
+	if e := r.chainFor(k).active(); e != nil {
+		return e.Name()
+	}
+	return ""
+}
+
+// chainFor returns the chain serving a request kind.
+func (r *Runner) chainFor(k engine.Kind) *chainState {
+	if cs, ok := r.chains[k]; ok {
+		return cs
+	}
+	return r.chains[engine.KindWrite]
 }
 
 // Run executes one job, reporting progress and a terminal Done/Err event. It
@@ -170,11 +239,15 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 	r.started = time.Now()
 	r.timings = nil
 
-	if len(r.engines) == 0 {
+	// The cursor is deliberately NOT reset here. A Runner reused across a queue
+	// keeps the backend it settled on, so a dead provider is tried once for the
+	// whole queue rather than once per paper.
+	if e := r.chainFor(engine.KindWrite).active(); e != nil {
+		r.engineName = e.Name()
+	} else {
 		r.emit(ErrEvent("no generation engine available"))
 		return
 	}
-	r.engineName = r.engines[0].Name()
 	if err := r.run(ctx, job); err != nil {
 		r.emit(ErrEvent(err.Error()))
 	}
@@ -212,9 +285,10 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		return err
 	}
 
-	// Phase 2: extract claims, section by section.
+	// Phase 2: extract claims, section by section — unless a ledger from an
+	// earlier attempt is already on disk and still verifies.
 	r.phase(PhaseClaims, "running")
-	records, dropped, err := r.extractClaims(ctx, sections, outputDir)
+	records, dropped, err := r.resumeOrExtract(ctx, job, sections, outputDir)
 	if err != nil {
 		r.phase(PhaseClaims, "failed")
 		return err
@@ -261,11 +335,128 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		OutputPath: outputPath,
 		Words:      words,
 		Mode:       "draft",
-		Engine:     r.engineName,
+		Engine:     r.writerName(),
 		Duration:   time.Since(r.started),
 		Timings:    append([]PhaseTiming(nil), r.timings...),
 	})
 	return nil
+}
+
+// DryRunReport is what a run would do, without doing it.
+type DryRunReport struct {
+	Sources      []string
+	SectionCount int
+	// Engines maps each request kind to the backend that would serve it.
+	Engines map[engine.Kind]string
+	// EstCalls is the number of model calls a clean run would make: one per
+	// section to extract, plus one to write. Retries and continuations are
+	// extra and are reported separately by the caller.
+	EstCalls    int
+	OutputDir   string
+	LedgerFound bool
+}
+
+// DryRun reports what a run would do and returns without calling a model.
+//
+// It runs the real resolve and sectioning path — the deterministic ~110 ms of a
+// run — so a dry run that succeeds is evidence the sources are readable, not
+// just a guess. Committing to a ten-minute run should not be the only way to
+// find out that a PDF is a scan.
+func (r *Runner) DryRun(ctx context.Context, job Job) (DryRunReport, error) {
+	rep := DryRunReport{
+		Sources:   job.Sources,
+		OutputDir: r.datedDir(),
+		Engines: map[engine.Kind]string{
+			engine.KindExtract: r.EngineFor(engine.KindExtract),
+			engine.KindWrite:   r.EngineFor(engine.KindWrite),
+			engine.KindEdit:    r.EngineFor(engine.KindEdit),
+		},
+	}
+	if len(job.Sources) == 0 {
+		return rep, errors.New("no source files")
+	}
+
+	sections, err := r.sections(ctx, job.Sources)
+	if err != nil {
+		return rep, err
+	}
+	if len(sections) == 0 {
+		return rep, errors.New("no readable text extracted from the source(s)")
+	}
+	rep.SectionCount = len(sections)
+	rep.EstCalls = len(sections) + 1
+
+	if _, statErr := os.Stat(ledgerPathFor(rep.OutputDir, job)); statErr == nil {
+		rep.LedgerFound = true
+		// A resumable ledger means extraction is already paid for.
+		rep.EstCalls = 1
+	}
+	return rep, nil
+}
+
+// resumeOrExtract reuses a verified ledger from an earlier attempt when
+// --resume is set and one is on disk, and otherwise mines the claims afresh.
+//
+// Extraction is 80-95% of a run's wall clock. When the write phase fails, that
+// work was previously thrown away even though the ledger it produced was still
+// sitting in the day folder — so a retry re-paid ten minutes for work that had
+// already succeeded.
+//
+// The reused ledger is re-verified against the freshly sectioned sources rather
+// than taken on trust. Resume therefore cannot weaken grounding: if a source
+// changed underneath, the records it no longer supports are dropped here, and a
+// wholly changed source resumes to an empty ledger that fails the write phase
+// honestly instead of producing an ungrounded draft.
+func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Section, outputDir string) ([]claims.Record, int, error) {
+	if !r.cfg.Resume {
+		return r.extractClaims(ctx, job, sections, outputDir)
+	}
+
+	ledgerPath := ledgerPathFor(outputDir, job)
+	data, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		// No ledger to resume from is not an error: fall through to a normal
+		// run rather than refusing to work.
+		r.log("no ledger to resume from; extracting claims")
+		return r.extractClaims(ctx, job, sections, outputDir)
+	}
+
+	var corpus strings.Builder
+	for _, s := range sections {
+		corpus.WriteString(s.Body + "\n\n")
+	}
+	records, dropped := claims.ParseLedger(string(data), corpus.String())
+	if len(records) == 0 {
+		r.warn("the saved ledger no longer verifies against these sources; extracting afresh")
+		return r.extractClaims(ctx, job, sections, outputDir)
+	}
+
+	r.ledgerPath = ledgerPath
+	r.log(fmt.Sprintf("resumed %d claim(s) from %s", len(records), shortPath(r.cfg, ledgerPath)))
+	if dropped > 0 {
+		r.warn(fmt.Sprintf("dropped %d resumed claim(s) the sources no longer support", dropped))
+	}
+	return records, dropped, nil
+}
+
+// ledgerPathFor names the verified-claim ledger for one job.
+//
+// The name is derived from the job's sources, not just the date. A date-only
+// name meant a second paper drafted the same day silently overwrote the first
+// one's ledger — losing the fact-checking artefact --keep-artifacts exists to
+// preserve, and leaving nothing for --resume to key on. The source count is
+// included so a --merge job cannot collide with a single-source job that
+// happens to start from the same file.
+func ledgerPathFor(outputDir string, job Job) string {
+	stem := "sources"
+	if len(job.Sources) > 0 {
+		base := filepath.Base(job.Sources[0])
+		stem = slugify(strings.TrimSuffix(base, filepath.Ext(base)))
+	}
+	if len(job.Sources) > 1 {
+		stem = fmt.Sprintf("%s-plus-%d", stem, len(job.Sources)-1)
+	}
+	return filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+stem+"-verified-claim-ledger.md")
 }
 
 // cleanupArtifacts removes the scratch claim ledger after a successful draft so
@@ -329,8 +520,8 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 // single local model that should not be hit in parallel). Any section that
 // fails a parallel call is retried through the chain, so a mid-run provider drop
 // still degrades to Ollama.
-func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outputDir string) ([]claims.Record, int, error) {
-	ledgerPath := filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-verified-claim-ledger.md")
+func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Section, outputDir string) ([]claims.Record, int, error) {
+	ledgerPath := ledgerPathFor(outputDir, job)
 	r.ledgerPath = ledgerPath
 	raw := make([]string, len(sections))
 
@@ -346,10 +537,15 @@ func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outp
 	}
 	raw[0] = text0
 
+	// Pin the backend section 0 settled on. Parallel workers call it directly
+	// rather than going through the chain, so they cannot race on the cursor.
 	conc := r.extractConcurrency()
-	pinned := r.engines[r.cur]
+	pinned := r.chainFor(engine.KindExtract).active()
+	if pinned == nil {
+		return nil, 0, errors.New("no extraction engine available")
+	}
 	if conc > 1 && len(sections) > 1 {
-		r.log(fmt.Sprintf("extracting %d section(s) with %d workers via %s", len(sections)-1, conc, r.engineName))
+		r.log(fmt.Sprintf("extracting %d section(s) with %d workers via %s", len(sections)-1, conc, pinned.Name()))
 	}
 
 	var mu sync.Mutex
@@ -375,12 +571,18 @@ func (r *Runner) extractClaims(ctx context.Context, sections []pdf.Section, outp
 		}
 		wg.Wait()
 	} else {
+		// Sequential extraction is where a run actually spends its time, so it
+		// is where an estimate is worth having: without one there is no way to
+		// tell a two-minute run from a twenty-minute one until it ends.
+		eta := newETA(len(sections), time.Since(r.started))
 		for i := 1; i < len(sections); i++ {
-			r.log(fmt.Sprintf("claim section %d/%d", i+1, len(sections)))
+			r.log(fmt.Sprintf("claim section %d/%d%s", i+1, len(sections), eta.remaining(i)))
+			started := time.Now()
 			text, err := extract(sections[i].Body)
 			if err != nil {
 				return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
 			}
+			eta.observe(time.Since(started))
 			raw[i] = text
 		}
 	}
@@ -435,7 +637,14 @@ func (r *Runner) extractConcurrency() int {
 	if n < 1 {
 		n = 1
 	}
-	if r.engineName == "ollama" && n > ollamaExtractConcurrency {
+	// Read the extraction chain rather than the last-used engine name: under
+	// per-kind routing the writer may be a session provider while extraction
+	// runs locally, and it is the local one that must not be over-driven.
+	extractor := ""
+	if e := r.chainFor(engine.KindExtract).active(); e != nil {
+		extractor = e.Name()
+	}
+	if extractor == "ollama" && n > ollamaExtractConcurrency {
 		return ollamaExtractConcurrency
 	}
 	return n
@@ -609,15 +818,16 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 // fails the run does not return to it, so a queue of sections is not re-attempted
 // against a dead provider.
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
+	cs := r.chainFor(req.Kind)
 	var lastErr error
-	for r.cur < len(r.engines) {
+	for cs != nil && cs.cur < len(cs.engines) {
 		// A cancelled run must not keep walking the chain. Without this check
 		// Ctrl+C makes every remaining engine fail in turn, each logging a
 		// misleading "falling back to ..." on the way out.
 		if err := ctx.Err(); err != nil {
 			return engine.Result{}, err
 		}
-		e := r.engines[r.cur]
+		e := cs.engines[cs.cur]
 		res, err := e.Generate(ctx, req)
 		if err == nil {
 			if r.engineName != e.Name() {
@@ -633,9 +843,9 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		}
 		lastErr = err
 		r.warn(fmt.Sprintf("%s failed (%v)", e.Name(), err))
-		r.cur++
-		if r.cur < len(r.engines) {
-			r.engineName = r.engines[r.cur].Name()
+		cs.cur++
+		if cs.cur < len(cs.engines) {
+			r.engineName = cs.engines[cs.cur].Name()
 			r.emit(EngineEvent(r.engineName))
 			r.warn("falling back to " + r.engineName)
 		}
@@ -644,6 +854,15 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		lastErr = errors.New("no engine available")
 	}
 	return engine.Result{}, lastErr
+}
+
+// writerName is the engine that produced the article, which is the one worth
+// reporting when extraction and writing may be different backends.
+func (r *Runner) writerName() string {
+	if e := r.chainFor(engine.KindWrite).active(); e != nil {
+		return e.Name()
+	}
+	return r.engineName
 }
 
 // save writes the article as a day-folder set — source/<stem>-body.md,

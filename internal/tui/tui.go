@@ -44,10 +44,10 @@ type jobResult struct {
 
 // Model is the Bubble Tea model backing the dashboard.
 type Model struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	cfg     config.Config
-	engines []engine.Engine
+	ctx    context.Context
+	cancel context.CancelFunc
+	cfg    config.Config
+	runner *pipeline.Runner
 
 	jobs    []pipeline.Job
 	results []jobResult
@@ -81,7 +81,7 @@ type Model struct {
 
 // New constructs the initial model for a set of jobs. cancel, when non-nil, is
 // invoked on quit to stop any in-flight pipeline work.
-func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job) Model {
+func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
 	sp.Style = accentStyle
@@ -104,7 +104,7 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engi
 		ctx:      ctx,
 		cancel:   cancel,
 		cfg:      cfg,
-		engines:  engines,
+		runner:   runner,
 		jobs:     jobs,
 		results:  results,
 		events:   make(chan pipeline.Event, 256),
@@ -114,8 +114,8 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engi
 		started:  time.Now(),
 	}
 	m.resetPhases()
-	if len(engines) > 0 {
-		m.engineName = engines[0].Name()
+	if runner != nil {
+		m.engineName = runner.EngineFor(engine.KindWrite)
 	}
 	// Init cannot return a mutated model, so reflect the first job's running
 	// state here; startJob still launches its goroutine from Init.
@@ -142,8 +142,8 @@ func (m *Model) startJob(i int) tea.Cmd {
 	m.started = time.Now()
 	m.genStarted = time.Time{}
 	job := m.jobs[i]
-	events := m.events
-	runner := pipeline.NewRunner(m.cfg, m.engines, events)
+	runner := m.runner
+	runner.SetEvents(m.events)
 	return func() tea.Msg {
 		go runner.Run(m.ctx, job)
 		return nil

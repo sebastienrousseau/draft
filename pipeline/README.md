@@ -3,6 +3,7 @@
 Orchestrates a single drafting job end to end, UI-agnostic and engine-agnostic.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/pipeline)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 Extract source text, mine quote-verified claims, write a grounded article
 (continuing past length limits and retrying on rule violations), validate it,

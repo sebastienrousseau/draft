@@ -3,6 +3,7 @@
 Text generation over interchangeable backends, behind a two-method interface.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/engine)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 Two backends ship with `draft`: **session providers** (Claude, Codex, Copilot,
 Cursor and more), each driven through its own CLI in headless mode using the

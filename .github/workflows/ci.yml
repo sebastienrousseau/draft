@@ -5,8 +5,13 @@ name: ci
 on:
   push:
     branches: [main]
+  # Every pull request, whatever its base. A stacked PR — one whose base is
+  # another feature branch rather than main — matched nothing under
+  # `branches: [main]`, so it reported no checks at all until the branch below
+  # it merged. Unverified is worse than late. `push` stays on main so a branch
+  # push does not duplicate the pull_request run.
   pull_request:
-    branches: [main]
+    branches: ["**"]
 
 permissions:
   contents: read

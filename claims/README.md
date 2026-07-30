@@ -4,6 +4,7 @@ Extracts, verifies, de-duplicates and renders the verified claim ledger that
 grounds every draft.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/claims)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 A claim survives only if its `SOURCE_QUOTE` is an exact substring of the section
 it was drawn from **and** every number in the claim also appears in that quote.
@@ -88,7 +89,7 @@ STRENGTH: demonstrated
 
 ## The verification gate
 
-`Verify` applies seven checks in order, returning the first failure as its
+`Verify` applies nine checks in order, returning the first failure as its
 reason string:
 
 | # | Check | Rejection reason |

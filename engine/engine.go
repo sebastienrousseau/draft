@@ -75,9 +75,45 @@ type Engine interface {
 // check must never be what downgrades an online machine to the local model.
 // Instead, if a session call fails (the provider is offline or not logged in),
 // the pipeline advances to the next engine in the chain and stays there.
-func Chain(cfg config.Config) []Engine {
+func Chain(cfg config.Config) []Engine { return ChainFor(cfg, KindWrite) }
+
+// ChainFor resolves the chain for one request kind, honouring that kind's
+// override and falling back to cfg.Engine when it is unset.
+//
+// The workload is lopsided: extraction is one cheap, mechanical call per
+// section, while writing is a single quality-critical call. Routing them
+// separately lets a local model do the dozen extractions — free, offline, and
+// no session quota — while the article itself is written by the best backend
+// available.
+func ChainFor(cfg config.Config, kind Kind) []Engine {
+	return chainForName(cfg, engineNameFor(cfg, kind))
+}
+
+// NameFor reports which configured engine serves a request kind, before any
+// chain is built. Callers use it to tell whether two kinds resolve to the same
+// backend, and to display the routing.
+func NameFor(cfg config.Config, kind Kind) string { return engineNameFor(cfg, kind) }
+
+// engineNameFor is the configured engine for a kind, or the global default.
+func engineNameFor(cfg config.Config, kind Kind) string {
+	var override string
+	switch kind {
+	case KindExtract:
+		override = cfg.ExtractEngine
+	case KindWrite:
+		override = cfg.WriteEngine
+	case KindEdit:
+		override = cfg.EditEngine
+	}
+	if strings.TrimSpace(override) != "" {
+		return override
+	}
+	return cfg.Engine
+}
+
+func chainForName(cfg config.Config, name string) []Engine {
 	ollama := NewOllama(cfg)
-	switch cfg.Engine {
+	switch name {
 	case config.EngineOllama:
 		return []Engine{ollama}
 	case config.EngineAuto, "":
@@ -94,7 +130,7 @@ func Chain(cfg config.Config) []Engine {
 		}
 		return append(chain, ollama)
 	default:
-		if s, ok := NewSession(cfg.Engine, cfg); ok {
+		if s, ok := NewSession(name, cfg); ok {
 			return []Engine{s, ollama}
 		}
 		// An unknown name reaching here means Validate was not called. Fall
@@ -109,15 +145,32 @@ func Chain(cfg config.Config) []Engine {
 // check `--engine claud` silently produces a local-model run that the user
 // believes came from Claude. Call it once, before Chain.
 func Validate(cfg config.Config) error {
-	switch cfg.Engine {
+	for _, s := range []struct{ setting, name string }{
+		{"--engine / DRAFT_ENGINE", cfg.Engine},
+		{"--extract-engine / DRAFT_EXTRACT_ENGINE", cfg.ExtractEngine},
+		{"--write-engine / DRAFT_WRITE_ENGINE", cfg.WriteEngine},
+		{"DRAFT_EDIT_ENGINE", cfg.EditEngine},
+	} {
+		if err := validateName(s.setting, s.name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateName reports an engine name that does not exist, naming which
+// setting carried it — "unknown engine" alone leaves the user hunting through
+// four places for the typo.
+func validateName(setting, name string) error {
+	switch name {
 	case config.EngineAuto, config.EngineOllama, "":
 		return nil
 	}
-	if _, ok := LookupProvider(cfg.Engine); ok {
+	if _, ok := LookupProvider(name); ok {
 		return nil
 	}
-	return fmt.Errorf("unknown engine %q (want %s, %s, or one of: %s)",
-		cfg.Engine, config.EngineAuto, config.EngineOllama, strings.Join(ProviderNames(), ", "))
+	return fmt.Errorf("%s: unknown engine %q (want %s, %s, or one of: %s)",
+		setting, name, config.EngineAuto, config.EngineOllama, strings.Join(ProviderNames(), ", "))
 }
 
 // ResolveModel returns the model label the given engine will use, for display.

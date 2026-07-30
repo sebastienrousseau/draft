@@ -35,7 +35,7 @@ func newModel(t *testing.T, jobs int) Model {
 	cfg := config.Config{OllamaModel: "gemma3:4b", HomeDir: "/home/seb"}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	return New(ctx, cancel, cfg, []engine.Engine{fakeEngine{"claude"}}, js)
+	return New(ctx, cancel, cfg, pipeline.NewRunner(cfg, []engine.Engine{fakeEngine{"claude"}}, nil), js)
 }
 
 func upd(m Model, msg tea.Msg) Model {
@@ -159,7 +159,7 @@ func TestQuitCancelsWork(t *testing.T) {
 	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m := New(ctx, func() { cancelled = true; cancel() }, config.Config{}, []engine.Engine{fakeEngine{"claude"}}, js)
+	m := New(ctx, func() { cancelled = true; cancel() }, config.Config{}, pipeline.NewRunner(config.Config{}, []engine.Engine{fakeEngine{"claude"}}, nil), js)
 	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}); cmd == nil {
 		t.Fatal("q should quit")
 	}

@@ -3,6 +3,7 @@
 Enforces the house article rules before a draft is saved.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/validate)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 Required structure, length, banned vocabulary, emoji, truncation, and
 faithfulness to the verified claim ledger. A violation triggers a targeted

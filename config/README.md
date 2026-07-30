@@ -4,6 +4,7 @@ Resolves runtime configuration from command-line flags, environment variables
 and defaults, in that order of precedence.
 
 [![Go reference](https://img.shields.io/badge/go.dev-reference-00ADD8?style=flat-square&logo=go&logoColor=white)](https://pkg.go.dev/github.com/sebastienrousseau/draft/config)
+[![Website](https://img.shields.io/badge/draftlib.com-ff6b5a?style=flat-square)](https://draftlib.com)
 
 ## Contents
 

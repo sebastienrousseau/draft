@@ -118,7 +118,7 @@ func run() error {
 	defer cancel()
 
 	tui.Version = "demo"
-	m := tui.New(ctx, cancel, cfg, []engine.Engine{demoEngine{}}, jobs)
+	m := tui.New(ctx, cancel, cfg, pipeline.NewRunner(cfg, []engine.Engine{demoEngine{}}, nil), jobs)
 	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	return err
 }

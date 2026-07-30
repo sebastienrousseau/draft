@@ -90,6 +90,7 @@ func main() {
 For the real command — driving a session provider (online) or Ollama (offline)
 over your PDFs — see the top-level [README](../README.md). For the package API,
 see the [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft).
+Guides and background live at [draftlib.com](https://draftlib.com).
 
 ## License
 
