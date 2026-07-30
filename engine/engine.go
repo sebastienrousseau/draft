@@ -15,6 +15,8 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/sebastienrousseau/draft/config"
 )
@@ -95,8 +97,27 @@ func Chain(cfg config.Config) []Engine {
 		if s, ok := NewSession(cfg.Engine, cfg); ok {
 			return []Engine{s, ollama}
 		}
+		// An unknown name reaching here means Validate was not called. Fall
+		// back rather than panic, but never pretend the requested engine ran:
+		// Validate is what turns a typo into a clean exit.
 		return []Engine{ollama}
 	}
+}
+
+// Validate reports whether cfg names an engine that exists. Chain has to
+// degrade to Ollama on an unknown name — it returns no error — so without this
+// check `--engine claud` silently produces a local-model run that the user
+// believes came from Claude. Call it once, before Chain.
+func Validate(cfg config.Config) error {
+	switch cfg.Engine {
+	case config.EngineAuto, config.EngineOllama, "":
+		return nil
+	}
+	if _, ok := LookupProvider(cfg.Engine); ok {
+		return nil
+	}
+	return fmt.Errorf("unknown engine %q (want %s, %s, or one of: %s)",
+		cfg.Engine, config.EngineAuto, config.EngineOllama, strings.Join(ProviderNames(), ", "))
 }
 
 // ResolveModel returns the model label the given engine will use, for display.

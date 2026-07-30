@@ -152,7 +152,9 @@ func TestSessionStreamJSONError(t *testing.T) {
 
 func TestSessionPromptViaArg(t *testing.T) {
 	withExec("echo-args", func() {
-		s, _ := NewSession("codex", config.Config{}) // codex uses a positional arg
+		// copilot was confirmed to ignore a prompt on stdin, so it takes a
+		// positional argument.
+		s, _ := NewSession("copilot", config.Config{})
 		res, err := s.Generate(context.Background(), Request{Prompt: "arg prompt"})
 		if err != nil {
 			t.Fatal(err)
@@ -160,10 +162,36 @@ func TestSessionPromptViaArg(t *testing.T) {
 		if !strings.Contains(res.Text, "arg prompt") {
 			t.Errorf("prompt should be the final arg, got %q", res.Text)
 		}
-		if !strings.Contains(res.Text, "exec") {
+		if !strings.Contains(res.Text, "--allow-all-tools") {
 			t.Errorf("provider args should be present, got %q", res.Text)
 		}
 	})
+}
+
+// Providers confirmed to read stdin must not also leak the prompt into argv,
+// where a process listing would expose it along with the source text it quotes.
+func TestStdinProvidersKeepThePromptOutOfArgv(t *testing.T) {
+	for _, name := range []string{"claude", "codex", "cursor-agent"} {
+		t.Run(name, func(t *testing.T) {
+			p, ok := LookupProvider(name)
+			if !ok {
+				t.Fatalf("provider %q is not registered", name)
+			}
+			if !p.PromptViaStdin {
+				t.Fatalf("%s was verified to read stdin; PromptViaStdin must be set", name)
+			}
+			withExec("echo-args", func() {
+				s, _ := NewSession(name, config.Config{})
+				res, err := s.Generate(context.Background(), Request{Prompt: "secret source quote"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(res.Text, "secret source quote") {
+					t.Errorf("prompt reached argv for %s: %q", name, res.Text)
+				}
+			})
+		})
+	}
 }
 
 func TestSessionModelFlag(t *testing.T) {
