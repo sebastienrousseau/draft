@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,9 @@ func TestSaveClaimsTheBodyExclusively(t *testing.T) {
 
 // save must fail rather than spin when it cannot create the body file at all.
 func TestSaveFailsWhenTheOutputTreeIsUnwritable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not restrict writes on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions")
 	}
@@ -116,6 +120,9 @@ func TestSaveFailsWhenTheOutputTreeIsUnwritable(t *testing.T) {
 // saveFailure reports only the files it actually wrote: pointing the user at a
 // rescued draft that was never saved sends them looking for nothing.
 func TestSaveFailureReportsWhatItCouldNotWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not restrict writes on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions")
 	}

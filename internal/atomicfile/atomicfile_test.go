@@ -6,6 +6,7 @@ package atomicfile
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -50,6 +51,12 @@ func TestWriteLeavesTheOriginalWhenStagingFails(t *testing.T) {
 }
 
 func TestWritePreservesMode(t *testing.T) {
+	// Windows has no POSIX mode bits: os.Chmod there can only toggle the
+	// read-only attribute, so every file reports 0666 and the distinction this
+	// asserts does not exist.
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file modes are not modelled on Windows")
+	}
 	path := filepath.Join(t.TempDir(), "draft.md")
 	if err := Write(path, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -170,6 +177,11 @@ func TestWriteSetPublishFailureIsReported(t *testing.T) {
 // A destination directory that cannot be written to fails at the staging step,
 // before anything is published.
 func TestStagingFailureInAnUnwritableDirectory(t *testing.T) {
+	// A directory mode of 0555 does not prevent writes on Windows, where
+	// access is governed by ACLs rather than mode bits.
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not restrict writes on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions")
 	}
