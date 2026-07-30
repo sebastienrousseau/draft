@@ -6,6 +6,41 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-stage engine routing.** `DRAFT_EXTRACT_ENGINE`, `DRAFT_WRITE_ENGINE`
+  and `DRAFT_EDIT_ENGINE` (with `--extract-engine` / `--write-engine`) send
+  each stage to its own backend. The workload is lopsided — a dozen cheap,
+  mechanical extraction calls per paper against one quality-critical write —
+  so `DRAFT_EXTRACT_ENGINE=ollama DRAFT_WRITE_ENGINE=claude` cuts session
+  usage roughly thirteenfold while keeping the best available writer. Each
+  stage keeps its own fallback chain and cursor, so extraction failing over to
+  Ollama does not drag writing down with it.
+- **`--resume`.** Extraction is 80-95% of a run's wall clock, and a failed
+  write phase used to discard all of it — even though the verified ledger was
+  already on disk. `--resume` re-verifies that ledger against the freshly
+  sectioned sources and skips straight to writing. Re-verification is
+  mandatory: a resumed ledger is trusted because it still passes the same
+  gate, not because we wrote it, so resume cannot weaken grounding.
+- **`--dry-run`.** Reports sources, section count, per-stage routing, the
+  estimated model-call count and whether a resumable ledger exists — in the
+  deterministic ~110 ms of a run, without calling a model. It exercises the
+  real resolve and sectioning path, so a clean plan is evidence the sources
+  are readable rather than a guess.
+- **An extraction ETA** on the progress line, from a running mean of completed
+  sections rather than an extrapolation from the first (which settles the
+  engine chain and warms the model, and so overstates badly).
+
+### Fixed
+
+- **Two papers drafted on the same day overwrote each other's claim ledger.**
+  The filename was date-only; it is now derived from the job's sources. This
+  lost the fact-checking artefact `--keep-artifacts` exists to preserve.
+- **A dead provider was retried once per paper.** The `Runner` was constructed
+  per job, resetting the fallback cursor every time, so a queue of twenty
+  papers re-tried and re-reported every dead backend twenty times. One Runner
+  now serves the queue and keeps the backend it settled on.
+
 ### Security
 
 - **A fabricated claim could pass the grounding gate using invalid UTF-8.**

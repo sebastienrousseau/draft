@@ -67,7 +67,15 @@ const (
 
 // Config is the fully-resolved run configuration shared across packages.
 type Config struct {
-	Engine       string // "auto", "ollama", or a session provider name
+	Engine string // "auto", "ollama", or a session provider name
+	// Per-stage engine overrides. Empty means "use Engine". Extraction is a
+	// dozen cheap, mechanical calls per paper while writing is one
+	// quality-critical call, so routing them separately lets a local model do
+	// the bulk without spending session quota on it.
+	ExtractEngine string // DRAFT_EXTRACT_ENGINE
+	WriteEngine   string // DRAFT_WRITE_ENGINE
+	EditEngine    string // DRAFT_EDIT_ENGINE
+
 	Model        string // session-provider model override ("" = provider default)
 	OllamaModel  string // writing model for the Ollama backend
 	ExtractModel string // claim-extraction model for the Ollama backend
@@ -80,6 +88,7 @@ type Config struct {
 	ExtractConcurrency int // parallel claim-extraction workers (session engines only)
 	ForceNew           bool
 	Merge              bool // combine every input into one draft instead of queueing
+	Resume             bool // reuse a verified claim ledger from an earlier attempt
 	KeepArtifacts      bool // keep prompt/ledger files beside a successful draft
 	Experimental       bool // let auto-selection consider experimental providers
 	OllamaHost         string
@@ -109,6 +118,9 @@ func Load(flags Flags) Config {
 	home := resolveHome(warn)
 	c := Config{
 		Engine:             env("DRAFT_ENGINE", EngineAuto),
+		ExtractEngine:      env("DRAFT_EXTRACT_ENGINE", ""),
+		WriteEngine:        env("DRAFT_WRITE_ENGINE", ""),
+		EditEngine:         env("DRAFT_EDIT_ENGINE", ""),
 		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
 		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
 		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
@@ -129,6 +141,12 @@ func Load(flags Flags) Config {
 	if flags.Engine != "" {
 		c.Engine = flags.Engine
 	}
+	if flags.ExtractEngine != "" {
+		c.ExtractEngine = flags.ExtractEngine
+	}
+	if flags.WriteEngine != "" {
+		c.WriteEngine = flags.WriteEngine
+	}
 	if flags.Model != "" {
 		c.Model = flags.Model
 	}
@@ -140,6 +158,7 @@ func Load(flags Flags) Config {
 	}
 	c.ForceNew = flags.ForceNew
 	c.Merge = flags.Merge
+	c.Resume = flags.Resume
 	c.KeepArtifacts = flags.KeepArtifacts
 	c.Experimental = flags.Experimental || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "1") || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "true")
 	c.Warnings = warnings
@@ -224,11 +243,14 @@ func resolveCallTimeout(warn func(string, ...any)) time.Duration {
 // Flags holds the raw command-line values before they are merged into a Config.
 type Flags struct {
 	Engine        string
+	ExtractEngine string
+	WriteEngine   string
 	Model         string
 	ContextLength int
 	PredictLength int
 	ForceNew      bool
 	Merge         bool
+	Resume        bool
 	KeepArtifacts bool
 	Experimental  bool
 }

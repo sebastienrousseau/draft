@@ -12,19 +12,18 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
-	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
 // runHeadless processes the queue without the Bubble Tea UI. Progress logs go to
 // stderr and each finished draft's path is printed to stdout, so the command
 // composes in scripts and cron jobs. It returns a count of failed jobs.
-func runHeadless(ctx context.Context, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job, stdout, stderr io.Writer) int {
+func runHeadless(ctx context.Context, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job, stdout, stderr io.Writer) int {
 	failures := 0
 	for i, job := range jobs {
 		fmt.Fprintf(stderr, "[%d/%d] %v\n", i+1, len(jobs), job.Sources)
 		events := make(chan pipeline.Event, 256)
-		runner := pipeline.NewRunner(cfg, engines, events)
+		runner.SetEvents(events)
 		go func() {
 			runner.Run(ctx, job)
 			close(events)
@@ -85,7 +84,7 @@ func phaseMillis(timings []pipeline.PhaseTiming) map[string]int64 {
 // runHeadlessJSON processes the queue emitting one JSON object per job to
 // stdout (JSON Lines), leaving stderr for human progress. It returns a count
 // of failed jobs.
-func runHeadlessJSON(ctx context.Context, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job, stdout, stderr io.Writer) int {
+func runHeadlessJSON(ctx context.Context, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job, stdout, stderr io.Writer) int {
 	failures := 0
 	enc := json.NewEncoder(stdout)
 	for i, job := range jobs {
@@ -93,7 +92,7 @@ func runHeadlessJSON(ctx context.Context, cfg config.Config, engines []engine.En
 		rec := jobRecord{Source: strings.Join(job.Sources, ",")}
 
 		events := make(chan pipeline.Event, 256)
-		runner := pipeline.NewRunner(cfg, engines, events)
+		runner.SetEvents(events)
 		go func() {
 			runner.Run(ctx, job)
 			close(events)

@@ -61,6 +61,28 @@ func Parse(text, source string) (records []Record, dropped int) {
 	return records, dropped
 }
 
+// ParseLedger reads back a ledger previously written by RenderLedger,
+// re-verifying every record against source exactly as Parse does.
+//
+// A resumed ledger is not trusted because we wrote it; it is trusted because it
+// still passes the same gate. That is what lets a run reuse extraction work
+// without weakening grounding: if a source has changed underneath it, the
+// records that no longer occur in it are dropped here.
+//
+// RenderLedger writes a human-readable header before the first record. Parse
+// would read that as a block with no CLAIM and count it as a drop, so it is
+// skipped: the returned count reflects records that genuinely no longer verify.
+func ParseLedger(ledger, source string) (records []Record, dropped int) {
+	i := strings.Index(ledger, "CLAIM:")
+	if i < 0 {
+		// No records at all — an empty ledger renders as a header and "NONE".
+		// Parse would read that header as one malformed block and report a
+		// phantom drop.
+		return nil, 0
+	}
+	return Parse(ledger[i:], source)
+}
+
 // Verify reports whether a record is trustworthy and, when not, why.
 func Verify(rec Record, source string) (bool, string) {
 	quote := strings.TrimSpace(rec.SourceQuote)

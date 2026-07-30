@@ -55,19 +55,22 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
-	var jsonOut bool
+	var jsonOut, dryRun bool
 	var reviewPath, frontmatterPath, completionShell string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { usage(stderr) }
 	fs.StringVar(&flags.Engine, "engine", "", "backend: auto (default), ollama, or a provider name")
+	fs.StringVar(&flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
+	fs.StringVar(&flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
 	fs.StringVar(&flags.Model, "model", "", "session-provider model override (e.g. opus)")
 	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
 	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
 	fs.IntVar(&flags.PredictLength, "num-predict", 0, "Ollama max output tokens (default 6000)")
 	fs.BoolVar(&flags.ForceNew, "force-new", false, "draft even if today's folder already has one")
 	fs.BoolVar(&flags.Merge, "merge", false, "combine all sources into one draft instead of queueing")
+	fs.BoolVar(&flags.Resume, "resume", false, "reuse a verified claim ledger from an earlier attempt")
 	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
 	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
 	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
@@ -76,6 +79,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
+	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err := fs.Parse(argv); err != nil {
@@ -144,22 +148,31 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	// in-flight session subprocess or Ollama request instead of orphaning it.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	engines := engine.Chain(cfg)
+	// One Runner for the whole queue. Constructing one per job reset the
+	// fallback cursor every time, so a dead provider was retried — and
+	// re-reported — once per paper instead of once per run.
+	runner := pipeline.NewRoutedRunner(cfg, nil)
 
+	if dryRun {
+		if runDryRun(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
+			return 1
+		}
+		return 0
+	}
 	if jsonOut {
-		if runHeadlessJSON(ctx, cfg, engines, jobs, stdout, stderr) > 0 {
+		if runHeadlessJSON(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
 			return 1
 		}
 		return 0
 	}
 	if headless {
-		if runHeadless(ctx, cfg, engines, jobs, stdout, stderr) > 0 {
+		if runHeadless(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
 			return 1
 		}
 		return 0
 	}
 
-	if err := runTUI(ctx, stop, cfg, engines, jobs); err != nil {
+	if err := runTUI(ctx, stop, cfg, runner, jobs); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -169,10 +182,10 @@ func run(argv []string, stdout, stderr io.Writer) int {
 // runTUI launches the full-screen dashboard. It is separated from main so the
 // job-planning logic around it stays testable. cancel is invoked when the user
 // quits so background pipeline work stops promptly.
-func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, engines []engine.Engine, jobs []pipeline.Job) error {
+func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job) error {
 	defer cancel()
 	tui.Version = version
-	m := tui.New(ctx, cancel, cfg, engines, jobs)
+	m := tui.New(ctx, cancel, cfg, runner, jobs)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
@@ -287,18 +300,22 @@ func usage(w io.Writer) {
 	fmt.Fprintf(w, "%s\n", head("FLAGS"))
 	for _, f := range [][2]string{
 		{"--engine <mode>", "auto (default), ollama, or a provider name"},
+		{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
+		{"--write-engine <m>", "backend for writing (default: --engine)"},
 		{"--model <name>", "session-provider model override (e.g. opus)"},
 		{"--experimental", "let auto mode use experimental providers"},
 		{"--num-ctx <n>", "Ollama context window (default 8192)"},
 		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
 		{"--force-new", "draft even if today's folder already has one"},
 		{"--merge", "combine all sources into one draft"},
+		{"--resume", "reuse a verified claim ledger from an earlier attempt"},
 		{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 		{"--frontmatter <file>", "regenerate frontmatter and the final article"},
 		{"--combine <file>", "alias for --frontmatter"},
 		{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 		{"--print", "run without the TUI; print draft paths to stdout"},
 		{"--json", "run without the TUI; one JSON object per job on stdout"},
+		{"--dry-run", "report what a run would do, without calling a model"},
 		{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
 		{"--version", "print version and exit"},
 		{"-h, --help", "show this help"},

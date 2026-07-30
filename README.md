@@ -195,8 +195,17 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   by a 10 MB binary. See [Performance](#performance).
 - **A dashboard worth watching.** The article streams in token by token,
   beside a pipeline view, a per-run log, and a focus timer.
+- **Split local and cloud per stage.** Extraction is a dozen cheap, mechanical
+  calls; writing is one that decides the article's quality. Point them at
+  different backends and a local model does the bulk for free while the best
+  writer you have does the part that matters.
+- **Never re-pay for extraction.** A failed run leaves its verified ledger on
+  disk; `--resume` re-verifies it against the sources and skips straight to
+  writing, turning a ten-minute retry into seconds.
+- **Look before you leap.** `--dry-run` reports the sections, the routing and
+  the model-call count in about a tenth of a second.
 - **Scriptable.** `--print` emits paths; `--json` emits one JSON object per
-  job; `--completion` writes shell completions.
+  job, with per-phase timings; `--completion` writes shell completions.
 
 ---
 
@@ -246,6 +255,10 @@ draft [flags] <source> [more-sources...]
 | `--num-predict <n>`  | Ollama max output tokens (default `6000`)                |
 | `--force-new`        | Draft even if today's folder already has one             |
 | `--merge`            | Combine all sources into one draft                       |
+| `--resume`           | Reuse a verified claim ledger from an earlier attempt    |
+| `--dry-run`          | Report what a run would do, without calling a model      |
+| `--extract-engine <m>` | Backend for claim extraction (default: `--engine`)     |
+| `--write-engine <m>` | Backend for writing the article (default: `--engine`)    |
 | `--review <draft>`   | Enhance an existing draft with surgical edits            |
 | `--frontmatter <f>`  | Regenerate frontmatter + final document from an article  |
 | `--combine <f>`      | Alias for `--frontmatter`                                |
@@ -377,6 +390,9 @@ Flags beat environment variables. Environment variables beat defaults.
 | Variable                    | Default                  | Purpose |
 | --------------------------- | ------------------------ | ------- |
 | `DRAFT_ENGINE`              | `auto`                   | Backend selection (auto, ollama, provider) |
+| `DRAFT_EXTRACT_ENGINE`      | —                        | Backend for claim extraction (default: `DRAFT_ENGINE`) |
+| `DRAFT_WRITE_ENGINE`        | —                        | Backend for writing the article |
+| `DRAFT_EDIT_ENGINE`         | —                        | Backend for `--review` edits |
 | `DRAFT_MODEL_SESSION`       | —                        | Session-provider model override |
 | `DRAFT_MODEL`               | —                        | Sets all Ollama models at once |
 | `DRAFT_WRITE_MODEL`         | `gemma3:4b`              | Ollama writing model |

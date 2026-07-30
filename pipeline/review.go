@@ -61,7 +61,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	}
 
 	r.phase(PhaseClaims, "running")
-	records, dropped, err := r.extractClaims(ctx, sections, outputDir)
+	records, dropped, err := r.extractClaims(ctx, job, sections, outputDir)
 	if err != nil {
 		r.phase(PhaseClaims, "failed")
 		return err
@@ -137,7 +137,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		OutputPath: job.ReviewPath,
 		Words:      validate.WordCount(enhanced),
 		Mode:       "review",
-		Engine:     r.engineName,
+		Engine:     r.writerName(),
 		Duration:   time.Since(r.started),
 		Timings:    append([]PhaseTiming(nil), r.timings...),
 	})

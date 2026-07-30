@@ -97,7 +97,7 @@ func TestRunHeadless(t *testing.T) {
 	cfg, full := tmpSource(t, "paper.txt")
 	jobs := []pipeline.Job{{Sources: []string{full}}}
 	var out strings.Builder
-	failures := runHeadless(context.Background(), cfg, []engine.Engine{stubEngine{}}, jobs, &out, io.Discard)
+	failures := runHeadless(context.Background(), cfg, pipeline.NewRunner(cfg, []engine.Engine{stubEngine{}}, nil), jobs, &out, io.Discard)
 	if failures != 0 {
 		t.Errorf("expected success, got %d failures", failures)
 	}
@@ -116,7 +116,7 @@ func TestRunHeadlessFailure(t *testing.T) {
 	jobs := []pipeline.Job{{Sources: []string{full}}}
 	// An ollama-only chain with no server -> failure.
 	chain := engine.Chain(config.Config{Engine: config.EngineOllama, OllamaHost: "http://127.0.0.1:0"})
-	if runHeadless(context.Background(), cfg, chain, jobs, io.Discard, io.Discard) == 0 {
+	if runHeadless(context.Background(), cfg, pipeline.NewRunner(cfg, chain, nil), jobs, io.Discard, io.Discard) == 0 {
 		t.Error("expected a failure with no reachable engine")
 	}
 }
@@ -301,7 +301,7 @@ func TestRunHeadlessJSON(t *testing.T) {
 	cfg, full := tmpSource(t, "paper.txt")
 	jobs := []pipeline.Job{{Sources: []string{full}}}
 	var out strings.Builder
-	if failures := runHeadlessJSON(context.Background(), cfg, []engine.Engine{stubEngine{}}, jobs, &out, io.Discard); failures != 0 {
+	if failures := runHeadlessJSON(context.Background(), cfg, pipeline.NewRunner(cfg, []engine.Engine{stubEngine{}}, nil), jobs, &out, io.Discard); failures != 0 {
 		t.Fatalf("expected success, got %d failures", failures)
 	}
 	// One JSON object per line, machine-readable.
@@ -357,7 +357,7 @@ func TestRunHeadlessJSONReportsFailure(t *testing.T) {
 	// record must say so rather than claiming success.
 	chain := engine.Chain(config.Config{Engine: config.EngineOllama, OllamaHost: "http://127.0.0.1:0"})
 	var out strings.Builder
-	if failures := runHeadlessJSON(context.Background(), cfg, chain, jobs, &out, io.Discard); failures == 0 {
+	if failures := runHeadlessJSON(context.Background(), cfg, pipeline.NewRunner(cfg, chain, nil), jobs, &out, io.Discard); failures == 0 {
 		t.Fatal("expected a failure with no reachable engine")
 	}
 	var rec struct {
