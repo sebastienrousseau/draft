@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sebastienrousseau/draft/rules"
 )
@@ -68,6 +69,21 @@ func Verify(rec Record, source string) (bool, string) {
 	}
 	if len([]rune(quote)) < rules.MinQuoteChars {
 		return false, "quote too short"
+	}
+	// A quote must be well-formed text before it can be compared.
+	//
+	// Comparison normalises with strings.ToLower, which maps every invalid
+	// UTF-8 byte to U+FFFD — so two DIFFERENT invalid byte sequences normalise
+	// to the same string, and a fabricated quote could match a source it does
+	// not occur in. Found by FuzzParse. Requiring the quote to be valid UTF-8
+	// and free of U+FFFD closes that: normalisation can only ever introduce
+	// U+FFFD, never other characters, so a quote containing none of it cannot
+	// be matched against mangled bytes.
+	if !utf8.ValidString(quote) {
+		return false, "quote is not valid UTF-8"
+	}
+	if strings.ContainsRune(quote, utf8.RuneError) {
+		return false, "quote contains a replacement character"
 	}
 	if !quoteInSource(quote, source) {
 		return false, "quote not found in source"

@@ -30,7 +30,7 @@ func FuzzParse(f *testing.F) {
 			if r.SourceQuote == "" {
 				t.Errorf("verified record has an empty quote: %+v", r)
 			}
-			if !strings.Contains(source, r.SourceQuote) {
+			if !groundedIn(source, r.SourceQuote) {
 				t.Errorf("ungrounded quote survived verification:\nquote:  %q\nsource: %q", r.SourceQuote, source)
 			}
 			if r.Claim == "" {
@@ -38,4 +38,53 @@ func FuzzParse(f *testing.F) {
 			}
 		}
 	})
+}
+
+// groundedIn reports whether quote genuinely occurs in source.
+//
+// The bar is deliberately not byte-exact containment. Text arrives from
+// pdftotext, where a sentence is wrapped across lines and columns are separated
+// by runs of spaces, so a quote that differs from the source only in how much
+// whitespace sits between its words IS present in that source — and refusing it
+// would drop true claims from every real paper. Case and curly quotes are
+// tolerated for the same reason.
+//
+// What it must still catch is fabrication: content the source does not contain.
+// Collapsing runs of whitespace cannot manufacture that, because a run collapses
+// to one space and never to none — "a b" does not match "ab", nor "ab" match
+// "a b".
+//
+// This is written independently of the production normalise() so that the test
+// checks the property rather than restating the implementation.
+func groundedIn(source, quote string) bool {
+	fold := func(s string) string {
+		s = strings.NewReplacer("“", `"`, "”", `"`, "‘", "'", "’", "'").Replace(s)
+		return strings.ToLower(strings.Join(strings.Fields(s), " "))
+	}
+	return strings.Contains(fold(source), fold(quote))
+}
+
+// The loosened invariant must still reject fabrication: collapsing whitespace
+// tolerates spacing, never invented content.
+func TestGroundedInStillRejectsFabrication(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, quote string
+		want                bool
+	}{
+		{name: "exact", source: "used 5x fewer FLOPs", quote: "used 5x fewer FLOPs", want: true},
+		{name: "wrapped across a line", source: "used 5x\nfewer FLOPs", quote: "used 5x fewer FLOPs", want: true},
+		{name: "column gutter", source: "used 5x    fewer FLOPs", quote: "used 5x fewer FLOPs", want: true},
+		{name: "case differs", source: "Used 5X Fewer FLOPs", quote: "used 5x fewer flops", want: true},
+		{name: "curly apostrophe", source: "the model’s output", quote: "the model's output", want: true},
+		{name: "words joined is not a match", source: "ab", quote: "a b", want: false},
+		{name: "words split is not a match", source: "a b", quote: "ab", want: false},
+		{name: "invented number", source: "used 5x fewer FLOPs", quote: "used 9x fewer FLOPs", want: false},
+		{name: "invented clause", source: "used 5x fewer FLOPs", quote: "and halved training cost", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := groundedIn(tc.source, tc.quote); got != tc.want {
+				t.Errorf("groundedIn(%q, %q) = %v, want %v", tc.source, tc.quote, got, tc.want)
+			}
+		})
+	}
 }
