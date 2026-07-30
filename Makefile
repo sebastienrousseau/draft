@@ -29,8 +29,13 @@ race: ## Run tests with the race detector
 	go test -race $(PKG)
 
 .PHONY: cover
-cover: ## Report test coverage (app + library packages; demos excluded)
-	go test -cover ./internal/... ./cmd/...
+cover: ## Report test coverage and apply the same 95% gate CI does (demos excluded)
+	@go test -coverprofile=coverage.out ./... >/dev/null
+	@grep -v '/examples/' coverage.out > coverage.filtered.out
+	@go tool cover -func=coverage.filtered.out | tail -1
+	@pct=$$(go tool cover -func=coverage.filtered.out | awk '/^total:/ {print substr($$3, 1, length($$3)-1)}'); \
+	  awk -v p="$$pct" 'BEGIN { exit (p+0 >= 95 ? 0 : 1) }' \
+	  || { echo "coverage $$pct% is below 95%"; exit 1; }
 
 .PHONY: bench
 bench: ## Run benchmarks

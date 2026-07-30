@@ -4,6 +4,118 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [Unreleased]
+
+### Security
+
+- **A fabricated claim could pass the grounding gate using invalid UTF-8.**
+  Quote-to-source comparison lowercases both sides, and `strings.ToLower` maps
+  every invalid UTF-8 byte to U+FFFD — so two *different* invalid byte
+  sequences normalised to the same text and a quote could match a source it
+  does not occur in. That is a bypass of the one invariant the claim ledger
+  rests on. `claims.Verify` now rejects a quote that is not valid UTF-8 or that
+  contains a replacement character; accented and CJK quotes are unaffected.
+  Found by `FuzzParse`, and its input is kept as a corpus seed.
+- **Prompts now go over stdin for `codex` and `cursor-agent`.** A prompt passed
+  as a command-line argument is visible in a process listing for the duration
+  of the call, along with the source excerpts it quotes. Stdin delivery was
+  confirmed by running each CLI; `copilot`, `agy`, `grok` and `goose` were
+  confirmed *not* to read stdin and keep argument delivery.
+- **`OLLAMA_HOST` is validated.** A value that is not a valid `http`/`https`
+  URL is refused rather than concatenated into a request URL, and a host that
+  is not loopback is reported — a remote Ollama means prompts and verbatim
+  source text leave the machine.
+- **Extraction helpers are given absolute paths.** A source file named `-x.pdf`
+  would otherwise be parsed as a flag by `pdftotext` or `textutil`. Their
+  output is also capped, and source files are size-limited.
+
+### Fixed
+
+- **`--review` did not check faithfulness.** It gated only on the house style
+  rules, so a surgical edit could introduce an ungrounded number or an
+  unsupported metric into a finished article — and `factual correction` is an
+  allowed edit reason. Both write paths now run `validate.Errors` *and*
+  `validate.Faithfulness`.
+- **A stalled consumer could wedge the pipeline.** `Runner.emit` performed an
+  unconditional blocking send while its doc comment claimed the opposite, so a
+  dashboard that quit mid-run left the goroutine blocked forever. Sends now
+  race the run's context, and `TokenEvent`s are dropped rather than applying
+  backpressure — a slow renderer must slow the preview, never the generation.
+- **Truncation was only detected for Ollama.** Session providers never set
+  `Result.Truncated`, so the continuation machinery was dead code for them and
+  a length-limited stop surfaced much later as a rule violation costing a full
+  rewrite. The stream-json stop reason is now parsed, and an ending that does
+  not close a sentence is treated as a truncation for every backend.
+- **Cancelling a run walked the rest of the engine chain**, failing each
+  remaining backend in turn and logging a misleading fallback for each.
+- **`--frontmatter` could leave an article set disagreeing with itself.** The
+  three files were written with three sequential `os.WriteFile` calls, so a
+  failure after the first left the set desynced. They are now staged and
+  published as a unit, and `--review` writes through a temporary file and a
+  rename so an interrupted write cannot destroy the original draft.
+- **Section splitting could produce invalid UTF-8.** With no paragraph or
+  sentence boundary to cut on, the fallback sliced at a fixed byte offset and
+  split multi-byte runes in half.
+- **A misspelled `--engine` silently used Ollama.** `draft --engine claud` now
+  exits 2 and lists the valid names.
+- **Drafts could be written to the wrong directory.** When `os.UserHomeDir`
+  failed — routine under systemd, cron and in containers — the error was
+  discarded, leaving the Sources and Drafts paths relative to whatever
+  directory the process started in. They are now always absolute.
+- **`uniquePath` could loop forever** on a directory it could not stat into.
+- **Output filenames are claimed with `O_EXCL`** instead of a check-then-write,
+  and the search for a free name is bounded.
+- **`validate.Errors` now enforces `rules.MaxWords`.** The writing prompt asks
+  for a 500–3000 word band and `rules` declares it, but only the floor was
+  checked, so an over-long draft was told one thing and held to another. A
+  newly generated draft that runs long is now rewritten rather than saved.
+  `--review` is unaffected: it judges the edit, not the article (below).
+- **`--review` no longer fails on a violation it did not introduce.** It
+  operates on a file the user already has, which may predate a rule, exceed
+  the length band, or read as ungrounded against a ledger mined from whichever
+  sources were supplied today. Blocking on any of that made an existing article
+  permanently unreviewable for a reason the review had nothing to do with. The
+  gate now compares the article before and after the edit and fails only on
+  what the edit added; pre-existing problems are reported as warnings.
+- **Read errors during streaming are no longer swallowed**, so a broken pipe
+  cannot produce a half-written article that looks complete.
+- **Failures are reported honestly.** A claim ledger or rescued draft that
+  could not be written is no longer logged as saved.
+- **`pdftotext` failures surface the tool's own message** instead of
+  `exit status 1`.
+
+### Added
+
+- `DRAFT_CALL_TIMEOUT` bounds a single generation call (default 1800s, `0`
+  disables), so a wedged provider CLI cannot hang a run forever. The Ollama
+  backend uses its own HTTP client with dial and response-header timeouts
+  rather than the timeout-free `http.DefaultClient`.
+- `engine.Validate` reports an unknown engine name, which `Chain` cannot.
+- `DoneEvent` carries `Duration` and per-phase `Timings`, surfaced in `--json`
+  as `duration_ms` and `phases_ms`.
+- `WarnEvent` distinguishes a non-fatal problem from ordinary progress, and
+  `--json` records them per job as `warnings`.
+- `Config.Warnings` reports configuration that was recovered from rather than
+  applied silently; every numeric environment variable is now clamped at both
+  ends instead of only floored.
+- A README for each of the eight importable packages, with a runnable quick
+  start and an API table.
+
+### Changed
+
+- `make cover` now runs the same coverage gate CI does. It previously measured
+  only `./internal/...` and `./cmd/...`, omitting every library package while
+  describing itself as covering them.
+- **`FuzzParse` asserts the contract the gate actually has.** Its invariant
+  required a quote to appear byte-for-byte in the source, but quote matching is
+  deliberately insensitive to runs of whitespace — a sentence wrapped across
+  lines, or split by a column gutter, is still present in the paper it came
+  from, and rejecting it would drop true claims from every real PDF. The
+  invariant now folds whitespace, case and curly quotes, written independently
+  of the production code so it tests the property rather than restating the
+  implementation, and `TestGroundedInStillRejectsFabrication` pins that the
+  looser bar still refuses invented content.
+
 ## [0.0.28] - 2026-07-29
 
 ### Changed
