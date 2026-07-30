@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
-## [Unreleased]
+## [0.0.29] - 2026-07-30
 
 ### Added
 
@@ -696,6 +696,20 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.29]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.29
+[0.0.28]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.28
+[0.0.27]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.27
+[0.0.26]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.26
+[0.0.25]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.25
+[0.0.24]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.24
+[0.0.23]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.23
+[0.0.22]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.22
+[0.0.21]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.21
+[0.0.20]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.20
+[0.0.19]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.19
+[0.0.18]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.18
+[0.0.17]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.17
+[0.0.16]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.16
 [0.0.15]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.15
 [0.0.14]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.14
 [0.0.13]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.13
