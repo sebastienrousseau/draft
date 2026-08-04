@@ -36,12 +36,16 @@ make lint       # golangci-lint run   (config in .golangci.yml)
 make test       # go test ./...
 make cover      # coverage must stay >= 98% of app/library statements
 make bench      # benchmarks (for performance-sensitive changes)
+make fuzz       # fuzz every untrusted-input parser
+make mutation   # mutation-test the grounding gate
 ```
 
 - **Tests.** Add or update tests in the same commit as the behaviour change.
   Coverage is enforced at **≥98%** (demo `examples/` are excluded). The pipeline
   is tested end to end against a deterministic fake `Engine`; provider CLIs are
   faked via the `TestHelperProcess` pattern, so you never need a real agent.
+  Pull requests that change Go code compare benchmarks against their base, and
+  the scheduled deep-quality workflow runs extended fuzzing and mutation tests.
 - **Docs.** Every exported symbol carries a doc comment (revive's `exported`
   rule is enforced). User-facing changes update the `README.md` and `--help`.
 - **Changelog.** Note user-facing changes in `CHANGELOG.md` under the unreleased
