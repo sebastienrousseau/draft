@@ -922,8 +922,9 @@ parser and mutation-tests the grounding gate each day.
   `textutil`, with context timeouts, absolute paths (so a filename beginning
   with `-` cannot be read as a flag), capped output, and no shell
   interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`.
-- **Verifiable releases.** Signed with keyless Sigstore cosign, published with
-  a CycloneDX SBOM per archive and GitHub build provenance.
+- **Verifiable releases.** macOS binaries are Developer ID signed and Apple
+  notarized. Every release is also signed with keyless Sigstore cosign and
+  published with a CycloneDX SBOM per archive and GitHub build provenance.
 
 ---
 

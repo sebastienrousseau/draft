@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.31] - 2026-08-04
+
+### Security
+
+- **Native macOS trust.** Release binaries for Intel and Apple silicon are now
+  signed with a Developer ID Application certificate and notarized by Apple
+  before archiving, so Homebrew installs pass Gatekeeper without requiring a
+  manual quarantine override.
+
 ## [0.0.30] - 2026-07-30
 
 ### Added
