@@ -187,7 +187,7 @@ func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, r
 	defer cancel()
 	tui.Version = version
 	m := tui.New(ctx, cancel, cfg, runner, jobs, selectEngine)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }
