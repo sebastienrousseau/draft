@@ -317,6 +317,39 @@ func TestEngineSelectionInteractive(t *testing.T) {
 	}
 }
 
+func TestEngineSelectionInitNavigationAndCancel(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
+	ctx, cancelContext := context.WithCancel(context.Background())
+	canceled := false
+	cancel := func() {
+		canceled = true
+		cancelContext()
+	}
+	cfg := config.Config{HomeDir: "/home/seb"}
+	jobs := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	m := New(ctx, cancel, cfg, pipeline.NewRunner(cfg, nil, nil), jobs, true)
+	if cmd := m.Init(); cmd == nil {
+		t.Fatal("selection mode should initialize its animation commands")
+	}
+
+	m = upd(m, tea.KeyMsg{Type: tea.KeyUp})
+	if m.engineCursor != len(m.engineChoices)-1 {
+		t.Errorf("up from the first choice should wrap to the last, got %d", m.engineCursor)
+	}
+	m = upd(m, tea.KeyMsg{Type: tea.KeyDown})
+	if m.engineCursor != 0 {
+		t.Errorf("down from the last choice should wrap to the first, got %d", m.engineCursor)
+	}
+
+	m = upd(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !canceled {
+		t.Error("escaping engine selection should cancel the run")
+	}
+}
+
 func TestEngineSelectionOfflineDefault(t *testing.T) {
 	orig := engine.IsOnline
 	engine.IsOnline = func() bool { return false }
