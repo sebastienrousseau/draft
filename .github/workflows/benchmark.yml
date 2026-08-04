@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+name: benchmark
+
+on:
+  pull_request:
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - .github/workflows/benchmark.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BENCHSTAT_VERSION: v0.0.0-20260709024250-82a0b07e230d
+    steps:
+      - name: Check out proposed revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+      - name: Check out comparison base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          path: base
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "stable"
+          cache-dependency-path: head/go.sum
+      - name: Install benchstat
+        run: go install "golang.org/x/perf/cmd/benchstat@${BENCHSTAT_VERSION}"
+      - name: Benchmark base and proposed revision
+        run: |
+          set -euo pipefail
+          (cd base && go test -run='^$' -bench=. -benchmem -benchtime=250ms -count=8 ./...) > base.txt
+          (cd head && go test -run='^$' -bench=. -benchmem -benchtime=250ms -count=8 ./...) > head.txt
+      - name: Compare performance
+        run: |
+          set -euo pipefail
+          gobin="$(go env GOBIN)"
+          if [ -z "$gobin" ]; then
+            gobin="$(go env GOPATH)/bin"
+          fi
+          benchstat="$gobin/benchstat"
+          "$benchstat" base.txt head.txt | tee comparison.txt
+          "$benchstat" -format csv base.txt head.txt > comparison.csv
+          cat comparison.txt >> "$GITHUB_STEP_SUMMARY"
+          awk -F, '
+            $6 ~ /^\+[0-9.]+%$/ {
+              delta = $6
+              gsub(/[+%]/, "", delta)
+              if (delta + 0 > 25) {
+                printf "performance regression: %s is %s slower\n", $1, $6
+                failed = 1
+              }
+            }
+            END { exit failed }
+          ' comparison.csv

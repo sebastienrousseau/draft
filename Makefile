@@ -48,6 +48,11 @@ fuzz: ## Run each fuzz target briefly (FUZZTIME=30s make fuzz)
 	@go test ./frontmatter/ -run FuzzExtractMetadata -fuzz FuzzExtractMetadata -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./pipeline/ -run FuzzParseSurgicalEdits -fuzz FuzzParseSurgicalEdits -fuzztime $(or $(FUZZTIME),20s)
 
+.PHONY: mutation
+mutation: ## Mutation-test the security-critical grounding gate
+	go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash ./claims \
+	  --workers 4 --test-cpu 1 --threshold-efficacy 100 --threshold-mcover 100
+
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities (same check as CI)
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

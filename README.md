@@ -78,6 +78,20 @@ full-screen dashboard.
 
 ## Install
 
+With Homebrew:
+
+```sh
+brew install --cask sebastienrousseau/tap/draft
+```
+
+With mise's GitHub backend:
+
+```sh
+mise use --global github:sebastienrousseau/draft@latest
+```
+
+With the Go toolchain:
+
 ```sh
 go install github.com/sebastienrousseau/draft/cmd/draft@latest
 ```
@@ -88,6 +102,7 @@ Or build it yourself:
 git clone https://github.com/sebastienrousseau/draft
 cd draft
 make build          # ./bin/draft
+make install        # install into GOPATH/bin
 ```
 
 Signed binaries for macOS, Linux and Windows are attached to every
@@ -854,6 +869,7 @@ make race      # tests under the race detector
 make cover     # coverage report (≥98% gate, demos excluded)
 make bench     # benchmarks
 make fuzz      # each fuzz target briefly (FUZZTIME=30s make fuzz)
+make mutation  # mutation-test the grounding gate
 make vuln      # govulncheck, the same scan CI runs
 make lint      # golangci-lint
 make check     # fmt + vet + test
@@ -870,7 +886,9 @@ surgical edits — are fuzzed against invariants, the most important being that 
 surviving claim must quote its source verbatim.
 
 Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.24,
-`govulncheck`, CodeQL and REUSE compliance.
+`govulncheck`, CodeQL, REUSE compliance, and a base-versus-head benchmark
+regression check. A scheduled deep-quality workflow fuzzes every untrusted-input
+parser and mutation-tests the grounding gate each day.
 
 ---
 

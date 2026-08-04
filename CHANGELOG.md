@@ -24,6 +24,13 @@ series until `0.0.999`.
 
 ### Quality & Governance
 
+- **Install with Homebrew or mise.** Release archives now have documented,
+  first-class installation paths through `sebastienrousseau/tap/draft` and
+  mise's native GitHub backend, alongside `go install` and `make install`.
+- **Deep quality automation.** Pull requests compare benchmarks with their base
+  revision and fail on significant regressions above 25%. A daily workflow runs
+  extended native fuzzing and mutation-tests the security-critical grounding
+  gate at 100% efficacy and mutant coverage.
 - **Repository Audit (10/10 in all categories).** Full audit verified clean zero-issue
   `golangci-lint`, 98.1% test coverage (exceeding the 98% gate), `go test -race` clean,
   `govulncheck` clean, REUSE/SPDX license compliance, and strict versioning policy
