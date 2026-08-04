@@ -154,3 +154,18 @@ func TestFaultyStagingCleansUp(t *testing.T) {
 	_ = Write(filepath.Join(dir, "draft.md"), []byte("x"), 0o644)
 	assertNoTempFiles(t, dir)
 }
+
+func TestWriteAndWriteSetReportModeFailures(t *testing.T) {
+	original := chmod
+	chmod = func(string, os.FileMode) error { return errFault }
+	t.Cleanup(func() { chmod = original })
+
+	dir := t.TempDir()
+	if err := Write(filepath.Join(dir, "one.md"), []byte("x"), 0o644); !errors.Is(err, errFault) || !strings.Contains(err.Error(), "setting mode") {
+		t.Fatalf("Write mode failure = %v", err)
+	}
+	if err := WriteSet(map[string][]byte{filepath.Join(dir, "two.md"): []byte("x")}, 0o644); !errors.Is(err, errFault) || !strings.Contains(err.Error(), "setting mode") {
+		t.Fatalf("WriteSet mode failure = %v", err)
+	}
+	assertNoTempFiles(t, dir)
+}

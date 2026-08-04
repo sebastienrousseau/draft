@@ -28,6 +28,34 @@ func TestReadCappedRefusesOversizeFiles(t *testing.T) {
 	}
 }
 
+func TestReadCappedPropagatesReadFailure(t *testing.T) {
+	if _, err := readCapped(t.TempDir(), MaxArticleBytes); err == nil {
+		t.Fatal("expected reading a directory to fail")
+	}
+}
+
+func TestExtractKeyTermsCapsResults(t *testing.T) {
+	terms := extractKeyTerms("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november")
+	if len(terms) != 8 {
+		t.Fatalf("extractKeyTerms returned %d terms, want 8", len(terms))
+	}
+}
+
+func TestExtractMetadataCapsCombinedKeywords(t *testing.T) {
+	article := "# Alpha Bravo Charlie Delta Echo Foxtrot Golf Hotel\n\n" +
+		strings.Repeat("Quantum lattice decoder syndrome photon qubit entanglement superconducting. ", 2)
+	keywords := strings.Split(ExtractMetadata(article).Keywords, ", ")
+	if len(keywords) != 12 {
+		t.Fatalf("ExtractMetadata returned %d keywords, want 12", len(keywords))
+	}
+}
+
+func TestTruncateAtWordReturnsShortInput(t *testing.T) {
+	if got := truncateAtWord("short", 20); got != "short" {
+		t.Fatalf("truncateAtWord = %q, want short", got)
+	}
+}
+
 func TestProcessFileRefusesAnOversizeArticle(t *testing.T) {
 	// The cap is exercised through readCapped above; this checks the error is
 	// propagated rather than swallowed into an empty body.
@@ -37,6 +65,40 @@ func TestProcessFileRefusesAnOversizeArticle(t *testing.T) {
 	}
 	if _, _, _, err := ProcessFile(path, time.Now()); err == nil {
 		t.Error("expected an empty article to be refused")
+	}
+}
+
+func TestProcessFilePropagatesOutputDirectoryFailure(t *testing.T) {
+	parent := t.TempDir()
+	sourceDir := filepath.Join(parent, "source")
+	if err := os.Mkdir(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(sourceDir, "article.md")
+	if err := os.WriteFile(path, []byte("# Article\n\nBody."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parent, "yaml"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, _, err := ProcessFile(path, time.Now()); err == nil {
+		t.Fatal("expected the output directory error")
+	}
+}
+
+func TestProcessFilePropagatesAtomicWriteFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "article.md")
+	if err := os.WriteFile(path, []byte("# Article\n\nBody."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "article-body.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, _, err := ProcessFile(path, time.Now()); err == nil {
+		t.Fatal("expected the atomic write error")
 	}
 }
 

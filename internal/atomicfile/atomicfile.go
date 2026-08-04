@@ -33,6 +33,8 @@ var createTemp = func(dir, pattern string) (tempFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
 
+var chmod = os.Chmod
+
 // Write writes data to path via a temporary file in the same directory
 // followed by a rename, so the destination is either the old content or the
 // new one and never something in between.
@@ -64,7 +66,7 @@ func Write(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("closing %s: %w", path, err)
 	}
 	// CreateTemp always uses 0600; apply the caller's mode before publishing.
-	if err := os.Chmod(tmpName, perm); err != nil {
+	if err := chmod(tmpName, perm); err != nil {
 		return fmt.Errorf("setting mode on %s: %w", path, err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
@@ -115,7 +117,7 @@ func WriteSet(files map[string][]byte, perm os.FileMode) error {
 			cleanup()
 			return fmt.Errorf("closing %s: %w", dst, err)
 		}
-		if err := os.Chmod(tmp.Name(), perm); err != nil {
+		if err := chmod(tmp.Name(), perm); err != nil {
 			cleanup()
 			return fmt.Errorf("setting mode on %s: %w", dst, err)
 		}

@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,17 @@ func TestNoReadableText(t *testing.T) {
 	_, errText, _ := drain(t, cfg, []engine.Engine{okEngine("fake")}, Job{Sources: []string{bad}})
 	if !strings.Contains(errText, "no readable text") {
 		t.Errorf("expected no-readable-text error, got %q", errText)
+	}
+}
+
+func TestEmptyReadableSourceProducesNoTextError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "empty.txt")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRunner(testConfig(t), []engine.Engine{okEngine("fake")}, nil)
+	if err := r.run(context.Background(), Job{Sources: []string{path}}); err == nil || !strings.Contains(err.Error(), "no readable text") {
+		t.Fatalf("expected a no-readable-text error, got %v", err)
 	}
 }
 

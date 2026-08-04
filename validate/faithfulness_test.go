@@ -146,6 +146,9 @@ func TestWordBoundaryContains(t *testing.T) {
 	if !wordBoundaryContains("f1 score", "f1") {
 		t.Error("standalone term should match")
 	}
+	if wordBoundaryContains("short", "a much longer term") {
+		t.Error("a term longer than the input cannot match")
+	}
 }
 
 func TestDuplicateParagraphsMany(t *testing.T) {

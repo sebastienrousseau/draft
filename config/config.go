@@ -107,6 +107,12 @@ type Config struct {
 	Warnings []string
 }
 
+var (
+	userHomeDir = os.UserHomeDir
+	getwd       = os.Getwd
+	tempDir     = os.TempDir
+)
+
 // Load builds a Config from defaults, overlays environment variables, then
 // overlays the already-parsed flag values passed in from the caller.
 func Load(flags Flags) Config {
@@ -173,15 +179,15 @@ func Load(flags Flags) Config {
 // whatever directory the process happened to start in. Fall back to an
 // absolute path instead, and say so.
 func resolveHome(warn func(string, ...any)) string {
-	home, err := os.UserHomeDir()
+	home, err := userHomeDir()
 	if err == nil && home != "" {
 		return home
 	}
-	if wd, wdErr := os.Getwd(); wdErr == nil && wd != "" {
+	if wd, wdErr := getwd(); wdErr == nil && wd != "" {
 		warn("home directory unavailable (%v); using the working directory %s for Sources and Drafts", err, wd)
 		return wd
 	}
-	tmp := os.TempDir()
+	tmp := tempDir()
 	warn("home directory and working directory both unavailable (%v); using %s for Sources and Drafts", err, tmp)
 	return tmp
 }

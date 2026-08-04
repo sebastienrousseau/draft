@@ -4,11 +4,28 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestResolveHomeFallsBackToTemp(t *testing.T) {
+	origHome, origWD, origTemp := userHomeDir, getwd, tempDir
+	defer func() { userHomeDir, getwd, tempDir = origHome, origWD, origTemp }()
+	userHomeDir = func() (string, error) { return "", errors.New("no home") }
+	getwd = func() (string, error) { return "", errors.New("no cwd") }
+	tempDir = func() string { return "/fallback-temp" }
+	var warnings []string
+	got := resolveHome(func(format string, args ...any) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+	if got != "/fallback-temp" || len(warnings) != 1 {
+		t.Fatalf("temp fallback = %q, warnings %v", got, warnings)
+	}
+}
 
 // Load used to discard the os.UserHomeDir error, leaving HomeDir empty and
 // turning SourcesDir and DraftsDir into relative paths — so drafts were

@@ -60,3 +60,20 @@ func TestLoadTemplatesLargeContentClips(t *testing.T) {
 		t.Errorf("large template should be clipped near the char budget, len=%d", len(got))
 	}
 }
+
+func TestLoadTemplatesSkipsUnreadableAndHeadingOnlyFiles(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "Drop", "Templates")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "heading.md"), []byte("# Heading only\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "broken.md")); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadTemplates(config.Config{HomeDir: home}); got != "" {
+		t.Fatalf("empty and unreadable templates should be skipped, got %q", got)
+	}
+}

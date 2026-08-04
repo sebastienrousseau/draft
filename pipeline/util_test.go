@@ -6,6 +6,7 @@ package pipeline
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/sebastienrousseau/draft/config"
@@ -84,6 +85,16 @@ func TestShortPath(t *testing.T) {
 	}
 	if got := shortPath(cfg, "/other/x.md"); got != "/other/x.md" {
 		t.Errorf("non-home path should be unchanged, got %q", got)
+	}
+}
+
+func TestEnforceStyleSkipsEmptyReplacement(t *testing.T) {
+	original := styleReplacers
+	styleReplacers = []styleReplacer{{re: regexp.MustCompile("anything"), with: ""}}
+	t.Cleanup(func() { styleReplacers = original })
+
+	if got := enforceStyle("anything"); got != "anything" {
+		t.Fatalf("enforceStyle changed text for an empty replacement: %q", got)
 	}
 }
 

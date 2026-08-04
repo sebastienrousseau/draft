@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -211,6 +212,17 @@ func TestEnsureOllamaRunning(t *testing.T) {
 	withAvailable(map[string]bool{"ollama": false}, func() {
 		if err := EnsureOllamaRunning("http://127.0.0.1:59998"); err == nil {
 			t.Error("EnsureOllamaRunning without binary should return error")
+		}
+	})
+}
+
+func TestOllamaDefaultHostAndStartFailure(t *testing.T) {
+	_ = IsOllamaRunning("")
+
+	withAvailable(map[string]bool{"ollama": true}, func() {
+		t.Setenv("PATH", t.TempDir())
+		if err := EnsureOllamaRunning("http://127.0.0.1:1"); err == nil || !strings.Contains(err.Error(), "failed to start") {
+			t.Fatalf("missing executable start error = %v", err)
 		}
 	})
 }

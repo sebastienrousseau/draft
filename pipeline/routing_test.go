@@ -115,6 +115,13 @@ func TestNewRunnerSharesOneCursorAcrossKinds(t *testing.T) {
 	}
 }
 
+func TestUnknownRequestKindUsesWriteChain(t *testing.T) {
+	r := NewRunner(config.Config{}, []engine.Engine{&recorder{name: "writer"}}, nil)
+	if r.chainFor(engine.Kind(99)) != r.chainFor(engine.KindWrite) {
+		t.Fatal("an unknown request kind did not fall back to the write chain")
+	}
+}
+
 // A Runner reused across a queue keeps the backend it settled on, so a dead
 // provider is tried once for the whole queue rather than once per paper.
 func TestFallbackIsStickyAcrossAQueue(t *testing.T) {

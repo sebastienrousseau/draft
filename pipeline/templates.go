@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	maxTemplateChars = 1000
-	maxTemplateFiles = 2
+	maxTemplateChars        = 1000
+	maxTemplateFiles        = 2
+	maxTemplateExcerptChars = maxTemplateChars / maxTemplateFiles
 )
 
 // templateHeadingLine matches a Markdown heading in a user template, dropped from
@@ -50,7 +51,6 @@ func loadTemplates(cfg config.Config) string {
 	}
 
 	var parts []string
-	used := 0
 	for _, f := range files {
 		b, err := os.ReadFile(f)
 		if err != nil {
@@ -64,25 +64,14 @@ func loadTemplates(cfg config.Config) string {
 		if text == "" {
 			continue
 		}
-		limit := 500
-		if rem := maxTemplateChars - used; rem < limit {
-			limit = rem
-		}
-		if limit <= 0 {
-			break
-		}
 		excerpt := text
-		if len(excerpt) > limit {
-			excerpt = excerpt[:limit]
+		if len(excerpt) > maxTemplateExcerptChars {
+			excerpt = excerpt[:maxTemplateExcerptChars]
 		}
 		// Only the prose excerpt is shown, as a tone sample. A heading outline used
 		// to be included, but a literal model copied those headings verbatim into
 		// unrelated drafts; heading structure comes from the OUTPUT SKELETON instead.
 		parts = append(parts, "## Template example: "+filepath.Base(f)+"\n\n### Style sample\n"+excerpt)
-		used += len(excerpt)
-		if used >= maxTemplateChars {
-			break
-		}
 	}
 	return strings.Join(parts, "\n\n---\n\n")
 }
