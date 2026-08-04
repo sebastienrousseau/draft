@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sebastienrousseau/draft/config"
 )
@@ -155,14 +158,39 @@ func TestIsAvailable(t *testing.T) {
 }
 
 func TestNetworkAndOllamaHelpers(t *testing.T) {
-	_ = IsOnline() // exercise real call
+	origDial := dialTimeout
+	defer func() { dialTimeout = origDial }()
 
-	orig := IsOnline
-	IsOnline = func() bool { return false }
-	defer func() { IsOnline = orig }()
+	newConn := func() net.Conn {
+		client, server := net.Pipe()
+		_ = server.Close()
+		return client
+	}
 
+	dialTimeout = func(_, _ string, _ time.Duration) (net.Conn, error) {
+		return newConn(), nil
+	}
+	if !IsOnline() {
+		t.Error("a successful primary probe should report online")
+	}
+
+	probes := 0
+	dialTimeout = func(_, _ string, _ time.Duration) (net.Conn, error) {
+		probes++
+		if probes == 1 {
+			return nil, errors.New("primary unavailable")
+		}
+		return newConn(), nil
+	}
+	if !IsOnline() || probes != 2 {
+		t.Errorf("fallback probe should report online after two attempts, got %d", probes)
+	}
+
+	dialTimeout = func(_, _ string, _ time.Duration) (net.Conn, error) {
+		return nil, errors.New("offline")
+	}
 	if IsOnline() {
-		t.Error("mocked IsOnline should return false")
+		t.Error("failed primary and fallback probes should report offline")
 	}
 
 	if IsOllamaRunning("http://127.0.0.1:59999") {

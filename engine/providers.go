@@ -137,15 +137,16 @@ func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
 	return Provider{}, false
 }
 
+var dialTimeout = net.DialTimeout
+
 // IsOnline probes public DNS endpoints with a short timeout to check for network connectivity.
 var IsOnline = func() bool {
-	dialer := &net.Dialer{Timeout: 300 * time.Millisecond}
-	conn, err := dialer.Dial("tcp", "1.1.1.1:53")
+	conn, err := dialTimeout("tcp", "1.1.1.1:53", 300*time.Millisecond)
 	if err == nil {
 		_ = conn.Close()
 		return true
 	}
-	conn2, err2 := dialer.Dial("tcp", "8.8.8.8:53")
+	conn2, err2 := dialTimeout("tcp", "8.8.8.8:53", 300*time.Millisecond)
 	if err2 == nil {
 		_ = conn2.Close()
 		return true
