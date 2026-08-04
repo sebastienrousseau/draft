@@ -121,6 +121,7 @@ type Model struct {
 	selectingEngine bool
 	engineChoices   []engineChoice
 	engineCursor    int
+	online          bool
 
 	width, height int
 	spinner       spinner.Model
@@ -179,6 +180,7 @@ func New(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runn
 		selectingEngine: selecting,
 		engineChoices:   choices,
 		engineCursor:    initialCursor,
+		online:          online,
 	}
 	m.resetPhases()
 	if runner != nil {

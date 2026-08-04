@@ -29,6 +29,10 @@ func (f fakeEngine) Generate(context.Context, engine.Request) (engine.Result, er
 
 func newModel(t *testing.T, jobs int) Model {
 	t.Helper()
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
 	js := make([]pipeline.Job, jobs)
 	for i := range js {
 		js[i] = pipeline.Job{Sources: []string{"/tmp/x.pdf"}}

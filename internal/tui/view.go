@@ -467,7 +467,7 @@ func (m Model) renderEngineSelectView(width int) string {
 	b.WriteString(m.renderHeader(width))
 	b.WriteString("\n")
 
-	online := engine.IsOnline()
+	online := m.online
 	statusHeader := "Select LLM Provider / Model Engine:"
 	if !online {
 		statusHeader += "  " + errStyle.Render("[Offline - Zero Network]")
