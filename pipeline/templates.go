@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	maxTemplateChars = 3000
+	maxTemplateChars = 1000
 	maxTemplateFiles = 2
 )
 
@@ -64,7 +64,7 @@ func loadTemplates(cfg config.Config) string {
 		if text == "" {
 			continue
 		}
-		limit := 1500
+		limit := 500
 		if rem := maxTemplateChars - used; rem < limit {
 			limit = rem
 		}

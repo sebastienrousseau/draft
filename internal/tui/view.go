@@ -493,11 +493,12 @@ func (m Model) renderEngineSelectView(width int) string {
 				statusBadge = okStyle.Render("[auto]")
 			}
 		case choice.Name == "ollama":
-			if engine.IsOllamaRunning(m.cfg.OllamaHost) {
+			switch {
+			case engine.IsOllamaRunning(m.cfg.OllamaHost):
 				statusBadge = okStyle.Render("[running / ready]")
-			} else if choice.Installed {
+			case choice.Installed:
 				statusBadge = subtleStyle.Render("[local / auto-start]")
-			} else {
+			default:
 				statusBadge = mutedStyle.Render("[not installed]")
 			}
 		case choice.Installed:

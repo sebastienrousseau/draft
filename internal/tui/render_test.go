@@ -4,6 +4,8 @@
 package tui
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -123,6 +125,10 @@ func TestEnterWithEmptyInputIsNoop(t *testing.T) {
 }
 
 func TestRenderEngineSelectViewOnlineAndOffline(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
 	m := newModel(t, 1)
 	m.selectingEngine = true
 	m = upd(m, tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -132,12 +138,45 @@ func TestRenderEngineSelectViewOnlineAndOffline(t *testing.T) {
 		t.Errorf("online view missing expected content: %s", vOnline)
 	}
 
-	orig := engine.IsOnline
 	engine.IsOnline = func() bool { return false }
-	defer func() { engine.IsOnline = orig }()
 
 	vOffline := m.View()
 	if !strings.Contains(vOffline, "[Offline - Zero Network]") {
 		t.Errorf("offline view missing offline header: %s", vOffline)
+	}
+}
+
+func TestRenderEngineSelectViewOllamaBadges(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return false }
+	defer func() { engine.IsOnline = orig }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	m := newModel(t, 1)
+	m.selectingEngine = true
+	m.cfg.OllamaHost = server.URL
+	m.engineChoices = []engineChoice{{Name: "ollama", Installed: true}}
+	if view := m.View(); !strings.Contains(view, "[running / ready]") {
+		t.Errorf("running Ollama badge missing: %s", view)
+	}
+
+	m.cfg.OllamaHost = "http://127.0.0.1:1"
+	m.engineChoices[0].Installed = true
+	if view := m.View(); !strings.Contains(view, "[local / auto-start]") {
+		t.Errorf("Ollama auto-start badge missing: %s", view)
+	}
+
+	m.engineChoices[0].Installed = false
+	if view := m.View(); !strings.Contains(view, "[not installed]") {
+		t.Errorf("missing Ollama badge not rendered: %s", view)
+	}
+
+	m.engineChoices = []engineChoice{{Name: "missing", Installed: false}}
+	if view := m.View(); !strings.Contains(view, "[not found]") {
+		t.Errorf("missing provider badge not rendered: %s", view)
 	}
 }

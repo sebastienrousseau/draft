@@ -278,6 +278,10 @@ func TestHandleKeyUpAndPageUp(t *testing.T) {
 }
 
 func TestEngineSelectionInteractive(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
 	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
 	cfg := config.Config{HomeDir: "/home/seb"}
 	ctx, cancel := context.WithCancel(context.Background())

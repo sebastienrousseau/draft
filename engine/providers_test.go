@@ -6,6 +6,9 @@ package engine
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sebastienrousseau/draft/config"
@@ -144,6 +147,9 @@ func TestIsAvailable(t *testing.T) {
 		if IsAvailable("codex") {
 			t.Error("codex should not be available when not installed")
 		}
+		if IsAvailable("unknown") {
+			t.Error("unknown providers should not be available")
+		}
 	})
 }
 
@@ -178,6 +184,32 @@ func TestEnsureOllamaRunning(t *testing.T) {
 			t.Error("EnsureOllamaRunning without binary should return error")
 		}
 	})
+}
+
+func TestEnsureOllamaRunningStartsServer(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	binDir := t.TempDir()
+	ollamaPath := filepath.Join(binDir, "ollama")
+	if err := os.WriteFile(ollamaPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := EnsureOllamaRunning(server.URL); err != nil {
+		t.Fatalf("EnsureOllamaRunning should recover after starting Ollama: %v", err)
+	}
+	if requests.Load() < 2 {
+		t.Fatalf("expected readiness to be checked again, got %d request(s)", requests.Load())
+	}
 }
 
 func names(engs []Engine) []string {
