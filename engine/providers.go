@@ -3,7 +3,14 @@
 
 package engine
 
-import "os/exec"
+import (
+	"fmt"
+	"net"
+	"net/http"
+	"os/exec"
+	"strings"
+	"time"
+)
 
 // Provider describes how to drive one token-free AI coding-agent CLI in headless
 // mode. Every provider authenticates through its own already-logged-in session,
@@ -101,6 +108,20 @@ var available = func(bin string) bool {
 	return err == nil
 }
 
+// IsAvailable reports whether the provider binary for name (or ollama) is installed on PATH.
+func IsAvailable(name string) bool {
+	if name == "auto" {
+		return true
+	}
+	if name == "ollama" {
+		return available("ollama")
+	}
+	if p, ok := LookupProvider(name); ok {
+		return available(p.Bin)
+	}
+	return false
+}
+
 // FirstAvailableProvider returns the first registered provider whose CLI is
 // installed, in preference order. Experimental providers are considered only
 // when includeExperimental is true.
@@ -114,4 +135,59 @@ func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
 		}
 	}
 	return Provider{}, false
+}
+
+var dialTimeout = net.DialTimeout
+
+// IsOnline probes public DNS endpoints with a short timeout to check for network connectivity.
+var IsOnline = func() bool {
+	conn, err := dialTimeout("tcp", "1.1.1.1:53", 300*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		return true
+	}
+	conn2, err2 := dialTimeout("tcp", "8.8.8.8:53", 300*time.Millisecond)
+	if err2 == nil {
+		_ = conn2.Close()
+		return true
+	}
+	return false
+}
+
+// IsOllamaRunning reports whether a local Ollama server is responding at host.
+func IsOllamaRunning(host string) bool {
+	if host == "" {
+		host = "http://127.0.0.1:11434"
+	}
+	url := strings.TrimRight(host, "/") + "/api/tags"
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 500
+}
+
+// EnsureOllamaRunning checks if Ollama is running at host. If not, it attempts to launch
+// `ollama serve` in the background and waits up to 3 seconds for it to become responsive.
+func EnsureOllamaRunning(host string) error {
+	if IsOllamaRunning(host) {
+		return nil
+	}
+	if !available("ollama") {
+		return fmt.Errorf("ollama is not installed on PATH; please install Ollama from https://ollama.com")
+	}
+	cmd := exec.Command("ollama", "serve")
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start 'ollama serve': %w", err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(250 * time.Millisecond)
+		if IsOllamaRunning(host) {
+			return nil
+		}
+	}
+	return fmt.Errorf("started 'ollama serve' but server at %s did not respond within 3 seconds", host)
 }

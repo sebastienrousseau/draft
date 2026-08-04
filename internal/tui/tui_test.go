@@ -29,6 +29,10 @@ func (f fakeEngine) Generate(context.Context, engine.Request) (engine.Result, er
 
 func newModel(t *testing.T, jobs int) Model {
 	t.Helper()
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
 	js := make([]pipeline.Job, jobs)
 	for i := range js {
 		js[i] = pipeline.Job{Sources: []string{"/tmp/x.pdf"}}
@@ -274,5 +278,99 @@ func TestHandleKeyUpAndPageUp(t *testing.T) {
 	m = upd(m, tea.KeyMsg{Type: tea.KeyPgUp})
 	if m.scroll >= 50 {
 		t.Error("up/pgup should decrease scroll")
+	}
+}
+
+func TestEngineSelectionInteractive(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
+	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	cfg := config.Config{HomeDir: "/home/seb"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := New(ctx, cancel, cfg, pipeline.NewRunner(cfg, nil, nil), js, true)
+	if !m.selectingEngine {
+		t.Error("expected selectingEngine to be true when selectEngine flag is passed")
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Select LLM Provider") {
+		t.Errorf("view missing selection title: %s", view)
+	}
+
+	// Navigate down
+	m = upd(m, tea.KeyMsg{Type: tea.KeyDown})
+	if m.engineCursor != 1 {
+		t.Errorf("expected cursor 1, got %d", m.engineCursor)
+	}
+
+	// Press enter to confirm selection
+	m = upd(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.selectingEngine {
+		t.Error("expected selectingEngine to become false after enter")
+	}
+	if m.engineName == "" {
+		t.Error("expected engineName to be populated after confirmation")
+	}
+}
+
+func TestEngineSelectionInitNavigationAndCancel(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return true }
+	defer func() { engine.IsOnline = orig }()
+
+	ctx, cancelContext := context.WithCancel(context.Background())
+	canceled := false
+	cancel := func() {
+		canceled = true
+		cancelContext()
+	}
+	cfg := config.Config{HomeDir: "/home/seb"}
+	jobs := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	m := New(ctx, cancel, cfg, pipeline.NewRunner(cfg, nil, nil), jobs, true)
+	if cmd := m.Init(); cmd == nil {
+		t.Fatal("selection mode should initialize its animation commands")
+	}
+
+	m = upd(m, tea.KeyMsg{Type: tea.KeyUp})
+	if m.engineCursor != len(m.engineChoices)-1 {
+		t.Errorf("up from the first choice should wrap to the last, got %d", m.engineCursor)
+	}
+	m = upd(m, tea.KeyMsg{Type: tea.KeyDown})
+	if m.engineCursor != 0 {
+		t.Errorf("down from the last choice should wrap to the first, got %d", m.engineCursor)
+	}
+
+	m = upd(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if !canceled {
+		t.Error("escaping engine selection should cancel the run")
+	}
+}
+
+func TestEngineSelectionOfflineDefault(t *testing.T) {
+	orig := engine.IsOnline
+	engine.IsOnline = func() bool { return false }
+	defer func() { engine.IsOnline = orig }()
+
+	js := []pipeline.Job{{Sources: []string{"/tmp/x.pdf"}}}
+	cfg := config.Config{HomeDir: "/home/seb"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := New(ctx, cancel, cfg, pipeline.NewRunner(cfg, nil, nil), js, true)
+	if m.engineChoices[m.engineCursor].Name != "ollama" {
+		t.Errorf("offline mode should default cursor to ollama, got %s", m.engineChoices[m.engineCursor].Name)
+	}
+
+	// Confirm selecting ollama while offline
+	m = upd(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if m.selectingEngine {
+		t.Error("expected selectingEngine to become false after enter on ollama")
+	}
+	if m.engineName != "ollama" {
+		t.Errorf("expected engineName to be ollama, got %s", m.engineName)
 	}
 }

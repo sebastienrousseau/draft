@@ -4,7 +4,16 @@
 package engine
 
 import (
+	"errors"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sebastienrousseau/draft/config"
 )
@@ -125,6 +134,114 @@ func TestResolveModel(t *testing.T) {
 	ollama := NewOllama(config.Config{OllamaModel: "gemma3:4b"})
 	if got := ResolveModel(config.Config{OllamaModel: "gemma3:4b"}, ollama); got != "gemma3:4b" {
 		t.Errorf("ollama model = %q, want gemma3:4b", got)
+	}
+}
+
+func TestIsAvailable(t *testing.T) {
+	if !IsAvailable("auto") {
+		t.Error("auto should always be available")
+	}
+	withAvailable(map[string]bool{"claude": true, "ollama": true}, func() {
+		if !IsAvailable("claude") {
+			t.Error("claude should be available when installed")
+		}
+		if !IsAvailable("ollama") {
+			t.Error("ollama should be available when installed")
+		}
+		if IsAvailable("codex") {
+			t.Error("codex should not be available when not installed")
+		}
+		if IsAvailable("unknown") {
+			t.Error("unknown providers should not be available")
+		}
+	})
+}
+
+func TestNetworkAndOllamaHelpers(t *testing.T) {
+	origDial := dialTimeout
+	defer func() { dialTimeout = origDial }()
+
+	newConn := func() net.Conn {
+		client, server := net.Pipe()
+		_ = server.Close()
+		return client
+	}
+
+	dialTimeout = func(_, _ string, _ time.Duration) (net.Conn, error) {
+		return newConn(), nil
+	}
+	if !IsOnline() {
+		t.Error("a successful primary probe should report online")
+	}
+
+	probes := 0
+	dialTimeout = func(_, _ string, _ time.Duration) (net.Conn, error) {
+		probes++
+		if probes == 1 {
+			return nil, errors.New("primary unavailable")
+		}
+		return newConn(), nil
+	}
+	if !IsOnline() || probes != 2 {
+		t.Errorf("fallback probe should report online after two attempts, got %d", probes)
+	}
+
+	dialTimeout = func(_, _ string, _ time.Duration) (net.Conn, error) {
+		return nil, errors.New("offline")
+	}
+	if IsOnline() {
+		t.Error("failed primary and fallback probes should report offline")
+	}
+
+	if IsOllamaRunning("http://127.0.0.1:59999") {
+		t.Error("unreachable host should return false for IsOllamaRunning")
+	}
+}
+
+func TestEnsureOllamaRunning(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	if err := EnsureOllamaRunning(ts.URL); err != nil {
+		t.Errorf("EnsureOllamaRunning on running host failed: %v", err)
+	}
+
+	withAvailable(map[string]bool{"ollama": false}, func() {
+		if err := EnsureOllamaRunning("http://127.0.0.1:59998"); err == nil {
+			t.Error("EnsureOllamaRunning without binary should return error")
+		}
+	})
+}
+
+func TestEnsureOllamaRunningStartsServer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake Ollama process is a POSIX shell script")
+	}
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	binDir := t.TempDir()
+	ollamaPath := filepath.Join(binDir, "ollama")
+	if err := os.WriteFile(ollamaPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := EnsureOllamaRunning(server.URL); err != nil {
+		t.Fatalf("EnsureOllamaRunning should recover after starting Ollama: %v", err)
+	}
+	if requests.Load() < 2 {
+		t.Fatalf("expected readiness to be checked again, got %d request(s)", requests.Load())
 	}
 }
 

@@ -172,7 +172,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	if err := runTUI(ctx, stop, cfg, runner, jobs); err != nil {
+	selectEngine := (flags.Engine == "")
+	if err := runTUI(ctx, stop, cfg, runner, jobs, selectEngine); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
@@ -182,11 +183,11 @@ func run(argv []string, stdout, stderr io.Writer) int {
 // runTUI launches the full-screen dashboard. It is separated from main so the
 // job-planning logic around it stays testable. cancel is invoked when the user
 // quits so background pipeline work stops promptly.
-func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job) error {
+func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job, selectEngine bool) error {
 	defer cancel()
 	tui.Version = version
-	m := tui.New(ctx, cancel, cfg, runner, jobs)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	m := tui.New(ctx, cancel, cfg, runner, jobs, selectEngine)
+	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
 }
