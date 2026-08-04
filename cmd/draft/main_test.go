@@ -336,6 +336,23 @@ func TestPrintPlanReportsResumableLedger(t *testing.T) {
 	}
 }
 
+func TestRunDryRunLabelsMultipleJobs(t *testing.T) {
+	cfg, first := tmpSource(t, "first.txt")
+	second := filepath.Join(cfg.SourcesDir, "second.txt")
+	if err := os.WriteFile(second, []byte("More research with a score of 0.7."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	jobs := []pipeline.Job{{Sources: []string{first}}, {Sources: []string{second}}}
+	var out strings.Builder
+	r := pipeline.NewRunner(cfg, []engine.Engine{stubEngine{}}, nil)
+	if failures := runDryRun(context.Background(), cfg, r, jobs, &out, io.Discard); failures != 0 {
+		t.Fatalf("runDryRun returned %d failures", failures)
+	}
+	if !strings.Contains(out.String(), "[1/2]") || !strings.Contains(out.String(), "[2/2]") {
+		t.Fatalf("multi-job labels missing: %s", out.String())
+	}
+}
+
 func TestCompletionScripts(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		var out strings.Builder
