@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 
@@ -187,6 +188,10 @@ func TestEnsureOllamaRunning(t *testing.T) {
 }
 
 func TestEnsureOllamaRunningStartsServer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake Ollama process is a POSIX shell script")
+	}
+
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if requests.Add(1) == 1 {
