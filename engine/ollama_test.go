@@ -6,10 +6,13 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sebastienrousseau/draft/config"
 )
@@ -128,5 +131,37 @@ func TestOllamaBadJSON(t *testing.T) {
 	})
 	if _, err := o.Generate(context.Background(), Request{}); err == nil {
 		t.Error("malformed stream line should error")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestOllamaTimeoutRequestAndStreamReadErrors(t *testing.T) {
+	o := ollamaFor(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"response":"ok","done":true}` + "\n"))
+	})
+	o.timeout = time.Second
+	if _, err := o.Generate(context.Background(), Request{}); err != nil {
+		t.Fatalf("bounded Ollama request failed: %v", err)
+	}
+
+	o.host = "://invalid"
+	if _, err := o.Generate(context.Background(), Request{}); err == nil {
+		t.Error("invalid host should fail request construction")
+	}
+
+	o.host = "http://ollama.test"
+	o.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(&errReader{data: `{"response":"partial"}`}),
+			Header:     make(http.Header),
+		}, nil
+	})}
+	res, err := o.Generate(context.Background(), Request{})
+	if !errors.Is(err, errBrokenPipe) || res.Text != "partial" {
+		t.Fatalf("stream read failure = (%q, %v)", res.Text, err)
 	}
 }

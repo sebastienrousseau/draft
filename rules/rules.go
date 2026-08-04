@@ -19,26 +19,16 @@ type WordForm struct {
 // WordForms returns the base banned word and its common inflections — plural or
 // third-person ("s"), past ("ed"), and gerund ("ing") — so the validator and the
 // style repair catch "leverages" and "leveraging", not only "leverage". Duplicate
-// forms are removed. It intentionally omits adverbial "-ly": the replacements do
-// not carry adverb forms, so those are handled as a separate concern.
+// forms are returned in a stable order. It intentionally omits adverbial "-ly":
+// the replacements do not carry adverb forms, so those are handled separately.
 func WordForms(w string) []WordForm {
-	candidates := []WordForm{
+	return []WordForm{
 		{w, "base"},
 		{InflectLike(w, "s"), "s"},
 		{InflectLike(w, "ed"), "ed"},
 		{InflectLike(w, "ing"), "ing"},
 		{InflectLike(w, "ly"), "ly"},
 	}
-	seen := make(map[string]bool, len(candidates))
-	out := make([]WordForm, 0, len(candidates))
-	for _, f := range candidates {
-		if seen[f.Form] {
-			continue
-		}
-		seen[f.Form] = true
-		out = append(out, f)
-	}
-	return out
 }
 
 // InflectLike inflects word to the given kind using regular English spelling

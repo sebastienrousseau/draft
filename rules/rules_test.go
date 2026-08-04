@@ -51,6 +51,9 @@ func TestWordForms(t *testing.T) {
 			t.Error("empty form produced")
 		}
 	}
+	if !isVowel('A') || isVowel('z') {
+		t.Error("isVowel should recognize vowels case-insensitively")
+	}
 }
 
 func TestMetricForms(t *testing.T) {

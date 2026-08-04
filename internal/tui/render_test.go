@@ -79,6 +79,10 @@ func TestLogoDisabledByEnv(t *testing.T) {
 
 func TestScrollViewShortAndTall(t *testing.T) {
 	m := newModel(t, 1)
+	m.height = 0
+	if got := m.scrollView("unchanged"); got != "unchanged" {
+		t.Errorf("unsized scroll view changed content: %q", got)
+	}
 	// Tall terminal: everything fits, no scroll footer.
 	m = upd(m, tea.WindowSizeMsg{Width: 120, Height: 200})
 	if strings.Contains(m.View(), "scroll ") {
@@ -89,6 +93,29 @@ func TestScrollViewShortAndTall(t *testing.T) {
 	m = upd(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if !strings.Contains(m.View(), "scroll ") {
 		t.Error("short view should show a scroll footer")
+	}
+}
+
+func TestNarrowActivityAndCompactSelection(t *testing.T) {
+	m := newModel(t, 1)
+	m.engineName = strings.Repeat("provider", 8)
+	if got := m.activityLine(3); len([]rune(got)) > 3 {
+		t.Errorf("activity line exceeds its budget: %q", got)
+	}
+	if header := m.renderHeader(5); !strings.Contains(header, brand.Wordmark) {
+		t.Errorf("narrow header should retain the wordmark: %q", header)
+	}
+
+	m.selectingEngine = true
+	m.height = 20
+	m.width = 80
+	if view := m.renderEngineSelectView(76); view == "" {
+		t.Error("compact selection view should render")
+	}
+
+	rich := "# T\n<aside\nExecutive Summary\n## a\n## b\n## c\n## d\n## e"
+	if got := generationPercent(rich); got != 0.94 {
+		t.Errorf("generation progress should cap at 0.94, got %v", got)
 	}
 }
 

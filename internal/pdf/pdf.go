@@ -31,9 +31,10 @@ import (
 const MaxSectionChars = 4500
 
 var (
-	multiBlank  = regexp.MustCompile(`\n{4,}`)
-	stopSection = regexp.MustCompile(`(?im)^\s*(?:#{1,6}\s+)?(?:references|bibliography|acknowledge?ments|appendix)\b`)
-	sectionHead = regexp.MustCompile(`\n(?:(?:Abstract|Introduction|Related Work|Method|Methods|Experiments|Results|Discussion|Limitations|Conclusion|References)\b)`)
+	multiBlank      = regexp.MustCompile(`\n{4,}`)
+	stopSection     = regexp.MustCompile(`(?im)^\s*(?:#{1,6}\s+)?(?:references|bibliography|acknowledge?ments|appendix)\b`)
+	sectionHead     = regexp.MustCompile(`\n(?:(?:Abstract|Introduction|Related Work|Method|Methods|Experiments|Results|Discussion|Limitations|Conclusion|References)\b)`)
+	operatingSystem = runtime.GOOS
 )
 
 // MaxSourceBytes caps how much of a single source file is read. Sources are
@@ -79,7 +80,7 @@ func Extract(ctx context.Context, path string) (string, error) {
 	case ".docx":
 		// textutil is macOS-only; elsewhere DOCX is unsupported rather than a
 		// confusing "command not found".
-		if runtime.GOOS != "darwin" {
+		if operatingSystem != "darwin" {
 			return "", fmt.Errorf("DOCX extraction requires macOS (textutil); convert to PDF or Markdown first")
 		}
 		out, err := runTool(ctx, 120*time.Second, "textutil", "-convert", "txt", "-stdout", path)

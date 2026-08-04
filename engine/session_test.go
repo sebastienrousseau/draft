@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sebastienrousseau/draft/config"
 )
@@ -24,6 +25,8 @@ func TestHelperProcess(t *testing.T) {
 	switch os.Getenv("HELPER_MODE") {
 	case "fail":
 		os.Stderr.WriteString("boom: not logged in\nsecond line\n")
+		os.Exit(3)
+	case "fail-empty":
 		os.Exit(3)
 	case "echo-args":
 		// Print the arguments after the "--" separator so tests can assert them.
@@ -105,6 +108,21 @@ func TestSessionGenerateError(t *testing.T) {
 		// Only the first stderr line is surfaced, prefixed with the provider.
 		if !strings.Contains(err.Error(), "codex: boom") {
 			t.Errorf("error should carry provider + first stderr line, got %q", err)
+		}
+	})
+}
+
+func TestSessionTimeoutAndEmptyStderr(t *testing.T) {
+	withExec("default", func() {
+		s := &Session{provider: Provider{Name: "test", Bin: "test"}, timeout: 10 * time.Second}
+		if _, err := s.Generate(context.Background(), Request{Prompt: "x"}); err != nil {
+			t.Fatalf("bounded successful session failed: %v", err)
+		}
+	})
+	withExec("fail-empty", func() {
+		s := &Session{provider: Provider{Name: "test", Bin: "test"}}
+		if _, err := s.Generate(context.Background(), Request{Prompt: "x"}); err == nil || !strings.Contains(err.Error(), "exit status") {
+			t.Fatalf("empty stderr should fall back to the process error, got %v", err)
 		}
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -177,6 +178,12 @@ func TestSpinnerAndProgressTicks(t *testing.T) {
 	m := newModel(t, 1)
 	m = upd(m, spinner.TickMsg{})
 	m = upd(m, progress.FrameMsg{})
+	m = upd(m, pipeline.WarnEvent("fallback active"))
+	if len(m.logs) == 0 || !strings.HasPrefix(m.logs[len(m.logs)-1], "! ") {
+		t.Error("warnings should be marked in the activity log")
+	}
+	m.allDone = true
+	m = upd(m, progress.FrameMsg{})
 	_ = m.View()
 }
 
@@ -258,6 +265,18 @@ func TestStartJobOutOfRange(t *testing.T) {
 	m := newModel(t, 1)
 	if cmd := m.startJob(99); cmd != nil {
 		t.Error("out-of-range job index should return nil")
+	}
+	if msg := m.startJob(0)(); msg != nil {
+		t.Errorf("start command should launch asynchronously, got %v", msg)
+	}
+}
+
+func TestPreviewTailBackstopPreservesUTF8(t *testing.T) {
+	m := newModel(t, 1)
+	m.tail = append([]byte(strings.Repeat("x", previewTailBytes-1)), []byte("éé")...)
+	m.trimTail()
+	if len(m.tail) > previewTailBytes || !utf8.Valid(m.tail) {
+		t.Fatalf("trimmed preview must be bounded valid UTF-8: len=%d valid=%v", len(m.tail), utf8.Valid(m.tail))
 	}
 }
 
@@ -343,6 +362,12 @@ func TestEngineSelectionInitNavigationAndCancel(t *testing.T) {
 	if m.engineCursor != 0 {
 		t.Errorf("down from the last choice should wrap to the first, got %d", m.engineCursor)
 	}
+	m.engineCursor = 1
+	m = upd(m, tea.KeyMsg{Type: tea.KeyUp})
+	if m.engineCursor != 0 {
+		t.Errorf("up should move to the previous choice, got %d", m.engineCursor)
+	}
+	m = upd(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
 
 	m = upd(m, tea.KeyMsg{Type: tea.KeyEsc})
 	if !canceled {

@@ -239,15 +239,10 @@ func duplicateParagraphs(article string) []string {
 	}
 
 	var dups []string
-	flagged := map[int]bool{}
 	for j := range entries {
-		if flagged[j] {
-			continue
-		}
 		for i := 0; i < j; i++ {
 			if jaccard(entries[j].shing, entries[i].shing) >= duplicateThreshold {
 				dups = append(dups, snippet(entries[j].text, 70))
-				flagged[j] = true
 				break
 			}
 		}
@@ -326,9 +321,6 @@ func jaccard(a, b map[string]bool) float64 {
 		}
 	}
 	union := len(a) + len(b) - inter
-	if union == 0 {
-		return 0
-	}
 	return float64(inter) / float64(union)
 }
 

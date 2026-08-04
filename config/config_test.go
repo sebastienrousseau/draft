@@ -38,6 +38,16 @@ func TestFlagsBeatEnv(t *testing.T) {
 	}
 }
 
+func TestRemainingFlagsBeatEnvironment(t *testing.T) {
+	t.Setenv("DRAFT_EXTRACT_ENGINE", "env-extract")
+	t.Setenv("DRAFT_WRITE_ENGINE", "env-write")
+	t.Setenv("DRAFT_NUM_PREDICT", "2048")
+	c := Load(Flags{ExtractEngine: "flag-extract", WriteEngine: "flag-write", PredictLength: 4096})
+	if c.ExtractEngine != "flag-extract" || c.WriteEngine != "flag-write" || c.PredictLength != 4096 {
+		t.Fatalf("remaining flag precedence failed: %+v", c)
+	}
+}
+
 func TestEnvBeatsDefault(t *testing.T) {
 	t.Setenv("DRAFT_ENGINE", "grok")
 	t.Setenv("DRAFT_MODEL", "custom-ollama")

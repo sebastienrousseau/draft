@@ -39,8 +39,15 @@ import (
 // is how v0.0.22 once shipped mislabelled.
 var version = buildVersion()
 
+var (
+	readBuildInfo = debug.ReadBuildInfo
+	runTeaProgram = func(m tea.Model, opts ...tea.ProgramOption) (tea.Model, error) {
+		return tea.NewProgram(m, opts...).Run()
+	}
+)
+
 func buildVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
+	if info, ok := readBuildInfo(); ok {
 		if v := info.Main.Version; v != "" && v != "(devel)" {
 			return strings.TrimPrefix(v, "v")
 		}
@@ -187,8 +194,7 @@ func runTUI(ctx context.Context, cancel context.CancelFunc, cfg config.Config, r
 	defer cancel()
 	tui.Version = version
 	m := tui.New(ctx, cancel, cfg, runner, jobs, selectEngine)
-	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithAltScreen(), tea.WithMouseCellMotion())
-	_, err := p.Run()
+	_, err := runTeaProgram(m, tea.WithContext(ctx), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	return err
 }
 

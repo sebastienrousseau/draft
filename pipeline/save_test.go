@@ -5,6 +5,7 @@ package pipeline
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -114,6 +115,42 @@ func TestSaveFailsWhenTheOutputTreeIsUnwritable(t *testing.T) {
 		t.Error("expected save to fail on an unwritable source directory")
 	} else if errors.Is(err, os.ErrExist) {
 		t.Errorf("a permission failure must not be mistaken for a name collision: %v", err)
+	}
+}
+
+func TestSavePropagatesOutputDirectoryCreationFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(path, []byte("file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRunner(testConfig(t), nil, nil)
+	if _, _, err := r.save(path, validArticle(".")); err == nil {
+		t.Fatal("expected output directory creation to fail")
+	}
+}
+
+func TestSaveStopsAfterBoundedFilenameSearch(t *testing.T) {
+	outputDir := t.TempDir()
+	yamlDir := filepath.Join(outputDir, "yaml")
+	if err := os.MkdirAll(yamlDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := validArticle(".")
+	base := datedStem(t, body)
+	for i := 1; i <= maxStemAttempts; i++ {
+		stem := base
+		if i > 1 {
+			stem = fmt.Sprintf("%s-%d", base, i)
+		}
+		path := filepath.Join(yamlDir, stem+"-frontmatter.yaml")
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r := NewRunner(testConfig(t), nil, nil)
+	if _, _, err := r.save(outputDir, body); err == nil || !strings.Contains(err.Error(), "could not find a free filename") {
+		t.Fatalf("expected the bounded filename error, got %v", err)
 	}
 }
 

@@ -6,12 +6,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/internal/brand"
@@ -320,6 +323,36 @@ func TestRunHeadlessJSON(t *testing.T) {
 	}
 }
 
+func TestPrintPlanReportsResumableLedger(t *testing.T) {
+	var out strings.Builder
+	printPlan(&out, config.Config{}, pipeline.DryRunReport{
+		Sources:     []string{"paper.md"},
+		LedgerFound: true,
+		EstCalls:    1,
+		Engines:     map[engine.Kind]string{},
+	})
+	if !strings.Contains(out.String(), "extraction resumable") {
+		t.Fatalf("resumable ledger was not reported: %s", out.String())
+	}
+}
+
+func TestRunDryRunLabelsMultipleJobs(t *testing.T) {
+	cfg, first := tmpSource(t, "first.txt")
+	second := filepath.Join(cfg.SourcesDir, "second.txt")
+	if err := os.WriteFile(second, []byte("More research with a score of 0.7."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	jobs := []pipeline.Job{{Sources: []string{first}}, {Sources: []string{second}}}
+	var out strings.Builder
+	r := pipeline.NewRunner(cfg, []engine.Engine{stubEngine{}}, nil)
+	if failures := runDryRun(context.Background(), cfg, r, jobs, &out, io.Discard); failures != 0 {
+		t.Fatalf("runDryRun returned %d failures", failures)
+	}
+	if !strings.Contains(out.String(), "[1/2]") || !strings.Contains(out.String(), "[2/2]") {
+		t.Fatalf("multi-job labels missing: %s", out.String())
+	}
+}
+
 func TestCompletionScripts(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "fish"} {
 		var out strings.Builder
@@ -342,6 +375,64 @@ func TestBuildVersionFallback(t *testing.T) {
 	// must be a readable placeholder rather than an empty string.
 	if got := buildVersion(); got == "" {
 		t.Error("buildVersion must never return an empty string")
+	}
+}
+
+func TestBuildVersionFromModuleMetadata(t *testing.T) {
+	orig := readBuildInfo
+	defer func() { readBuildInfo = orig }()
+	readBuildInfo = func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{Main: debug.Module{Version: "v1.2.3"}}, true
+	}
+	if got := buildVersion(); got != "1.2.3" {
+		t.Fatalf("build version = %q", got)
+	}
+}
+
+func TestRunTUIDispatch(t *testing.T) {
+	orig := runTeaProgram
+	defer func() { runTeaProgram = orig }()
+	_, full := tmpSource(t, "paper.txt")
+
+	calls := 0
+	runTeaProgram = func(tea.Model, ...tea.ProgramOption) (tea.Model, error) {
+		calls++
+		return nil, nil
+	}
+	if code := run([]string{full}, io.Discard, io.Discard); code != 0 || calls != 1 {
+		t.Fatalf("successful TUI dispatch = code %d, calls %d", code, calls)
+	}
+
+	runTeaProgram = func(tea.Model, ...tea.ProgramOption) (tea.Model, error) {
+		return nil, errors.New("terminal failed")
+	}
+	var stderr strings.Builder
+	if code := run([]string{"--engine", "ollama", full}, io.Discard, &stderr); code != 1 || !strings.Contains(stderr.String(), "terminal failed") {
+		t.Fatalf("failed TUI dispatch = code %d, stderr %q", code, stderr.String())
+	}
+}
+
+func TestRunDryRunSuccessAndFailure(t *testing.T) {
+	_, source := tmpSource(t, "paper.txt")
+	var out, stderr strings.Builder
+	if code := run([]string{"--dry-run", "--engine", "ollama", source}, &out, &stderr); code != 0 || !strings.Contains(out.String(), "Plan") {
+		t.Fatalf("dry run = code %d, out %q, err %q", code, out.String(), stderr.String())
+	}
+
+	bad := filepath.Join(t.TempDir(), "source.bin")
+	if err := os.WriteFile(bad, []byte("unsupported"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr.Reset()
+	if code := run([]string{"--dry-run", "--engine", "ollama", bad}, io.Discard, &stderr); code != 1 {
+		t.Fatalf("invalid dry run = code %d, err %q", code, stderr.String())
+	}
+}
+
+func TestRunFrontmatterMissingFile(t *testing.T) {
+	var stderr strings.Builder
+	if code := run([]string{"--frontmatter", filepath.Join(t.TempDir(), "missing.md")}, io.Discard, &stderr); code != 1 {
+		t.Fatalf("missing frontmatter file = code %d, err %q", code, stderr.String())
 	}
 }
 

@@ -25,7 +25,7 @@ series until `0.0.999`.
 ### Quality & Governance
 
 - **Repository Audit (10/10 in all categories).** Full audit verified clean zero-issue
-  `golangci-lint`, 95.0% test coverage (exceeding 95% gate), `go test -race` clean,
+  `golangci-lint`, 98.1% test coverage (exceeding the 98% gate), `go test -race` clean,
   `govulncheck` clean, REUSE/SPDX license compliance, and strict versioning policy
   (incrementing by 0.0.1 up to `v0.0.999` before `v0.1.0`).
 

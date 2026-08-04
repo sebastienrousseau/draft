@@ -14,7 +14,7 @@
   <a href="https://github.com/sebastienrousseau/draft/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/draft/ci.yml?branch=main&style=for-the-badge&logo=github&label=build" alt="Build status" /></a>
   <a href="https://draftlib.com"><img src="https://img.shields.io/badge/website-draftlib.com-ff6b5a?style=for-the-badge" alt="draftlib.com" /></a>
   <a href="https://pkg.go.dev/github.com/sebastienrousseau/draft"><img src="https://img.shields.io/badge/go.dev-reference-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go reference" /></a>
-  <a href="https://github.com/sebastienrousseau/draft/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-gated%20%E2%89%A595%25-brightgreen?style=for-the-badge" alt="Coverage gated at 95%" /></a>
+  <a href="https://github.com/sebastienrousseau/draft/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-gated%20%E2%89%A598%25-brightgreen?style=for-the-badge" alt="Coverage gated at 98%" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/sebastienrousseau/draft"><img src="https://img.shields.io/ossf-scorecard/github.com/sebastienrousseau/draft?style=for-the-badge&label=openssf%20scorecard" alt="OpenSSF Scorecard" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge" alt="License: MIT OR Apache-2.0" /></a>
   <a href="#"><img src="https://img.shields.io/badge/go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+" /></a>
@@ -851,7 +851,7 @@ make build     # compile to ./bin/draft
 make install   # install into GOPATH/bin
 make test      # unit + pipeline tests
 make race      # tests under the race detector
-make cover     # coverage report (≥95% gate, demos excluded)
+make cover     # coverage report (≥98% gate, demos excluded)
 make bench     # benchmarks
 make fuzz      # each fuzz target briefly (FUZZTIME=30s make fuzz)
 make vuln      # govulncheck, the same scan CI runs
@@ -860,7 +860,7 @@ make check     # fmt + vet + test
 make run ARGS='--help'
 ```
 
-The suite holds **≥95% of statements** and CI fails below it. The pipeline is
+The suite holds **≥98% of statements** and CI fails below it. The pipeline is
 tested end to end against a deterministic fake `Engine`, so grounding,
 truncation-continuation and multi-provider fallback are all verified without a
 network call. Provider CLIs are faked via the `TestHelperProcess` pattern, so

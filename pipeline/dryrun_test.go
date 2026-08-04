@@ -86,6 +86,14 @@ func TestDryRunSurfacesUnusableSources(t *testing.T) {
 	if _, err := r.DryRun(context.Background(), Job{Sources: []string{bad}}); err == nil {
 		t.Error("expected an error for an unreadable source")
 	}
+
+	empty := filepath.Join(t.TempDir(), "empty.txt")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.DryRun(context.Background(), Job{Sources: []string{empty}}); err == nil {
+		t.Error("expected an error for a readable source with no text")
+	}
 }
 
 // A Runner is reused across a queue, so each job supplies its own channel.

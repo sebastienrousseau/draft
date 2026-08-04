@@ -77,6 +77,17 @@ func TestParseStreamJSONForwardsChunks(t *testing.T) {
 	}
 }
 
+func TestParseStreamJSONDefaultErrorAndReadFailure(t *testing.T) {
+	_, _, err := parseStreamJSON(strings.NewReader(`{"type":"result","is_error":true}`), nil)
+	if err == nil || err.Error() != "provider reported an error" {
+		t.Fatalf("empty provider error = %v", err)
+	}
+	text, _, err := parseStreamJSON(&errReader{data: `{"type":"stream_event"}`}, nil)
+	if !errors.Is(err, errBrokenPipe) || text != "" {
+		t.Fatalf("read failure = (%q, %v)", text, err)
+	}
+}
+
 // errReader returns some data and then a non-EOF failure.
 type errReader struct {
 	data string

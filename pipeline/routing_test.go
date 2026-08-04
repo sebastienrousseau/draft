@@ -115,6 +115,29 @@ func TestNewRunnerSharesOneCursorAcrossKinds(t *testing.T) {
 	}
 }
 
+func TestUnknownRequestKindUsesWriteChain(t *testing.T) {
+	r := NewRunner(config.Config{}, []engine.Engine{&recorder{name: "writer"}}, nil)
+	if r.chainFor(engine.Kind(99)) != r.chainFor(engine.KindWrite) {
+		t.Fatal("an unknown request kind did not fall back to the write chain")
+	}
+}
+
+func TestEmptyEngineChainReturnsUsefulError(t *testing.T) {
+	r := NewRunner(config.Config{}, nil, nil)
+	r.done = context.Background().Done()
+	if _, err := r.generate(context.Background(), engine.Request{Kind: engine.KindWrite}); err == nil || !strings.Contains(err.Error(), "no engine available") {
+		t.Fatalf("expected the empty-chain error, got %v", err)
+	}
+}
+
+func TestWriterNameFallsBackToLastEngineName(t *testing.T) {
+	r := NewRunner(config.Config{}, nil, nil)
+	r.engineName = "last-writer"
+	if got := r.writerName(); got != "last-writer" {
+		t.Fatalf("writerName = %q, want last-writer", got)
+	}
+}
+
 // A Runner reused across a queue keeps the backend it settled on, so a dead
 // provider is tried once for the whole queue rather than once per paper.
 func TestFallbackIsStickyAcrossAQueue(t *testing.T) {

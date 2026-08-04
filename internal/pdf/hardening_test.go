@@ -6,13 +6,21 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 )
+
+type errorWriter struct{}
+
+func (errorWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
 
 // SplitSections used to fall back to a fixed byte offset when it found neither
 // a paragraph nor a sentence boundary, slicing multi-byte runes in half. The
@@ -116,6 +124,12 @@ func TestReadCappedRejectsOversizeFiles(t *testing.T) {
 	}
 }
 
+func TestReadCappedPropagatesReadFailure(t *testing.T) {
+	if _, err := readCappedLimit(t.TempDir(), MaxSourceBytes); err == nil {
+		t.Fatal("expected reading a directory to fail")
+	}
+}
+
 func TestLimitedWriterTruncatesWithoutFailing(t *testing.T) {
 	var buf bytes.Buffer
 	w := &limitedWriter{w: &buf, remaining: 5}
@@ -136,6 +150,13 @@ func TestLimitedWriterTruncatesWithoutFailing(t *testing.T) {
 	}
 	if buf.String() != "abcde" {
 		t.Errorf("buffered %q, want %q", buf.String(), "abcde")
+	}
+}
+
+func TestLimitedWriterPropagatesUnderlyingFailure(t *testing.T) {
+	w := &limitedWriter{w: errorWriter{}, remaining: 1}
+	if _, err := w.Write([]byte("too long")); err == nil {
+		t.Fatal("expected the underlying writer error")
 	}
 }
 
@@ -162,6 +183,30 @@ func TestRunToolReportsCancellation(t *testing.T) {
 	cancel()
 	if _, err := runTool(ctx, time.Second, "sh", "-c", "true"); err == nil {
 		t.Error("expected a cancellation error")
+	}
+}
+
+func TestRunToolReturnsSilentExitError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper is a POSIX shell script")
+	}
+	path := filepath.Join(t.TempDir(), "silent-fail")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runTool(context.Background(), time.Second, path); err == nil {
+		t.Fatal("expected the silent non-zero exit to be returned")
+	}
+}
+
+func TestExtractRejectsDOCXOutsideMacOS(t *testing.T) {
+	original := operatingSystem
+	operatingSystem = "linux"
+	t.Cleanup(func() { operatingSystem = original })
+
+	path := filepath.Join(t.TempDir(), "paper.docx")
+	if _, err := Extract(context.Background(), path); err == nil || !strings.Contains(err.Error(), "requires macOS") {
+		t.Fatalf("expected the platform error, got %v", err)
 	}
 }
 
