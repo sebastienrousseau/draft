@@ -32,12 +32,10 @@ import (
 	"github.com/sebastienrousseau/draft/pipeline"
 )
 
-// version is the build version. Release builds inject it via -ldflags
-// "-X main.version=…" (see .goreleaser.yaml); otherwise it is read from the
-// module's build info, so a `go install` reports the tag it came from. There
-// is deliberately no hand-maintained literal here — a second source of truth
-// is how v0.0.22 once shipped mislabelled.
-var version = buildVersion()
+// version must have a constant initializer so the linker can replace it with
+// "-X main.version=…" (see .goreleaser.yaml). Development and go-install
+// builds resolve their version from module build information during init.
+var version = "dev"
 
 var (
 	readBuildInfo = debug.ReadBuildInfo
@@ -45,6 +43,17 @@ var (
 		return tea.NewProgram(m, opts...).Run()
 	}
 )
+
+func init() {
+	version = resolveVersion(version)
+}
+
+func resolveVersion(linked string) string {
+	if linked != "" && linked != "dev" {
+		return linked
+	}
+	return buildVersion()
+}
 
 func buildVersion() string {
 	if info, ok := readBuildInfo(); ok {

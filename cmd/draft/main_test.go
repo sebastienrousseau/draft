@@ -389,6 +389,26 @@ func TestBuildVersionFromModuleMetadata(t *testing.T) {
 	}
 }
 
+func TestResolveVersionPrefersLinkerValue(t *testing.T) {
+	readCalls := 0
+	orig := readBuildInfo
+	defer func() { readBuildInfo = orig }()
+	readBuildInfo = func() (*debug.BuildInfo, bool) {
+		readCalls++
+		return &debug.BuildInfo{Main: debug.Module{Version: "v9.9.9"}}, true
+	}
+
+	if got := resolveVersion("0.0.32"); got != "0.0.32" {
+		t.Fatalf("resolved linker version = %q", got)
+	}
+	if readCalls != 0 {
+		t.Fatalf("build info read %d times for linker version", readCalls)
+	}
+	if got := resolveVersion("dev"); got != "9.9.9" {
+		t.Fatalf("resolved development version = %q", got)
+	}
+}
+
 func TestRunTUIDispatch(t *testing.T) {
 	orig := runTeaProgram
 	defer func() { runTeaProgram = orig }()
