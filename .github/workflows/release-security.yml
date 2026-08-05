@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+name: release-security
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  credentials:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check certificate expiry and API-key age
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY_ROTATED_AT: ${{ vars.APPLE_API_KEY_ROTATED_AT }}
+        run: |
+          set -euo pipefail
+          gh label create security --repo "$GITHUB_REPOSITORY" \
+            --description "Security and credential lifecycle" --color B60205 --force
+          now="$(date -u +%s)"
+          alert() {
+            title="$1"
+            body="$2"
+            if ! gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+              --limit 100 --json title | jq -e --arg title "$title" \
+              'any(.[]; .title == $title)' >/dev/null; then
+              gh issue create --repo "$GITHUB_REPOSITORY" --label security \
+                --title "$title" --body "$body"
+            fi
+          }
+          for cert in build/apple/*.pem; do
+            subject="$(openssl x509 -in "$cert" -noout -subject | sed 's/^subject=//')"
+            expires="$(openssl x509 -in "$cert" -noout -enddate | cut -d= -f2-)"
+            expiry_epoch="$(date -u -d "$expires" +%s)"
+            days="$(( (expiry_epoch - now) / 86400 ))"
+            echo "$subject expires in $days days" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$days" -le 60 ]; then
+              alert "security: renew Apple certificate within 60 days" \
+                "$subject expires on $expires. Renew it, replace the protected release-environment secret, update the public certificate, and run the release-security workflow."
+            fi
+            if [ "$days" -le 30 ]; then
+              alert "security: renew Apple certificate within 30 days" \
+                "$subject expires on $expires. Release signing is at immediate risk; follow docs/RELEASE_SECURITY.md."
+            fi
+          done
+          rotated_epoch="$(date -u -d "$KEY_ROTATED_AT" +%s)"
+          key_age="$(( (now - rotated_epoch) / 86400 ))"
+          echo "App Store Connect API key age: $key_age days" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$key_age" -ge 80 ]; then
+            alert "security: rotate App Store Connect notarization key" \
+              "The notarization key is $key_age days old. Rotate it before day 90 and update APPLE_API_KEY_ROTATED_AT."
+          fi

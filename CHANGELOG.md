@@ -4,14 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.32] - 2026-08-04
+
+### Security
+
+- **Protected release credentials.** Apple signing and notarization secrets are
+  isolated in an approval-gated GitHub environment restricted to version tags.
+- **Notarized universal installer.** Releases now include a Developer ID signed,
+  Apple-notarized and stapled macOS package, with provenance and signed checksums.
+- **Credential lifecycle automation.** Weekly checks warn at 60 and 30 days
+  before certificate expiry and before the 90-day API-key rotation deadline.
+- **Independent release verification.** A clean macOS runner verifies every
+  checksum, Sigstore bundle, provenance attestation, Apple signature, package
+  ticket, architecture, and executable version after publishing.
+
 ## [0.0.31] - 2026-08-04
 
 ### Security
 
 - **Native macOS trust.** Release binaries for Intel and Apple silicon are now
   signed with a Developer ID Application certificate and notarized by Apple
-  before archiving, so Homebrew installs pass Gatekeeper without requiring a
-  manual quarantine override.
+  before archiving.
 
 ## [0.0.30] - 2026-07-30
 

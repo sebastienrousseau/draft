@@ -90,6 +90,12 @@ With mise's GitHub backend:
 mise use --global github:sebastienrousseau/draft@latest
 ```
 
+Or install the signed, notarized universal macOS package attached to a release:
+
+```sh
+sudo installer -pkg draft_VERSION_universal.pkg -target /
+```
+
 With the Go toolchain:
 
 ```sh
@@ -922,9 +928,10 @@ parser and mutation-tests the grounding gate each day.
   `textutil`, with context timeouts, absolute paths (so a filename beginning
   with `-` cannot be read as a flag), capped output, and no shell
   interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`.
-- **Verifiable releases.** macOS binaries are Developer ID signed and Apple
-  notarized. Every release is also signed with keyless Sigstore cosign and
-  published with a CycloneDX SBOM per archive and GitHub build provenance.
+- **Verifiable releases.** macOS binaries and the universal installer package
+  are Developer ID signed and Apple notarized; the package carries a stapled
+  ticket for offline Gatekeeper verification. Every release is also signed with
+  keyless Sigstore cosign and published with CycloneDX SBOMs and provenance.
 
 ---
 
