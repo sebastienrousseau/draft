@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [0.0.33] - 2026-08-11
+
+### Changed
+
+- Bumped `actions/attest-build-provenance` v4.1.1 -> v4.2.2 (both call
+  sites in `release.yml`).
+
 ## [0.0.32] - 2026-08-04
 
 ### Security
@@ -750,6 +757,9 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.33]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.33
+[0.0.32]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.32
+[0.0.31]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.31
 [0.0.30]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.30
 [0.0.29]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.29
 [0.0.28]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.28
