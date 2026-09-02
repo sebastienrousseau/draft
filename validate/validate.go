@@ -281,13 +281,22 @@ func yearLike(n string) bool {
 	return err == nil && v >= 1000 && v <= 2999
 }
 
-func duplicateParagraphs(article string) []string {
+// Paragraphs splits an article on blank lines, the unit the duplicate check
+// works in. Exported so a repair pass can address the same paragraphs the
+// check complains about, rather than re-deriving the split and drifting.
+func Paragraphs(article string) []string { return blankLinePat.Split(article, -1) }
+
+// DuplicateParagraphIndexes returns the indexes, within Paragraphs(article), of
+// paragraphs that nearly duplicate an earlier one. Headings and short
+// paragraphs are never reported: a repeated heading is structure, and short
+// runs of shared words are not evidence of duplication.
+func DuplicateParagraphIndexes(article string) []int {
 	type entry struct {
-		text  string
+		index int
 		shing map[string]bool
 	}
 	var entries []entry
-	for _, para := range blankLinePat.Split(article, -1) {
+	for i, para := range Paragraphs(article) {
 		para = strings.TrimSpace(para)
 		if para == "" || strings.HasPrefix(strings.TrimLeft(para, " \t"), "#") {
 			continue
@@ -296,17 +305,26 @@ func duplicateParagraphs(article string) []string {
 		if len(words) < duplicateMinWords {
 			continue
 		}
-		entries = append(entries, entry{text: strings.Join(strings.Fields(para), " "), shing: shingles(words, shingleK)})
+		entries = append(entries, entry{index: i, shing: shingles(words, shingleK)})
 	}
 
-	var dups []string
+	var dups []int
 	for j := range entries {
 		for i := 0; i < j; i++ {
 			if jaccard(entries[j].shing, entries[i].shing) >= duplicateThreshold {
-				dups = append(dups, snippet(entries[j].text, 70))
+				dups = append(dups, entries[j].index)
 				break
 			}
 		}
+	}
+	return dups
+}
+
+func duplicateParagraphs(article string) []string {
+	paras := Paragraphs(article)
+	var dups []string
+	for _, idx := range DuplicateParagraphIndexes(article) {
+		dups = append(dups, snippet(strings.Join(strings.Fields(paras[idx]), " "), 70))
 	}
 	switch {
 	case len(dups) == 0:

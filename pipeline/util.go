@@ -15,6 +15,7 @@ import (
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/internal/mdspan"
 	"github.com/sebastienrousseau/draft/rules"
+	"github.com/sebastienrousseau/draft/validate"
 )
 
 // sentenceClosers are the runes validate.EndsSentence accepts as a clean end,
@@ -156,6 +157,52 @@ func normalizeDraft(s string) string {
 	s = unfilledThesisLine.ReplaceAllString(s, "")
 	s = unfilledSectionHeading.ReplaceAllString(s, "")
 	return enforceStyle(stripThinking(cleanOutput(s)))
+}
+
+// repairDuplicates drops paragraphs that nearly duplicate an earlier one,
+// returning the repaired article and how many were removed.
+//
+// A rule violation otherwise costs a full rewrite — the single most expensive
+// call in a run, paid up to WriteRetries times — and a near-duplicate
+// paragraph is redundant by definition, so removing it needs no model at all.
+// enforceStyle established this pattern for banned vocabulary; this is the
+// same trade for the other violation a deterministic edit can settle.
+//
+// It stops before the article would fall under the house minimum: shipping a
+// too-short draft is a different violation, not a repair. Over-length is
+// deliberately NOT repaired by trimming trailing paragraphs — that cuts the
+// conclusion and leaves an article that ends abruptly but passes the
+// truncation check, which is worse than asking the model again. Removing
+// duplicates often brings an over-long draft back inside the band anyway.
+func repairDuplicates(md string) (string, int) {
+	dups := validate.DuplicateParagraphIndexes(md)
+	if len(dups) == 0 {
+		return md, 0
+	}
+	drop := make(map[int]bool, len(dups))
+	for _, i := range dups {
+		drop[i] = true
+	}
+
+	paras := validate.Paragraphs(md)
+	kept := make([]string, 0, len(paras))
+	removed := 0
+	for i, p := range paras {
+		if drop[i] {
+			// Re-check the floor against what would remain, so the repair
+			// cannot trade one violation for another.
+			remaining := validate.WordCount(strings.Join(append(append([]string{}, kept...), paras[i+1:]...), "\n\n"))
+			if remaining >= rules.MinWords {
+				removed++
+				continue
+			}
+		}
+		kept = append(kept, p)
+	}
+	if removed == 0 {
+		return md, 0
+	}
+	return strings.Join(kept, "\n\n"), removed
 }
 
 // collapseSpace normalises a block to single-spaced text for echo comparison.

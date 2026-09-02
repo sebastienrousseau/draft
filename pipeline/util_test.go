@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/rules"
+	"github.com/sebastienrousseau/draft/validate"
 )
 
 func TestSlugify(t *testing.T) {
@@ -156,5 +160,95 @@ func TestEnforceStyleStillRepairsUnquotedProse(t *testing.T) {
 	}
 	if !strings.Contains(got, `"they leverage it too"`) {
 		t.Errorf("enforceStyle rewrote the quotation: %q", got)
+	}
+}
+
+// A near-duplicate paragraph is redundant by definition, so removing it needs
+// no model — and a rule violation otherwise costs a full rewrite, the most
+// expensive call in a run.
+func TestRepairDuplicatesRemovesTheLaterCopy(t *testing.T) {
+	para := "The measured throughput reached twelve pages per second across the corpus, " +
+		"which is roughly five times the previous figure recorded on the same hardware. "
+	// Long enough that removing the duplicate still clears the house minimum,
+	// which the repair refuses to breach.
+	filler := strings.Repeat("Distinct sentence with entirely separate wording here. ", 90)
+	md := "# Title\n\n" + para + "\n\n" + filler + "\n\n" + para
+	if validate.WordCount(md)-validate.WordCount(para) < rules.MinWords {
+		t.Fatalf("fixture too short: %d words", validate.WordCount(md))
+	}
+
+	repaired, removed := repairDuplicates(md)
+	if removed != 1 {
+		t.Fatalf("removed %d paragraphs, want 1", removed)
+	}
+	if strings.Count(repaired, "twelve pages per second") != 1 {
+		t.Errorf("the duplicate survived:\n%s", repaired)
+	}
+	if len(validate.DuplicateParagraphIndexes(repaired)) != 0 {
+		t.Error("the repaired article still reports duplicates")
+	}
+}
+
+func TestRepairDuplicatesLeavesACleanArticleAlone(t *testing.T) {
+	md := "# Title\n\n" + strings.Repeat("A unique sentence about the first topic. ", 30) +
+		"\n\n" + strings.Repeat("A different sentence about a second topic. ", 30)
+	repaired, removed := repairDuplicates(md)
+	if removed != 0 || repaired != md {
+		t.Errorf("repairDuplicates changed a clean article (removed %d)", removed)
+	}
+}
+
+// Shipping a too-short draft is a different violation, not a repair.
+func TestRepairDuplicatesStopsAtTheHouseMinimum(t *testing.T) {
+	para := strings.Repeat("The same sentence repeated for length. ", 25)
+	md := "# Title\n\n" + para + "\n\n" + para
+	if validate.WordCount(md) >= 2*rules.MinWords {
+		t.Skip("fixture is long enough that removal stays above the floor")
+	}
+	repaired, removed := repairDuplicates(md)
+	if removed != 0 {
+		t.Errorf("removed %d paragraph(s), dropping the article under the %d-word floor", removed, rules.MinWords)
+	}
+	if repaired != md {
+		t.Error("article was modified despite no removal")
+	}
+}
+
+// The repair must run inside validateWithRetry, so a near-duplicate paragraph
+// is settled without paying for another generation.
+func TestValidateWithRetryRepairsDuplicatesInsteadOfRegenerating(t *testing.T) {
+	para := "The measured throughput reached twelve pages per second across the corpus, " +
+		"which is roughly five times the previous figure recorded on the same hardware. "
+	filler := strings.Repeat("Distinct sentence with entirely separate wording here. ", 90)
+	md := "# Title\n\n<aside class=\"post-lead\">TL;DR</aside>\n\n" +
+		"Executive Summary\n\n## A section\n\n" + para + "\n\n" + filler + "\n\n" + para
+
+	if errs, _ := validate.Faithfulness(md, nil); len(errs) == 0 {
+		t.Fatal("fixture should start with a duplicate-paragraph violation")
+	}
+
+	eng := &countingEngine{name: "fake", out: md}
+	events := make(chan Event, 64)
+	r := NewRunner(config.Config{WriteRetries: 2}, []engine.Engine{eng}, events)
+
+	out, err := r.validateWithRetry(context.Background(), "base prompt", md, nil)
+	if err != nil {
+		t.Fatalf("validateWithRetry returned %v", err)
+	}
+	if eng.calls.Load() != 0 {
+		t.Errorf("the repair should have avoided regeneration, but %d call(s) were made", eng.calls.Load())
+	}
+	if strings.Count(out, "twelve pages per second") != 1 {
+		t.Errorf("the duplicate survived:\n%s", out)
+	}
+	close(events)
+	var logged bool
+	for e := range events {
+		if l, ok := e.(LogEvent); ok && strings.Contains(string(l), "near-duplicate") {
+			logged = true
+		}
+	}
+	if !logged {
+		t.Error("the repair should be reported")
 	}
 }

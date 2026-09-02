@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -125,6 +126,35 @@ var slugRepeat = regexp.MustCompile(`-{2,}`)
 type chainState struct {
 	engines []engine.Engine
 	cur     int
+	// demotedAt is when the cursor last advanced past a failing engine.
+	demotedAt time.Time
+}
+
+// timeNow is a variable so the rehabilitation clock is testable.
+var timeNow = time.Now
+
+// rehabilitationDelay is how long a demoted engine stays demoted before the
+// chain probes it again.
+//
+// Stickiness is right for a provider that is genuinely dead — not logged in,
+// uninstalled — because retrying it costs a failed call per job. It is wrong
+// for one that blipped: a single flaky moment on the first paper otherwise
+// demotes a forty-paper queue to the local model for its entire life, and the
+// cost of that is every remaining article written by a 4B model instead of
+// the backend the user chose. A failed call is cheap and fails fast; a
+// silently downgraded queue is expensive and invisible. Probing occasionally
+// is the cheaper mistake.
+const rehabilitationDelay = 15 * time.Minute
+
+// rehabilitate returns the chain to its preferred engine once a demoted one
+// has had long enough to recover, and reports whether it did.
+func (c *chainState) rehabilitate(now time.Time) bool {
+	if c == nil || c.cur == 0 || c.demotedAt.IsZero() || now.Sub(c.demotedAt) < rehabilitationDelay {
+		return false
+	}
+	c.cur = 0
+	c.demotedAt = time.Time{}
+	return true
 }
 
 func (c *chainState) active() engine.Engine {
@@ -642,6 +672,21 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 // memory pressure a shared GPU cannot absorb.
 const ollamaExtractConcurrency = 2
 
+// ollamaParallelism reports how many extraction calls the local server will
+// genuinely serve at once.
+//
+// The constant above was measured on an 8 GB machine, where two workers gave
+// ~1.8x the throughput of one. Treating it as a ceiling leaves a larger
+// machine idle: a host started with OLLAMA_NUM_PARALLEL=4 has four slots and
+// queues anything beyond them, so reading the server's own setting is both
+// safe and strictly better. Absent the variable, nothing has changed.
+func ollamaParallelism() int {
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("OLLAMA_NUM_PARALLEL"))); err == nil && v > ollamaExtractConcurrency {
+		return v
+	}
+	return ollamaExtractConcurrency
+}
+
 // extractConcurrency is the number of parallel extraction workers for the settled
 // engine: the configured value for a session provider (independent subprocesses),
 // and a small, capped amount for Ollama (concurrent requests to one local server).
@@ -657,8 +702,10 @@ func (r *Runner) extractConcurrency() int {
 	if e := r.chainFor(engine.KindExtract).active(); e != nil {
 		extractor = e.Name()
 	}
-	if extractor == "ollama" && n > ollamaExtractConcurrency {
-		return ollamaExtractConcurrency
+	if extractor == "ollama" {
+		if limit := ollamaParallelism(); n > limit {
+			return limit
+		}
 	}
 	return n
 }
@@ -871,6 +918,15 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 				markdown = r.continueGeneration(ctx, markdown)
 			}
 		}
+		// Repair what a deterministic edit can settle before spending another
+		// generation on it. A rewrite is the most expensive call in the run.
+		if repaired, removed := repairDuplicates(markdown); removed > 0 {
+			if len(validate.Errors(repaired)) <= len(validate.Errors(markdown)) {
+				markdown = repaired
+				r.log(fmt.Sprintf("removed %d near-duplicate paragraph(s) without regenerating", removed))
+			}
+		}
+
 		styleErrs := validate.Errors(markdown)
 		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
 		errs = append(append([]string{}, styleErrs...), factErrs...)
@@ -891,6 +947,11 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 // against a dead provider.
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
 	cs := r.chainFor(req.Kind)
+	if cs.rehabilitate(timeNow()) {
+		r.log("retrying " + cs.engines[0].Name() + " after its earlier failure")
+		r.engineName = cs.engines[0].Name()
+		r.emit(EngineEvent(r.engineName))
+	}
 	var lastErr error
 	for cs != nil && cs.cur < len(cs.engines) {
 		// A cancelled run must not keep walking the chain. Without this check
@@ -916,6 +977,7 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		lastErr = err
 		r.warn(fmt.Sprintf("%s failed (%v)", e.Name(), err))
 		cs.cur++
+		cs.demotedAt = timeNow()
 		if cs.cur < len(cs.engines) {
 			r.engineName = cs.engines[cs.cur].Name()
 			r.emit(EngineEvent(r.engineName))
