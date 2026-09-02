@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# The rendered user manual. Its pages are the repository's own Markdown,
+# assembled by scripts/build-manual.py — nothing is authored here, so a chapter
+# can never disagree with the file it came from.
+site_name: draft
+site_description: Research papers in. Publication-ready Markdown out.
+site_url: https://sebastienrousseau.github.io/draft/
+repo_url: https://github.com/sebastienrousseau/draft
+repo_name: sebastienrousseau/draft
+edit_uri: ""
+copyright: MIT OR Apache-2.0
+
+docs_dir: .gen/manual
+site_dir: .gen/site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      # GitHub's slugger, so an anchor written for the repository resolves on
+      # the site too. The default collapses the runs that an em dash leaves
+      # behind, turning "Phase 3 — Roadmap" into a different anchor than the
+      # one every link in the repository points at.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Development: DEVELOPMENT.md
+      - Architecture: docs/ARCHITECTURE.md
+      - Routing and resume: docs/SPEC-routing-and-resume.md
+      - Audit 2026-09: docs/AUDIT-2026-09.md
+  - Decisions:
+      - Overview: docs/adr/README.md
+      - 0001 Plain-text extraction: docs/adr/0001-plain-text-extraction.md
+      - 0002 Quote-verified ledger: docs/adr/0002-quote-verified-claim-ledger.md
+      - 0003 Session CLI backends: docs/adr/0003-session-cli-backends.md
+      - 0004 No tools for providers: docs/adr/0004-no-tools-granted-to-providers.md
+      - 0005 Content-addressed cache: docs/adr/0005-content-addressed-extraction-cache.md
+      - Template: docs/adr/template.md
+  - Distribution:
+      - Packaging: docs/packaging.md
+      - Release security: docs/RELEASE_SECURITY.md
+      - Changelog: CHANGELOG.md
+  - Project:
+      - Contributing: CONTRIBUTING.md
+      - Support: SUPPORT.md
+      - Governance: GOVERNANCE.md
+      - Security policy: SECURITY.md
+      - Code of conduct: CODE_OF_CONDUCT.md
+
+# Warnings become errors, so a broken nav entry or a dangling link fails the
+# build rather than shipping a 404.
+strict: true

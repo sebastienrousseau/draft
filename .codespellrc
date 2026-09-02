@@ -17,4 +17,4 @@
 #                ("mesure très précise").
 [codespell]
 ignore-words-list = rouge,wont,cant,isnt,arent,dont,unparseable,mesure
-skip = ./.git,./node_modules,./bin,./build,./coverage.out,./coverage.filtered.out,./go.sum,*.pdf,./claims/testdata,./internal/pdf/testdata,./.crush
+skip = ./.git,./.gen,./node_modules,./bin,./build,./coverage.out,./coverage.filtered.out,./go.sum,*.pdf,./claims/testdata,./internal/pdf/testdata,./.crush

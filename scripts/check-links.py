@@ -43,7 +43,7 @@ def anchors(path: str) -> set[str]:
 def main() -> int:
     bad = []
     for path in sorted(glob.glob("**/*.md", recursive=True)):
-        if path.startswith(("node_modules", ".git")):
+        if path.startswith(("node_modules", ".git", ".gen")):
             continue
         for raw in LINK.findall(open(path, encoding="utf-8").read()):
             target = raw.split(" ")[0].strip("<>")

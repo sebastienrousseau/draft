@@ -10,6 +10,9 @@ globs:
 ignores:
   - "node_modules/**"
   - ".git/**"
+  # Generated: .gen/manual is copied from the sources already linted here, so
+  # linting it again reports every finding twice and can never find a new one.
+  - ".gen/**"
 
 config:
   # Go is tab-indented by gofmt, so every fenced Go block necessarily contains

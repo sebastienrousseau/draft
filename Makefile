@@ -72,6 +72,17 @@ docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, lin
 	python3 -m codespell_lib
 	python3 scripts/check-links.py
 
+.PHONY: manual
+manual: ## Build the rendered user manual into .gen/site
+	python3 -m pip install --quiet --disable-pip-version-check mkdocs mkdocs-material
+	python3 scripts/build-manual.py
+	python3 -m mkdocs build
+
+.PHONY: manual-serve
+manual-serve: ## Serve the manual locally with live reload
+	python3 scripts/build-manual.py
+	python3 -m mkdocs serve
+
 .PHONY: docs-fix
 docs-fix: ## Auto-fix what can be fixed in the docs (table alignment)
 	python3 scripts/align-tables.py
