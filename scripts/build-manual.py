@@ -65,10 +65,32 @@ ROOT_PAGES = {
     "GOVERNANCE.md": "GOVERNANCE.md",
     "CODE_OF_CONDUCT.md": "CODE_OF_CONDUCT.md",
     "CHANGELOG.md": "CHANGELOG.md",
+    "AGENTS.md": "AGENTS.md",
 }
 
 
+def unlisted_root_pages() -> list[str]:
+    """Root Markdown files this script would silently leave out of the manual.
+
+    ROOT_PAGES is explicit because mkdocs.yml needs a nav entry per page, and
+    two hand-maintained lists drift. Rather than trust them to agree, fail
+    here: a document added to the repository root and forgotten is exactly how
+    the manual starts describing a different project than the repository.
+    """
+    return sorted(set(glob.glob("*.md")) - set(ROOT_PAGES))
+
+
 def main() -> int:
+    missing = unlisted_root_pages()
+    if missing:
+        print(
+            "error: root document(s) not in ROOT_PAGES: " + ", ".join(missing) + "\n"
+            "       Add them there and to the nav in mkdocs.yml, or the manual\n"
+            "       will link to pages it does not contain.",
+            file=sys.stderr,
+        )
+        return 1
+
     if os.path.exists(OUT):
         shutil.rmtree(OUT)
     os.makedirs(OUT)

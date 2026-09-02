@@ -78,6 +78,10 @@ docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, lin
 	python3 -m codespell_lib
 	python3 scripts/check-links.py
 	python3 scripts/verify-release-versions.py
+	@# Assembling the manual needs no dependencies and catches a root document
+	@# that was added without a page, which is otherwise only found by the
+	@# full mkdocs build in `make manual`.
+	python3 scripts/build-manual.py
 
 .PHONY: manual
 manual: ## Build the rendered user manual into .gen/site

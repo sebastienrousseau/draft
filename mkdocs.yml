@@ -69,6 +69,7 @@ nav:
       - Changelog: CHANGELOG.md
   - Project:
       - Contributing: CONTRIBUTING.md
+      - Agent invariants: AGENTS.md
       - Support: SUPPORT.md
       - Governance: GOVERNANCE.md
       - Security policy: SECURITY.md
