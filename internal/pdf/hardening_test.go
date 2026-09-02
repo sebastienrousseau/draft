@@ -59,27 +59,6 @@ func TestSplitSectionsStillPrefersRealBoundaries(t *testing.T) {
 	}
 }
 
-func TestRuneBoundaryAtOrBefore(t *testing.T) {
-	s := "aé測" // 1 + 2 + 3 bytes
-	for _, tc := range []struct {
-		limit int
-		want  int
-	}{
-		{0, 0},
-		{1, 1}, // 'é' starts here
-		{2, 1}, // mid-'é' backs up
-		{3, 3}, // '測' starts here
-		{4, 3}, // mid-'測' backs up
-		{5, 3},
-		{6, 6},  // exactly len(s)
-		{99, 6}, // past the end
-	} {
-		if got := runeBoundaryAtOrBefore(s, tc.limit); got != tc.want {
-			t.Errorf("runeBoundaryAtOrBefore(%q, %d) = %d, want %d", s, tc.limit, got, tc.want)
-		}
-	}
-}
-
 // A filename beginning with "-" would be parsed as a flag by pdftotext and
 // textutil. Extract resolves to an absolute path so that cannot happen.
 func TestExtractResolvesToAbsolutePath(t *testing.T) {

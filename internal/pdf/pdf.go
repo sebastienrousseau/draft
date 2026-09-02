@@ -23,7 +23,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/sebastienrousseau/draft/internal/runes"
 )
 
 // MaxSectionChars bounds a single extraction section so a small local model is
@@ -139,7 +140,7 @@ func SplitSections(name, text string) []Section {
 				// the byte limit — backed up to a rune boundary. Slicing a
 				// multi-byte rune in half produces invalid UTF-8 in both the
 				// prompt and the text a claim's quote is later matched against.
-				cut = runeBoundaryAtOrBefore(part, MaxSectionChars)
+				cut = runes.BoundaryAtOrBefore(part, MaxSectionChars)
 			}
 			idx++
 			sections = append(sections, Section{Label: fmt.Sprintf("%s section %d", name, idx), Body: strings.TrimSpace(part[:cut])})
@@ -179,21 +180,6 @@ func NormaliseSpace(text string) string {
 		text = multiBlank.ReplaceAllString(text, "\n\n\n")
 	}
 	return strings.TrimSpace(text)
-}
-
-// runeBoundaryAtOrBefore returns the largest index <= limit that starts a UTF-8
-// rune, so slicing s[:index] can never split one in half. It walks back at most
-// three bytes — the longest a UTF-8 continuation run can be.
-func runeBoundaryAtOrBefore(s string, limit int) int {
-	if limit >= len(s) {
-		return len(s)
-	}
-	for i := 0; i < utf8.UTFMax && limit-i > 0; i++ {
-		if utf8.RuneStart(s[limit-i]) {
-			return limit - i
-		}
-	}
-	return limit
 }
 
 // splitKeepHeadings splits before each recognised section heading while keeping
