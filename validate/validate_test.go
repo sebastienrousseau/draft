@@ -107,3 +107,29 @@ func TestErrorsEachMissingElement(t *testing.T) {
 		}
 	}
 }
+
+// enforceStyle refuses to rewrite a quotation, so failing the draft for a
+// banned word inside one would be a rule the repair pass can never satisfy —
+// an unfixable rewrite loop.
+func TestErrorsIgnoresBannedWordsInsideQuotations(t *testing.T) {
+	base := "# Title\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\n" +
+		strings.Repeat("word ", 600) + "."
+	quoted := base + "\n\nThe paper states: \"we leverage it\".\n"
+	for _, e := range Errors(quoted) {
+		if strings.Contains(e, "banned words") {
+			t.Errorf("Errors() flagged a banned word inside a quotation: %q", e)
+		}
+	}
+
+	// The same word in the writer's own prose must still fail.
+	unquoted := base + "\n\nWe leverage it.\n"
+	var found bool
+	for _, e := range Errors(unquoted) {
+		if strings.Contains(e, "banned words") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Errors() missed a banned word in unquoted prose: %v", Errors(unquoted))
+	}
+}

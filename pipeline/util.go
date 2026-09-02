@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/internal/mdspan"
 	"github.com/sebastienrousseau/draft/rules"
 )
 
@@ -99,8 +100,18 @@ func buildStyleReplacers() []styleReplacer {
 // equivalent, matching the case of the first character replaced. It repairs the
 // most common reason a small local model's otherwise-clean draft fails the house
 // rules, avoiding a slow full regeneration that would only introduce fresh
-// clichés. It never touches numbers, names, or quotes, so grounding is untouched.
+// clichés.
+//
+// It never rewrites code or a quoted span. The patterns cannot match a number or
+// a name, but they very much can match inside a quotation — and rewriting there
+// changes what a source is reported to have said, which is the one edit that
+// would void the grounding guarantee. See internal/mdspan.
 func enforceStyle(md string) string {
+	return mdspan.OutsideProtected(md, applyStyleReplacers)
+}
+
+// applyStyleReplacers runs every replacement over one unprotected region.
+func applyStyleReplacers(md string) string {
 	for _, r := range styleReplacers {
 		if r.with == "" {
 			continue

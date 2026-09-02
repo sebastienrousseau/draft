@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/sebastienrousseau/draft/config"
@@ -125,4 +126,35 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+// A banned word inside a quotation is the source's word, not the writer's.
+// Rewriting it attributes to a paper something the paper never said, which is
+// the one edit that would void the grounding guarantee.
+func TestEnforceStyleLeavesQuotationsIntact(t *testing.T) {
+	for _, tc := range []struct{ name, in string }{
+		{"straight quote", `The paper states: "we leverage a robust seamless pipeline" (p. 4).`},
+		{"smart quote", "The paper states: “we leverage a robust pipeline” (p. 4)."},
+		{"inline code", "The flag is `--leverage-robust` in their tool."},
+		{"fenced block", "Their snippet:\n\n```\nleverage(robust)\n```\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := enforceStyle(tc.in); got != tc.in {
+				t.Errorf("enforceStyle mutated protected text:\n got %q\nwant %q", got, tc.in)
+			}
+		})
+	}
+}
+
+// The repair must still fire on the writer's own prose, including prose that
+// sits in the same sentence as a protected span.
+func TestEnforceStyleStillRepairsUnquotedProse(t *testing.T) {
+	in := `We leverage the result: "they leverage it too".`
+	got := enforceStyle(in)
+	if strings.Contains(got, "We leverage") {
+		t.Errorf("enforceStyle left the writer's own banned word: %q", got)
+	}
+	if !strings.Contains(got, `"they leverage it too"`) {
+		t.Errorf("enforceStyle rewrote the quotation: %q", got)
+	}
 }

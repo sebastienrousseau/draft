@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/sebastienrousseau/draft/claims"
+	"github.com/sebastienrousseau/draft/internal/mdspan"
 	"github.com/sebastienrousseau/draft/rules"
 )
 
@@ -67,7 +68,11 @@ func Errors(md string) []string {
 	if ContainsEmoji(md) {
 		errs = append(errs, "contains emoji")
 	}
-	lowered := strings.ToLower(md)
+	// Scan the writer's own prose only. Code and quoted spans are exempt
+	// because enforceStyle refuses to rewrite them — attributing different
+	// words to a source is worse than a cliché — and a rule the repair pass
+	// cannot satisfy would otherwise drive an unfixable rewrite loop.
+	lowered := strings.ToLower(mdspan.BlankProtected(md))
 	if hits := bannedWordRe.FindAllString(lowered, -1); len(hits) > 0 {
 		errs = append(errs, "contains banned words: "+strings.Join(dedupeStrings(hits), ", "))
 	}
