@@ -5,6 +5,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,7 +39,7 @@ func TestLookupProvider(t *testing.T) {
 
 func TestProviderNames(t *testing.T) {
 	names := ProviderNames()
-	if len(names) != len(Providers) || names[0] != "claude" {
+	if len(names) != len(Providers()) || names[0] != "claude" {
 		t.Errorf("unexpected provider names: %v", names)
 	}
 }
@@ -263,4 +265,69 @@ func names(engs []Engine) []string {
 		out[i] = e.Name()
 	}
 	return out
+}
+
+// The table used to be an exported slice that callers were invited to append
+// to, which races every read of it in a concurrent program.
+func TestRegistryIsConcurrencySafe(t *testing.T) {
+	t.Cleanup(ResetProviders)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_ = Register(Provider{Name: fmt.Sprintf("probe-%d", i), Bin: "probe"})
+		}(i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = Providers()
+			_ = ProviderNames()
+			_, _ = LookupProvider("claude")
+			_, _ = FirstAvailableProvider(true)
+		}()
+	}
+	wg.Wait()
+
+	if _, ok := LookupProvider("probe-0"); !ok {
+		t.Error("a registered provider is not visible")
+	}
+}
+
+func TestProvidersReturnsACopy(t *testing.T) {
+	got := Providers()
+	if len(got) == 0 {
+		t.Fatal("Providers() is empty")
+	}
+	got[0].Name = "mutated"
+	if fresh := Providers(); fresh[0].Name == "mutated" {
+		t.Error("mutating the returned slice changed the registry")
+	}
+}
+
+func TestRegisterReplacesByName(t *testing.T) {
+	t.Cleanup(ResetProviders)
+	before := len(Providers())
+	if err := Register(Provider{Name: "claude", Bin: "elsewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(Providers()); got != before {
+		t.Errorf("registry grew to %d; a same-name provider should replace", got)
+	}
+	p, _ := LookupProvider("claude")
+	if p.Bin != "elsewhere" {
+		t.Errorf("Bin = %q, want the replacement", p.Bin)
+	}
+}
+
+// A provider missing either field would fail at the point of a generation
+// call, with a far worse message than this.
+func TestRegisterRejectsAnUnrunnableProvider(t *testing.T) {
+	t.Cleanup(ResetProviders)
+	for _, p := range []Provider{{}, {Name: "  "}, {Name: "x"}, {Name: "x", Bin: " "}} {
+		if err := Register(p); err == nil {
+			t.Errorf("Register(%+v) = nil, want an error", p)
+		}
+	}
 }

@@ -4,11 +4,13 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,8 +53,8 @@ type Provider struct {
 	StreamJSON bool
 }
 
-// Providers is the registry of supported session CLIs, in auto-selection
-// preference order. The first non-experimental one found on PATH becomes the
+// defaultProviders is the built-in registry of supported session CLIs, in
+// auto-selection preference order. The first non-experimental one found on PATH becomes the
 // default online backend. Invocations were derived from each CLI's own --help.
 //
 // claude, copilot, codex, grok, agy, and cursor-agent are verified end to end
@@ -80,26 +82,83 @@ type Provider struct {
 // crush (no provider configured) — their documentation suggests stdin support,
 // but guessing here would break a working provider, so they keep argument
 // delivery until someone can run them.
-var Providers = []Provider{
-	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
-	{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
-	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
-	{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
-	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
-	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
-	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
-	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
-	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
-	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+func defaultProviders() []Provider {
+	return []Provider{
+		{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
+		{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
+		{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
+		{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
+		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
+		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
+		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
+		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
+		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
+		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+	}
+}
+
+// registry holds the provider table behind a lock.
+//
+// It used to be an exported slice, and LookupProvider's comment documented
+// that callers may append to it. For a package meant to be embedded that is a
+// data race the detector can only catch by luck: a consumer registering a
+// provider while a run is in flight races every Chain, LookupProvider and
+// FirstAvailableProvider call at once. For a library the public surface is the
+// product, so the table is reached only through these accessors.
+var registry = struct {
+	mu   sync.RWMutex
+	list []Provider
+}{list: defaultProviders()}
+
+// Providers returns the registered session CLIs in auto-selection preference
+// order. The result is a copy: mutating it does not change the registry, and
+// Register is the supported way to extend it.
+func Providers() []Provider {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	return append([]Provider(nil), registry.list...)
+}
+
+// Register adds a provider, or replaces the entry with the same name. A
+// provider needs at least a name and a binary to be runnable; anything less
+// would fail later, at the point of a generation call, with a far worse
+// message.
+func Register(p Provider) error {
+	if strings.TrimSpace(p.Name) == "" {
+		return errors.New("provider needs a name")
+	}
+	if strings.TrimSpace(p.Bin) == "" {
+		return fmt.Errorf("provider %q needs a binary to look up on PATH", p.Name)
+	}
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	for i := range registry.list {
+		if registry.list[i].Name == p.Name {
+			registry.list[i] = p
+			return nil
+		}
+	}
+	registry.list = append(registry.list, p)
+	return nil
+}
+
+// ResetProviders restores the built-in table, discarding anything registered.
+// It exists so a test that registers a provider can undo it.
+func ResetProviders() {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	registry.list = defaultProviders()
 }
 
 // LookupProvider returns the provider spec for name and whether it exists.
 //
-// It scans Providers rather than consulting an index built at init: Providers
-// is exported and therefore mutable, and an index would silently disagree with
-// it the moment a caller appended a provider. Ten entries make the scan free.
+// It scans rather than consulting an index built at init: the registry is
+// extensible, and an index would silently disagree with it the moment a caller
+// registered a provider. Ten entries make the scan free.
 func LookupProvider(name string) (Provider, bool) {
-	for _, p := range Providers {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	for _, p := range registry.list {
 		if p.Name == name {
 			return p, true
 		}
@@ -109,8 +168,10 @@ func LookupProvider(name string) (Provider, bool) {
 
 // ProviderNames returns every registered provider name in preference order.
 func ProviderNames() []string {
-	names := make([]string, len(Providers))
-	for i, p := range Providers {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	names := make([]string, len(registry.list))
+	for i, p := range registry.list {
 		names[i] = p.Name
 	}
 	return names
@@ -141,7 +202,7 @@ func IsAvailable(name string) bool {
 // installed, in preference order. Experimental providers are considered only
 // when includeExperimental is true.
 func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
-	for _, p := range Providers {
+	for _, p := range Providers() {
 		if p.Experimental && !includeExperimental {
 			continue
 		}

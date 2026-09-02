@@ -29,7 +29,7 @@ var toolGrantingFlags = []string{
 }
 
 func TestNoProviderGrantsTools(t *testing.T) {
-	for _, p := range Providers {
+	for _, p := range Providers() {
 		for _, arg := range p.Args {
 			for _, bad := range toolGrantingFlags {
 				if arg == bad {
@@ -149,7 +149,7 @@ func TestPromptStaysOutOfArgvWhereverPossible(t *testing.T) {
 	// copilot ignores stdin and offers no prompt-file flag; agy offers only an
 	// NDJSON turn protocol. Both keep argv until that changes.
 	argvOnly := map[string]bool{"copilot": true, "agy": true, "amp": true, "crush": true, "qwen": true}
-	for _, p := range Providers {
+	for _, p := range Providers() {
 		if p.PromptViaStdin || p.PromptFileFlag != "" || argvOnly[p.Name] {
 			continue
 		}

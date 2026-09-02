@@ -64,7 +64,7 @@ func defaultEngineChoices(online bool) []engineChoice {
 		{Name: "grok", Label: "grok", Description: "Grok CLI session", Installed: engine.IsAvailable("grok")},
 		{Name: "ollama", Label: "ollama", Description: "Ollama (Local offline model)", Installed: engine.IsAvailable("ollama")},
 	}
-	for _, p := range engine.Providers {
+	for _, p := range engine.Providers() {
 		found := false
 		for _, c := range base {
 			if c.Name == p.Name {
