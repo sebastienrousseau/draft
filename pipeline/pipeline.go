@@ -99,6 +99,12 @@ type (
 		Status   string // "done" or "failed"
 		Duration time.Duration
 	}
+	// SourceDigest identifies one input by content, so a draft can be traced
+	// back to exactly the file that produced it.
+	SourceDigest struct {
+		Path   string
+		SHA256 string
+	}
 	// DoneEvent is the terminal success event.
 	DoneEvent struct {
 		OutputPath string
@@ -106,6 +112,14 @@ type (
 		Words      int
 		Mode       string
 		Engine     string
+		// Model, PromptVersion, Sources and LedgerSHA256 form the run
+		// manifest. A tool that sells authenticity should be able to say what
+		// produced a given draft: which backend and model, which version of
+		// the extraction instructions, and which bytes went in.
+		Model         string
+		PromptVersion string
+		Sources       []SourceDigest
+		LedgerSHA256  string
 		// Duration is the wall-clock time for the whole job, and Timings the
 		// per-phase breakdown, so --json output can be compared across runs
 		// rather than only read.
@@ -190,9 +204,13 @@ type Runner struct {
 	// started, phaseStart and timings record how long the run and each phase
 	// took, reported on DoneEvent so a run's cost is measurable rather than
 	// merely felt.
-	started    time.Time
-	phaseStart time.Time
-	timings    []PhaseTiming
+	// sourceDigests and ledgerDigest record what went into the current job,
+	// reported on DoneEvent as a run manifest.
+	sourceDigests []SourceDigest
+	ledgerDigest  string
+	started       time.Time
+	phaseStart    time.Time
+	timings       []PhaseTiming
 	// cache reuses claim extractions across runs, addressed by the content
 	// that produced them. Nil when caching is disabled; every method on it
 	// tolerates that, so there is no branch at the call sites.
@@ -278,6 +296,8 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 	r.done = ctx.Done()
 	r.started = time.Now()
 	r.timings = nil
+	r.sourceDigests = nil
+	r.ledgerDigest = ""
 
 	// The cursor is deliberately NOT reset here. A Runner reused across a queue
 	// keeps the backend it settled on, so a dead provider is tried once for the
@@ -372,12 +392,16 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	r.log("saved " + shortPath(r.cfg, outputPath))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{
-		OutputPath: outputPath,
-		Words:      words,
-		Mode:       "draft",
-		Engine:     r.writerName(),
-		Duration:   time.Since(r.started),
-		Timings:    append([]PhaseTiming(nil), r.timings...),
+		OutputPath:    outputPath,
+		Words:         words,
+		Mode:          "draft",
+		Engine:        r.writerName(),
+		Model:         r.writerModel(),
+		PromptVersion: prompt.ClaimVersion(),
+		Sources:       append([]SourceDigest(nil), r.sourceDigests...),
+		LedgerSHA256:  r.ledgerDigest,
+		Duration:      time.Since(r.started),
+		Timings:       append([]PhaseTiming(nil), r.timings...),
 	})
 	return nil
 }
@@ -523,6 +547,9 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 	failed := 0
 
 	for _, src := range sources {
+		if sum, err := fileSHA256(src); err == nil {
+			r.sourceDigests = append(r.sourceDigests, SourceDigest{Path: src, SHA256: sum})
+		}
 		text, err := pdf.Extract(ctx, src)
 		if err != nil {
 			// Cancellation is not a skippable per-file problem.
@@ -655,7 +682,9 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	// Report what actually happened. Logging "claims saved" unconditionally
 	// after a discarded write tells the user a fact-checking artefact exists
 	// when it may not.
-	if err := os.WriteFile(ledgerPath, []byte(claims.RenderLedger(records, dropped)+"\n"), 0o644); err != nil {
+	ledgerText := claims.RenderLedger(records, dropped) + "\n"
+	r.ledgerDigest = sha256Hex(ledgerText)
+	if err := os.WriteFile(ledgerPath, []byte(ledgerText), 0o644); err != nil {
 		r.ledgerPath = ""
 		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
 	} else {
@@ -988,6 +1017,11 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		lastErr = errors.New("no engine available")
 	}
 	return engine.Result{}, lastErr
+}
+
+// writerModel is the model the writing backend used, for the run manifest.
+func (r *Runner) writerModel() string {
+	return engine.ResolveModel(r.cfg, r.chainFor(engine.KindWrite).active())
 }
 
 // writerName is the engine that produced the article, which is the one worth

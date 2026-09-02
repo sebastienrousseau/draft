@@ -73,7 +73,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
 	var jsonOut, dryRun bool
-	var clearCache bool
+	var clearCache, doctor bool
 	var reviewPath, frontmatterPath, completionShell string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
@@ -103,6 +103,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
+	fs.BoolVar(&doctor, "doctor", false, "check that this machine can run draft, and exit")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err := fs.Parse(argv); err != nil {
@@ -163,6 +164,10 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	if err := engine.Validate(cfg); err != nil {
 		fmt.Fprintln(stderr, "draft:", err)
 		return 2
+	}
+
+	if doctor {
+		return runDoctor(cfg, defaultProbes(), stdout)
 	}
 
 	args := fs.Args()
@@ -354,6 +359,7 @@ func usage(w io.Writer) {
 		{"--print", "run without the TUI; print draft paths to stdout"},
 		{"--json", "run without the TUI; one JSON object per job on stdout"},
 		{"--dry-run", "report what a run would do, without calling a model"},
+		{"--doctor", "check that this machine can run draft, and exit"},
 		{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
 		{"--version", "print version and exit"},
 		{"-h, --help", "show this help"},

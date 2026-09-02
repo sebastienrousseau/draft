@@ -4,7 +4,10 @@
 package pipeline
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -277,6 +280,27 @@ func slugify(s string) string {
 		return "draft-article"
 	}
 	return out
+}
+
+// sha256Hex is the hex digest of s.
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+// fileSHA256 digests a file by streaming it, so a large source is not pulled
+// into memory a second time just to identify it.
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func fileExists(path string) bool {

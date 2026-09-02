@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -552,5 +554,52 @@ func TestRunClearCacheIgnoresNoCache(t *testing.T) {
 	}
 	if _, err := os.Stat(shard); !os.IsNotExist(err) {
 		t.Error("--clear-cache --no-cache did not clear the configured directory")
+	}
+}
+
+// A tool that sells authenticity should be able to answer "what made this?"
+// without the asker having to trust the answer.
+func TestJSONCarriesASchemaAndRunManifest(t *testing.T) {
+	cfg, full := tmpSource(t, "paper.txt")
+	jobs := []pipeline.Job{{Sources: []string{full}}}
+	var out strings.Builder
+	if failures := runHeadlessJSON(context.Background(), cfg, pipeline.NewRunner(cfg, []engine.Engine{stubEngine{}}, nil), jobs, &out, io.Discard); failures != 0 {
+		t.Fatalf("%d failures", failures)
+	}
+
+	var rec jobRecord
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &rec); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out.String())
+	}
+	if rec.Schema != jobRecordSchema {
+		t.Errorf("schema = %d, want %d", rec.Schema, jobRecordSchema)
+	}
+	if rec.Manifest == nil {
+		t.Fatal("no manifest on a successful job")
+	}
+	if rec.Manifest.DraftVersion == "" {
+		t.Error("manifest has no draft version")
+	}
+	if rec.Manifest.PromptVersion == "" {
+		t.Error("manifest has no prompt version")
+	}
+	if rec.Manifest.LedgerSHA256 == "" {
+		t.Error("manifest has no ledger digest")
+	}
+	if len(rec.Manifest.Sources) != 1 {
+		t.Fatalf("manifest lists %d source(s), want 1", len(rec.Manifest.Sources))
+	}
+	src := rec.Manifest.Sources[0]
+	if src.Path != full {
+		t.Errorf("manifest source path = %q, want %q", src.Path, full)
+	}
+	// The digest must be of the bytes that actually went in.
+	data, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	if src.SHA256 != hex.EncodeToString(sum[:]) {
+		t.Errorf("manifest digest %q does not match the source file", src.SHA256)
 	}
 }

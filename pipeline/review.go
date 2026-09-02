@@ -134,12 +134,16 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	r.log(fmt.Sprintf("applied %d surgical edit(s)", len(edits)))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{
-		OutputPath: job.ReviewPath,
-		Words:      validate.WordCount(enhanced),
-		Mode:       "review",
-		Engine:     r.writerName(),
-		Duration:   time.Since(r.started),
-		Timings:    append([]PhaseTiming(nil), r.timings...),
+		OutputPath:    job.ReviewPath,
+		Words:         validate.WordCount(enhanced),
+		Mode:          "review",
+		Engine:        r.writerName(),
+		Model:         r.writerModel(),
+		PromptVersion: prompt.ClaimVersion(),
+		Sources:       append([]SourceDigest(nil), r.sourceDigests...),
+		LedgerSHA256:  r.ledgerDigest,
+		Duration:      time.Since(r.started),
+		Timings:       append([]PhaseTiming(nil), r.timings...),
 	})
 	return nil
 }

@@ -51,6 +51,9 @@ func runHeadless(ctx context.Context, cfg config.Config, runner *pipeline.Runner
 // jobRecord is one line of --json output: a stable, machine-readable summary
 // of a single job's outcome.
 type jobRecord struct {
+	// Schema versions this record so a consumer can branch on it rather than
+	// sniffing for fields.
+	Schema int    `json:"schema"`
 	Source string `json:"source"`
 	Output string `json:"output,omitempty"`
 	Engine string `json:"engine,omitempty"`
@@ -67,6 +70,43 @@ type jobRecord struct {
 	// because a Go duration serialises as an opaque nanosecond count.
 	DurationMS int64            `json:"duration_ms,omitempty"`
 	PhasesMS   map[string]int64 `json:"phases_ms,omitempty"`
+	// Manifest records what produced the draft. A tool that sells
+	// authenticity should be able to answer "what made this?" without the
+	// asker having to trust the answer: which model, which version of the
+	// extraction instructions, and the digests of the exact bytes that went
+	// in and of the ledger they were verified against.
+	Manifest *runManifest `json:"manifest,omitempty"`
+}
+
+// jobRecordSchema is the current version of the --json record shape. Bump it
+// when a field changes meaning or disappears, never for a pure addition.
+const jobRecordSchema = 1
+
+type runManifest struct {
+	DraftVersion  string           `json:"draft_version"`
+	Model         string           `json:"model,omitempty"`
+	PromptVersion string           `json:"prompt_version,omitempty"`
+	LedgerSHA256  string           `json:"ledger_sha256,omitempty"`
+	Sources       []manifestSource `json:"sources,omitempty"`
+}
+
+type manifestSource struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+}
+
+// manifestFor builds the manifest from a completed job's event.
+func manifestFor(ev pipeline.DoneEvent) *runManifest {
+	m := &runManifest{
+		DraftVersion:  version,
+		Model:         ev.Model,
+		PromptVersion: ev.PromptVersion,
+		LedgerSHA256:  ev.LedgerSHA256,
+	}
+	for _, s := range ev.Sources {
+		m.Sources = append(m.Sources, manifestSource{Path: s.Path, SHA256: s.SHA256})
+	}
+	return m
 }
 
 // phaseMillis flattens per-phase timings into the JSON shape.
@@ -89,7 +129,7 @@ func runHeadlessJSON(ctx context.Context, cfg config.Config, runner *pipeline.Ru
 	enc := json.NewEncoder(stdout)
 	for i, job := range jobs {
 		fmt.Fprintf(stderr, "[%d/%d] %v\n", i+1, len(jobs), job.Sources)
-		rec := jobRecord{Source: strings.Join(job.Sources, ",")}
+		rec := jobRecord{Schema: jobRecordSchema, Source: strings.Join(job.Sources, ",")}
 
 		events := make(chan pipeline.Event, 256)
 		runner.SetEvents(events)
@@ -108,6 +148,7 @@ func runHeadlessJSON(ctx context.Context, cfg config.Config, runner *pipeline.Ru
 				rec.Output, rec.Engine, rec.Mode, rec.Words, rec.OK = ev.OutputPath, ev.Engine, ev.Mode, ev.Words, true
 				rec.DurationMS = ev.Duration.Milliseconds()
 				rec.PhasesMS = phaseMillis(ev.Timings)
+				rec.Manifest = manifestFor(ev)
 			case pipeline.ErrEvent:
 				rec.Error = string(ev)
 			}
