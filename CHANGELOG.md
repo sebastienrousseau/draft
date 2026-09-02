@@ -4,6 +4,96 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and versions use a `0.0.x`
 series until `0.0.999`.
 
+## [Unreleased]
+
+### Security
+
+- **Bounded the blast radius of a crafted source document.** `draft` puts a
+  downloaded PDF's text into a prompt for an agent running with your
+  credentials, which is the canonical indirect-prompt-injection shape. Provider
+  subprocesses now run in a fresh empty temporary directory (removed when the
+  call returns) rather than your working directory, so a source cannot reach an
+  agent that has loaded the `CLAUDE.md`, `AGENTS.md`, `.mcp.json` or project
+  settings sitting there. `DRAFT_*` is stripped from the child environment.
+- **Removed every tool grant.** `copilot --allow-all-tools` and
+  `cursor-agent --force` (its own `--help` calls that an alias for `--yolo`,
+  "Run Everything") are gone. `draft` only ever asks for text. A test pins the
+  invocation table against a list of known tool-granting flags.
+- **Fenced untrusted text.** Source documents, the claim ledger and the draft
+  under review are wrapped in a nonce-delimited block stating that the contents
+  are data, never directions. The nonce is fresh per call, so a document cannot
+  close its own block and continue as the operator. The ledger is fenced too: a
+  `SOURCE_QUOTE` is verbatim source by construction.
+- **Kept prompts out of `argv` for two more providers.** `goose` is driven over
+  stdin (`run -i -`) and `grok` through a `0600` prompt file, per each CLI's own
+  `--help`. Only `copilot` and `agy` still take an argument, and a test pins
+  that exception list.
+
+### Fixed
+
+- **`enforceStyle` no longer rewrites quotations.** It ran its banned-vocabulary
+  replacers over the whole draft, so `The paper states: "we leverage a robust
+  seamless pipeline"` became `"we use a strong smooth pipeline"` — attributing
+  to a source words it never wrote. Code and quoted spans are now excluded, and
+  the banned-vocabulary check skips them too, so the repair pass is never asked
+  to satisfy a rule it refuses to touch.
+- **Prompts are cut on rune boundaries.** `ContinueWriting`, `prompt.clip` and
+  the template excerpt all sliced at raw byte offsets; on non-ASCII sources that
+  produced invalid UTF-8, and `claims.Verify` rejects any quote containing
+  U+FFFD. Lifting the existing helper out of `internal/pdf` also surfaced an
+  off-by-one in it: a document opening with a multi-byte rune was cut mid-rune.
+- **Shell completion is derived from the help table.** The two lists had drifted
+  by four flags despite a comment promising they could not.
+- **`ollama serve` is reaped.** A started process that is never waited on stayed
+  a zombie for as long as `draft` lived.
+
+### Added
+
+- **`--out` and `--sources-dir`** (`DRAFT_DRAFTS_DIR`, `DRAFT_SOURCES_DIR`).
+  Both trees were hardcoded under the home directory with no flag and no
+  variable, which made `draft` unusable from CI, a container, or as a library
+  whose caller chooses where output goes.
+- **`--doctor`.** Checks Poppler, the installed backends, Ollama, the resolved
+  paths and their writability, and the per-kind engine routing. Every
+  requirement was previously discovered at failure time.
+- **`--strict-numbers` / `DRAFT_STRICT_NUMBERS`.** Promotes "numbers not found
+  in any claim" from a warning to a blocking error. Opt-in for one release while
+  the false-positive rate is measured; ordered-list markers and four-digit years
+  are excluded when blocking, and still reported when advisory.
+- **A run manifest on `--json`,** plus `"schema": 1`. Records the draft version,
+  model, a hash of the extraction instructions, the ledger digest and the
+  SHA-256 of every source file.
+
+### Changed
+
+- **Claim extractions are cached by content** rather than by date. The only
+  reuse was `--resume`, whose ledger is named for today's date and the first
+  source's filename, so redrafting the same paper tomorrow re-paid the whole
+  cost — 80-95% of a run's wall clock. Measured on a one-section source, the
+  second run's extract phase went from 15,108 ms to 1 ms with an identical
+  ledger digest. A cached entry is still re-verified against the freshly read
+  source, so a stale one can only ever yield fewer claims, never an ungrounded
+  one. `--no-cache` and `--clear-cache` control it.
+- **A demoted engine recovers.** The fallback cursor was permanent for the life
+  of a `Runner`, so one flaky moment on the first paper demoted a forty-paper
+  queue to the local model for its entire life. The chain now re-probes after
+  15 minutes.
+- **Ollama concurrency follows the server.** `OLLAMA_NUM_PARALLEL` is read, and
+  the measured floor of 2 is no longer a ceiling.
+- **Near-duplicate paragraphs are repaired without regenerating.** A rule
+  violation cost a full rewrite — the most expensive call in a run — even when a
+  deterministic edit could settle it.
+- **BREAKING: `engine.Providers` is a function, not a slice.** It was an
+  exported mutable table that callers were invited to append to, which races
+  every read of it in a concurrent program. Use `engine.Providers()` to read and
+  `engine.Register` to extend.
+
+### Documentation
+
+- **`docs/AUDIT-2026-09.md`** — a full architecture, performance, security and
+  product audit against 2026-2027 market context, with the roadmap these changes
+  implement.
+
 ## [0.0.33] - 2026-08-11
 
 ### Changed
