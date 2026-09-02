@@ -32,6 +32,12 @@ type Provider struct {
 	// PromptViaStdin sends the prompt on stdin instead of as a positional
 	// argument. When false, StdinPlaceholder (if set) is still appended.
 	PromptViaStdin bool
+	// PromptFileFlag, when non-empty, writes the prompt to a private file
+	// inside the call's sandbox directory and passes its path with this flag
+	// (e.g. "--prompt-file"). It is the second-best delivery after stdin, and
+	// far better than argv: a positional prompt carries the verbatim source
+	// text into the process listing, where any local user can read it.
+	PromptFileFlag string
 	// StdinPlaceholder is appended as a positional argument when the prompt is
 	// delivered on stdin and the CLI needs a marker (e.g. "-").
 	StdinPlaceholder string
@@ -55,16 +61,25 @@ type Provider struct {
 // been verified for a full article, so auto-selection skips them unless
 // --experimental is set.
 //
-// PromptViaStdin is set only where stdin delivery was confirmed by running the
-// CLI, because a prompt passed as an argument is visible in a process listing
-// along with the source text it quotes. Confirmed reading stdin: claude, codex
-// ("Reading prompt from stdin..."), cursor-agent (answered a stdin prompt).
-// Confirmed NOT to: copilot (ignored a stdin prompt entirely), agy and grok and
-// goose (their prompt flags require a value, so there is nothing to read stdin
-// into). Unverifiable when checked: amp (out of credits), qwen (no auth
-// configured), crush (no provider configured) — their documentation suggests
-// stdin support, but guessing here would break a working provider, so they keep
-// argument delivery until someone can run them.
+// The prompt is kept out of argv wherever the CLI allows it, because a
+// positional prompt is visible in a process listing — along with the verbatim
+// source text it quotes — to any other user on the machine.
+//
+// Confirmed reading stdin: claude, codex ("Reading prompt from stdin..."),
+// cursor-agent (answered a stdin prompt), and goose, whose `run -i <FILE>`
+// documents "Use - for stdin" (an earlier note here recorded goose as
+// argv-only, which its own --help contradicts).
+//
+// Confirmed to accept a prompt file: grok, via `--prompt-file <PATH>`
+// ("Single-turn prompt from a file").
+//
+// Confirmed NOT to read stdin: copilot (ignored a stdin prompt entirely).
+// agy offers only --input-format stream-json, an NDJSON turn protocol rather
+// than a plain prompt, so it keeps argv until that is implemented.
+// Unverifiable when checked: amp (out of credits), qwen (no auth configured),
+// crush (no provider configured) — their documentation suggests stdin support,
+// but guessing here would break a working provider, so they keep argument
+// delivery until someone can run them.
 var Providers = []Provider{
 	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
 	{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
@@ -73,8 +88,8 @@ var Providers = []Provider{
 	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
 	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
 	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
-	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}, Experimental: true},
-	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}},
+	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
+	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
 	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
 }
 

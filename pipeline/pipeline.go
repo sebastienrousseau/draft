@@ -800,7 +800,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 			}
 		}
 		styleErrs := validate.Errors(markdown)
-		factErrs, warnings := validate.Faithfulness(markdown, records)
+		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
 		errs = append(append([]string{}, styleErrs...), factErrs...)
 		if len(errs) == 0 {
 			for _, w := range warnings {
@@ -1025,6 +1025,11 @@ func (r *Runner) phase(index int, status string) {
 		}
 	}
 	r.emit(PhaseEvent{Index: index, Status: status})
+}
+
+// validateOptions is the validation policy for this run.
+func (r *Runner) validateOptions() validate.Options {
+	return validate.Options{StrictNumbers: r.cfg.StrictNumbers}
 }
 
 func (r *Runner) log(msg string) { r.emit(LogEvent(msg)) }

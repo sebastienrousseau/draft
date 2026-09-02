@@ -141,3 +141,55 @@ func TestSessionFailsWhenTheSandboxCannotBeCreated(t *testing.T) {
 		t.Errorf("error should name the cause, got %q", err)
 	}
 }
+
+// A positional prompt puts the verbatim source text into the process listing.
+// Every provider must therefore deliver it on stdin or through a private file;
+// the exceptions are the CLIs whose own --help offers neither.
+func TestPromptStaysOutOfArgvWhereverPossible(t *testing.T) {
+	// copilot ignores stdin and offers no prompt-file flag; agy offers only an
+	// NDJSON turn protocol. Both keep argv until that changes.
+	argvOnly := map[string]bool{"copilot": true, "agy": true, "amp": true, "crush": true, "qwen": true}
+	for _, p := range Providers {
+		if p.PromptViaStdin || p.PromptFileFlag != "" || argvOnly[p.Name] {
+			continue
+		}
+		t.Errorf("provider %q delivers the prompt in argv but is not on the exception list", p.Name)
+	}
+}
+
+func TestPromptFileIsStagedPrivatelyAndPassedByPath(t *testing.T) {
+	var captured *exec.Cmd
+	orig := execCommand
+	execCommand = captureExec(&captured)
+	defer func() { execCommand = orig }()
+
+	s, _ := NewSession("grok", config.Config{})
+	if _, err := s.Generate(context.Background(), Request{Prompt: "secret source text"}); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(captured.Args, "\x1f")
+	if strings.Contains(joined, "secret source text") {
+		t.Errorf("prompt leaked into argv: %q", joined)
+	}
+	if !strings.Contains(joined, "--prompt-file") {
+		t.Errorf("prompt file flag missing from argv: %q", joined)
+	}
+}
+
+func TestPromptFileFailureIsReported(t *testing.T) {
+	origMk := mkTempDir
+	// A directory that does not exist makes the staging write fail without
+	// needing an unwritable filesystem.
+	mkTempDir = func(string, string) (string, error) { return "/nonexistent-draft-sandbox", nil }
+	defer func() { mkTempDir = origMk }()
+
+	origExec := execCommand
+	execCommand = fakeExec("default")
+	defer func() { execCommand = origExec }()
+
+	s, _ := NewSession("grok", config.Config{})
+	_, err := s.Generate(context.Background(), Request{Prompt: "hi"})
+	if err == nil || !strings.Contains(err.Error(), "stage the prompt") {
+		t.Errorf("expected a staging error, got %v", err)
+	}
+}

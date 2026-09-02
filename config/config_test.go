@@ -190,3 +190,27 @@ func TestAbsDirReportsAnUnresolvablePath(t *testing.T) {
 		t.Errorf("expected a warning naming the setting, got %v", c.Warnings)
 	}
 }
+
+func TestStrictNumbersOptIn(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+	if Load(Flags{}).StrictNumbers {
+		t.Error("StrictNumbers should be off by default")
+	}
+	if !Load(Flags{StrictNumbers: true}).StrictNumbers {
+		t.Error("the flag should enable it")
+	}
+	for _, v := range []string{"1", "true", "TRUE", "yes", "on"} {
+		t.Setenv("DRAFT_STRICT_NUMBERS", v)
+		if !Load(Flags{}).StrictNumbers {
+			t.Errorf("DRAFT_STRICT_NUMBERS=%q should enable it", v)
+		}
+	}
+	// A mistyped opt-in must not stop a run.
+	for _, v := range []string{"", "0", "off", "nope"} {
+		t.Setenv("DRAFT_STRICT_NUMBERS", v)
+		if Load(Flags{}).StrictNumbers {
+			t.Errorf("DRAFT_STRICT_NUMBERS=%q should not enable it", v)
+		}
+	}
+}

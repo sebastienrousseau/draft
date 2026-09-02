@@ -6,6 +6,8 @@ package validate
 import (
 	"strings"
 	"testing"
+
+	"github.com/sebastienrousseau/draft/claims"
 )
 
 func TestEndsSentence(t *testing.T) {
@@ -132,4 +134,59 @@ func TestErrorsIgnoresBannedWordsInsideQuotations(t *testing.T) {
 	if !found {
 		t.Errorf("Errors() missed a banned word in unquoted prose: %v", Errors(unquoted))
 	}
+}
+
+// A number in the article that appears in no claim is the clearest sign of
+// invention. Warning about it and saving anyway is hard to defend for a tool
+// whose promise is that every sentence is grounded.
+func TestStrictNumbersPromotesInventionToAnError(t *testing.T) {
+	recs := []claims.Record{{Claim: "throughput reached 12 pages/s", SourceQuote: "throughput reached 12 pages/s"}}
+	article := "The model improved by 34%, reaching 12 pages/s."
+
+	errs, warnings := Faithfulness(article, recs)
+	if hasNumberComplaint(errs) {
+		t.Error("default policy should not block on an ungrounded number")
+	}
+	if !hasNumberComplaint(warnings) {
+		t.Errorf("default policy should warn, got %v", warnings)
+	}
+
+	errs, warnings = FaithfulnessWithOptions(article, recs, Options{StrictNumbers: true})
+	if !hasNumberComplaint(errs) {
+		t.Errorf("strict policy should block, got errs %v", errs)
+	}
+	if hasNumberComplaint(warnings) {
+		t.Error("strict policy should not also warn")
+	}
+}
+
+// The two dominant false positives must not fail an honest draft.
+func TestStrictNumbersIgnoresStructureAndYears(t *testing.T) {
+	recs := []claims.Record{{Claim: "a claim", SourceQuote: "a claim"}}
+	for _, tc := range []struct{ name, article string }{
+		{"ordered list", "1. first item\n2. second item\n3. third item\n"},
+		{"publication year", "The approach was described in 2019 and refined later.\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			errs, _ := FaithfulnessWithOptions(tc.article, recs, Options{StrictNumbers: true})
+			if hasNumberComplaint(errs) {
+				t.Errorf("strict policy blocked on %s: %v", tc.name, errs)
+			}
+		})
+	}
+	// Both are still reported when the result is only advisory, so nothing is
+	// hidden from a reader of the warnings.
+	_, warnings := Faithfulness("The approach was described in 2019.", recs)
+	if !hasNumberComplaint(warnings) {
+		t.Error("advisory mode should still report a year")
+	}
+}
+
+func hasNumberComplaint(msgs []string) bool {
+	for _, m := range msgs {
+		if strings.Contains(m, "numbers not found in any claim") {
+			return true
+		}
+	}
+	return false
 }

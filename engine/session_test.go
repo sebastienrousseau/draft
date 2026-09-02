@@ -189,7 +189,7 @@ func TestSessionPromptViaArg(t *testing.T) {
 // Providers confirmed to read stdin must not also leak the prompt into argv,
 // where a process listing would expose it along with the source text it quotes.
 func TestStdinProvidersKeepThePromptOutOfArgv(t *testing.T) {
-	for _, name := range []string{"claude", "codex", "cursor-agent"} {
+	for _, name := range []string{"claude", "codex", "cursor-agent", "goose"} {
 		t.Run(name, func(t *testing.T) {
 			p, ok := LookupProvider(name)
 			if !ok {

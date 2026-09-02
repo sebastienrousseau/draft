@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -107,6 +108,18 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		args = append(args, s.provider.ModelFlag, s.model)
 	}
 
+	// Deliver the prompt without putting it in argv wherever the CLI allows:
+	// a positional prompt puts the verbatim source text into the process
+	// listing for every other user on the machine to read.
+	promptFile := ""
+	if !s.provider.PromptViaStdin && s.provider.PromptFileFlag != "" {
+		promptFile = filepath.Join(dir, "prompt.txt")
+		if err := os.WriteFile(promptFile, []byte(req.Prompt), 0o600); err != nil {
+			return Result{}, fmt.Errorf("%s: could not stage the prompt: %w", s.provider.Name, err)
+		}
+		args = append(args, s.provider.PromptFileFlag, promptFile)
+	}
+
 	cmd := execCommand(ctx, s.provider.Bin, args...)
 	cmd.Dir = dir
 	// Filter whatever environment the command already carries, rather than
@@ -121,7 +134,7 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		if s.provider.StdinPlaceholder != "" {
 			cmd.Args = append(cmd.Args, s.provider.StdinPlaceholder)
 		}
-	} else {
+	} else if promptFile == "" {
 		cmd.Args = append(cmd.Args, req.Prompt)
 	}
 

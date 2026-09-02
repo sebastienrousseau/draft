@@ -91,6 +91,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&flags.Resume, "resume", false, "reuse a verified claim ledger from an earlier attempt")
 	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
 	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
+	fs.BoolVar(&flags.StrictNumbers, "strict-numbers", false, "fail a draft that contains a number found in no verified claim")
 	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
 	fs.StringVar(&frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
 	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
@@ -322,6 +323,7 @@ func usage(w io.Writer) {
 		{"--write-engine <m>", "backend for writing (default: --engine)"},
 		{"--model <name>", "session-provider model override (e.g. opus)"},
 		{"--experimental", "let auto mode use experimental providers"},
+		{"--strict-numbers", "fail on a number found in no verified claim"},
 		{"--num-ctx <n>", "Ollama context window (default 8192)"},
 		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
 		{"--out <dir>", "directory to write drafts into"},
@@ -349,7 +351,7 @@ func usage(w io.Writer) {
 		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
 		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
 		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
-		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR,"),
+		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR, DRAFT_STRICT_NUMBERS,"),
 		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
 
 	fmt.Fprintf(w, "%s\n", head("OUTPUT"))

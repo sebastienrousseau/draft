@@ -91,7 +91,10 @@ type Config struct {
 	Resume             bool // reuse a verified claim ledger from an earlier attempt
 	KeepArtifacts      bool // keep prompt/ledger files beside a successful draft
 	Experimental       bool // let auto-selection consider experimental providers
-	OllamaHost         string
+	// StrictNumbers blocks a save when the article carries a number that
+	// appears in no verified claim, instead of only warning.
+	StrictNumbers bool
+	OllamaHost    string
 
 	// CallTimeout bounds a single generation call (0 = no timeout).
 	CallTimeout time.Duration
@@ -173,7 +176,8 @@ func Load(flags Flags) Config {
 	c.Merge = flags.Merge
 	c.Resume = flags.Resume
 	c.KeepArtifacts = flags.KeepArtifacts
-	c.Experimental = flags.Experimental || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "1") || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "true")
+	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
+	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
 	c.Warnings = warnings
 	return c
 }
@@ -270,6 +274,18 @@ type Flags struct {
 	Resume        bool
 	KeepArtifacts bool
 	Experimental  bool
+	StrictNumbers bool
+}
+
+// envBool reads a boolean environment variable in the forms users actually
+// write. It is deliberately narrow: anything else is false rather than an
+// error, because a mistyped opt-in flag should not stop a run.
+func envBool(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 // resolveDir reads a directory from the environment, expanding a leading ~ and
