@@ -12,8 +12,8 @@ build: ## Compile the binary to ./bin/draft
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/draft
 
-.PHONY: install
-install: ## Install the binary into GOPATH/bin
+.PHONY: install-go
+install-go: ## Install the binary into GOPATH/bin (see GNUmakefile for the FHS install)
 	go install -ldflags '$(LDFLAGS)' ./cmd/draft
 
 .PHONY: run
@@ -97,5 +97,7 @@ clean: ## Remove build artefacts
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@# -h suppresses the filename prefix: MAKEFILE_LIST holds both this file
+	@# and GNUmakefile, and without it awk reads the filename as the target.
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'

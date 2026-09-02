@@ -1,6 +1,7 @@
 # Build artefacts
 /bin/
 /dist/
+/.gen/
 /draft
 
 # Go

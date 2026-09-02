@@ -77,7 +77,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
 	var jsonOut, dryRun bool
-	var clearCache, doctor bool
+	var clearCache, doctor, manPage bool
 	var reviewPath, frontmatterPath, completionShell string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
@@ -108,6 +108,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
 	fs.BoolVar(&doctor, "doctor", false, "check that this machine can run draft, and exit")
+	fs.BoolVar(&manPage, "man", false, "print a roff manual page on stdout and exit")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err := fs.Parse(argv); err != nil {
@@ -115,6 +116,13 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 	if showVersion {
 		fmt.Fprintln(stdout, "draft "+version)
+		return 0
+	}
+	if manPage {
+		if err := writeManPage(stdout, version, time.Now()); err != nil {
+			fmt.Fprintln(stderr, "draft:", err)
+			return 1
+		}
 		return 0
 	}
 	if completionShell != "" {
@@ -290,6 +298,17 @@ func resolveSource(cfg config.Config, arg string) (string, error) {
 	return "", fmt.Errorf("research file not found: %s", arg)
 }
 
+// usageExamples is the example list the help text and the generated manpage
+// both render, so a new example cannot appear in one and not the other.
+var usageExamples = [][2]string{
+	{`draft "2603.23420.pdf"`, "one paper"},
+	{"draft a.pdf b.pdf c.pdf", "three drafts, queued"},
+	{"draft --merge notes.md paper.pdf", "combine into a single draft"},
+	{"draft --engine ollama paper.pdf", "force the local model"},
+	{"draft --review draft.md paper.pdf", "enhance an existing draft"},
+	{"draft --frontmatter source/x-body.md", "regenerate the yaml + final set"},
+}
+
 // flagHelp is the flag reference: the single table the help text renders and
 // the shell completions are derived from.
 //
@@ -347,14 +366,7 @@ func usage(w io.Writer) {
 		dim("Each source becomes its own draft, processed as a queue."))
 
 	fmt.Fprintf(w, "%s\n", head("EXAMPLES"))
-	for _, ex := range [][2]string{
-		{`draft "2603.23420.pdf"`, "one paper"},
-		{"draft a.pdf b.pdf c.pdf", "three drafts, queued"},
-		{"draft --merge notes.md paper.pdf", "combine into a single draft"},
-		{"draft --engine ollama paper.pdf", "force the local model"},
-		{"draft --review draft.md paper.pdf", "enhance an existing draft"},
-		{"draft --frontmatter source/x-body.md", "regenerate the yaml + final set"},
-	} {
+	for _, ex := range usageExamples {
 		fmt.Fprintf(w, "  %-40s %s\n", ex[0], dim("# "+ex[1]))
 	}
 	fmt.Fprintln(w)

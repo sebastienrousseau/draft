@@ -5,6 +5,14 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # A dry run builds, archives and signs nothing, so new release machinery can
+  # be exercised before a tag makes its failure permanent.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and archive without publishing"
+        type: boolean
+        default: true
 
 # Read-only by default; the release job widens only what it needs.
 permissions: read-all
@@ -29,7 +37,9 @@ jobs:
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: "~> v2"
-          args: release --clean
+          args: >-
+            release --clean
+            ${{ github.event_name == 'workflow_dispatch' && '--snapshot --skip=publish,sign,notarize,announce' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MACOS_SIGN_P12: ${{ secrets.MACOS_CERTIFICATE }}
@@ -37,7 +47,20 @@ jobs:
           MACOS_NOTARY_KEY: ${{ secrets.APPLE_API_KEY }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+      - name: Verify the archives carry their documentation
+        run: |
+          set -euo pipefail
+          archive=$(ls dist/draft_*_linux_amd64.tar.gz | head -1)
+          for f in share/man/man1/draft.1 \
+                   share/bash-completion/completions/draft \
+                   share/zsh/site-functions/_draft \
+                   share/fish/vendor_completions.d/draft.fish \
+                   LICENSE-MIT LICENSE-APACHE README.md CHANGELOG.md draft; do
+            tar tzf "$archive" | grep -qx "$f" || { echo "missing from archive: $f"; exit 1; }
+          done
+
       - name: Attest build provenance
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |

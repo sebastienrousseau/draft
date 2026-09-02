@@ -7,6 +7,19 @@ project_name: draft
 before:
   hooks:
     - go mod tidy
+    # Generate the manpage and completions from the CLI definitions, so the
+    # packaged documentation cannot describe a different program than the
+    # binary beside it. `go run` builds the current tree, so these always
+    # match the archive they ship in.
+    # Generated into .gen/, not dist/: `before` hooks run before goreleaser
+    # clears the distribution directory, so writing there makes it refuse to
+    # start with "dist is not empty". Not build/ either — that is tracked, and
+    # holds the release signing certificates.
+    - mkdir -p .gen
+    - sh -c 'go run ./cmd/draft --man > .gen/draft.1'
+    - sh -c 'go run ./cmd/draft --completion bash > .gen/draft.bash'
+    - sh -c 'go run ./cmd/draft --completion zsh > .gen/_draft'
+    - sh -c 'go run ./cmd/draft --completion fish > .gen/draft.fish'
 
 builds:
   - id: draft
@@ -47,6 +60,21 @@ archives:
       - goos: windows
         formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # An archive that is only a binary makes every packager reconstruct the
+    # manpage, the completions and the licence texts themselves.
+    files:
+      - src: .gen/draft.1
+        dst: share/man/man1/draft.1
+      - src: .gen/draft.bash
+        dst: share/bash-completion/completions/draft
+      - src: .gen/_draft
+        dst: share/zsh/site-functions/_draft
+      - src: .gen/draft.fish
+        dst: share/fish/vendor_completions.d/draft.fish
+      - LICENSE-MIT
+      - LICENSE-APACHE
+      - README.md
+      - CHANGELOG.md
 
 checksum:
   name_template: "checksums.txt"

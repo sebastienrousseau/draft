@@ -45,6 +45,7 @@ Plus one backend: any supported agent CLI (online) or a running Ollama server
 
 ```console
 make build      # ./bin/draft
+make generated  # manpage + shell completions into bin/gen
 make test       # go test ./...
 make race       # go test -race ./...
 make cover      # coverage + the same 98% gate CI applies
@@ -53,7 +54,18 @@ make lint       # golangci-lint
 make docs-lint  # markdown, spelling, intra-repo links
 make check      # fmt, vet, test, docs-lint
 make help       # every target
+
+# The Unix install contract (GNU make reads GNUmakefile first, and it
+# includes Makefile, so every target above still works):
+make -f GNUmakefile install   PREFIX=/usr/local DESTDIR=/tmp/stage
+make -f GNUmakefile uninstall PREFIX=/usr/local DESTDIR=/tmp/stage
 ```
+
+The manpage and the shell completions are **generated from the CLI
+definitions** (`draft --man`, `draft --completion <shell>`) and never
+committed. A checked-in `.1` is a copy of the CLI that nothing keeps honest:
+flags get added, the manpage does not, and the packaged documentation quietly
+describes a different program.
 
 ## Reproducing every CI gate
 
