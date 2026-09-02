@@ -3,14 +3,14 @@
 ## Supported Versions
 
 | Version | Supported |
-|:--------|:---------:|
+| :------ | :-------: |
 | 0.0.x   | Yes       |
 
 ## Reporting a Vulnerability
 
 Report security vulnerabilities by opening a
 [private advisory](https://github.com/sebastienrousseau/draft/security/advisories/new)
-or by emailing **sebastian.rousseau@gmail.com**.
+or by emailing **<sebastian.rousseau@gmail.com>**.
 
 Do not open a public issue for security reports.
 

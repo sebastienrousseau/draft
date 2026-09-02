@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Markdown lint policy. Every relaxation below is a deliberate decision with a
+# reason, not a rule switched off because it was noisy: a config full of
+# unexplained exemptions is indistinguishable from no config at all.
+
+globs:
+  - "**/*.md"
+ignores:
+  - "node_modules/**"
+  - ".git/**"
+
+config:
+  # Go is tab-indented by gofmt, so every fenced Go block necessarily contains
+  # hard tabs. Prose still may not.
+  MD010:
+    code_blocks: false
+
+  # Prose wraps at 80. Tables, code blocks and headings cannot be wrapped
+  # without damaging them, and a URL in a link reference has no break point.
+  MD013:
+    line_length: 88
+    tables: false
+    code_blocks: false
+    headings: false
+
+  # Keep a Changelog repeats "### Added" under every version by design. Sibling
+  # scope still catches a genuine duplicate within one release.
+  MD024:
+    siblings_only: true
+
+  # The README's badge row, collapsible configuration sections, and the article
+  # skeleton's <aside> are all deliberate HTML with no Markdown equivalent.
+  MD033:
+    allowed_elements:
+      - a
+      - aside
+      - br
+      - details
+      - img
+      - li
+      - p
+      - strong
+      - summary
+      - ul
+
+  # The trailing space in `# ` and `## ` is the point: those are the literal
+  # structural markers the validator matches, and stripping it changes what
+  # the sentence documents.
+  MD038: false
+
+  # The Contents block groups its links under bold labels ("Getting started",
+  # "Reference"). They are list captions, not document sections: promoting
+  # them to headings would put them in the table of contents they introduce.
+  MD036: false
+
+  # The README opens with a centred badge block before its H1.
+  MD041: false

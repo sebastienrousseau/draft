@@ -77,32 +77,32 @@ STRENGTH: demonstrated
 
 ## API
 
-| Symbol | Signature | Purpose |
-| ------ | --------- | ------- |
-| `Record` | `struct{ Claim, SourceQuote, Type, Strength string }` | One verified fact plus the verbatim span supporting it |
-| `Parse` | `func(text, source string) (records []Record, dropped int)` | Reads one section's extraction output, keeping only records whose quotes verify |
-| `Verify` | `func(rec Record, source string) (bool, string)` | Reports whether a record is trustworthy and, when not, why |
-| `Dedupe` | `func(records []Record) []Record` | Removes records whose normalised claim text was already seen |
-| `RenderLedger` | `func(records []Record, dropped int) string` | Full, human-readable ledger |
-| `RenderPromptLedger` | `func(records []Record, maxClaims, maxChars int) string` | Compact ledger for the writing model, capped by count and characters |
-| `Numbers` | `func(s string) map[string]bool` | Distinct numeric tokens, thousands separators stripped so `1,000` and `1000` compare equal |
+| Symbol               | Signature                                                   | Purpose                                                                                    |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `Record`             | `struct{ Claim, SourceQuote, Type, Strength string }`       | One verified fact plus the verbatim span supporting it                                     |
+| `Parse`              | `func(text, source string) (records []Record, dropped int)` | Reads one section's extraction output, keeping only records whose quotes verify            |
+| `Verify`             | `func(rec Record, source string) (bool, string)`            | Reports whether a record is trustworthy and, when not, why                                 |
+| `Dedupe`             | `func(records []Record) []Record`                           | Removes records whose normalised claim text was already seen                               |
+| `RenderLedger`       | `func(records []Record, dropped int) string`                | Full, human-readable ledger                                                                |
+| `RenderPromptLedger` | `func(records []Record, maxClaims, maxChars int) string`    | Compact ledger for the writing model, capped by count and characters                       |
+| `Numbers`            | `func(s string) map[string]bool`                            | Distinct numeric tokens, thousands separators stripped so `1,000` and `1000` compare equal |
 
 ## The verification gate
 
 `Verify` applies nine checks in order, returning the first failure as its
 reason string:
 
-| # | Check | Rejection reason |
-| - | ----- | ---------------- |
-| 1 | `Claim` and `SourceQuote` both non-empty | `missing claim or quote` |
-| 2 | quote is at least `rules.MinQuoteChars` (12) runes | `quote too short` |
-| 3 | quote is valid UTF-8 | `quote is not valid UTF-8` |
-| 4 | quote holds no U+FFFD replacement character | `quote contains a replacement character` |
-| 5 | quote occurs in the source | `quote not found in source` |
-| 6 | quote does not end mid-clause (`and`, `the`, a comma, …) | `quote is a truncated fragment` |
-| 7 | `Type`, if set, is in `rules.ClaimTypes` | `invalid TYPE '…'` |
-| 8 | `Strength`, if set, is in `rules.ClaimStrengths` | `invalid STRENGTH '…'` |
-| 9 | every numeric token in `Claim` appears in the quote | `claim numbers absent from quote: …` |
+| # | Check                                                    | Rejection reason                         |
+| - | -------------------------------------------------------- | ---------------------------------------- |
+| 1 | `Claim` and `SourceQuote` both non-empty                 | `missing claim or quote`                 |
+| 2 | quote is at least `rules.MinQuoteChars` (12) runes       | `quote too short`                        |
+| 3 | quote is valid UTF-8                                     | `quote is not valid UTF-8`               |
+| 4 | quote holds no U+FFFD replacement character              | `quote contains a replacement character` |
+| 5 | quote occurs in the source                               | `quote not found in source`              |
+| 6 | quote does not end mid-clause (`and`, `the`, a comma, …) | `quote is a truncated fragment`          |
+| 7 | `Type`, if set, is in `rules.ClaimTypes`                 | `invalid TYPE '…'`                       |
+| 8 | `Strength`, if set, is in `rules.ClaimStrengths`         | `invalid STRENGTH '…'`                   |
+| 9 | every numeric token in `Claim` appears in the quote      | `claim numbers absent from quote: …`     |
 
 Three details matter. Containment (check 5) is tested against a **normalised**
 form of both strings — lowercased, whitespace collapsed, smart quotes folded to

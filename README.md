@@ -10,6 +10,8 @@
   Every sentence grounded in a fact it can prove.
 </p>
 
+<!-- markdownlint-disable MD013 -->
+<!-- Badge anchors are single-line HTML with no break point. -->
 <p align="center">
   <a href="https://github.com/sebastienrousseau/draft/actions"><img src="https://img.shields.io/github/actions/workflow/status/sebastienrousseau/draft/ci.yml?branch=main&style=for-the-badge&logo=github&label=build" alt="Build status" /></a>
   <a href="https://draftlib.com"><img src="https://img.shields.io/badge/website-draftlib.com-ff6b5a?style=for-the-badge" alt="draftlib.com" /></a>
@@ -19,6 +21,7 @@
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge" alt="License: MIT OR Apache-2.0" /></a>
   <a href="#"><img src="https://img.shields.io/badge/go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+" /></a>
 </p>
+<!-- markdownlint-enable MD013 -->
 
 ---
 
@@ -124,12 +127,12 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
 
 **What you need at runtime**, depending on how you run:
 
-| Tool                  | Needed for                      | Install (macOS)        |
-| --------------------- | ------------------------------- | ---------------------- |
-| `pdftotext` (Poppler) | reading PDFs                    | `brew install poppler` |
-| `textutil`            | reading DOCX (macOS only)       | built in               |
-| a session CLI         | online writing, via your login  | [`claude`][claude], `codex`, … |
-| [`ollama`][ollama]    | offline writing                 | `brew install ollama`  |
+| Tool                  | Needed for                     | Install (macOS)                |
+| --------------------- | ------------------------------ | ------------------------------ |
+| `pdftotext` (Poppler) | reading PDFs                   | `brew install poppler`         |
+| `textutil`            | reading DOCX (macOS only)      | built in                       |
+| a session CLI         | online writing, via your login | [`claude`][claude], `codex`, … |
+| [`ollama`][ollama]    | offline writing                | `brew install ollama`          |
 
 PDF, Markdown and text work everywhere. DOCX is macOS only.
 
@@ -159,7 +162,6 @@ PATHS
 
 `--doctor` reports the machine; `--dry-run` reports one paper. Between them
 nothing about a run should be a surprise.
-
 
 ```sh
 # One paper. Online it picks your agent CLI; offline it uses Ollama.
@@ -269,18 +271,18 @@ Rows are in auto-selection preference order — the same order
 takes the first installed provider, skipping experimental rows unless
 `--experimental` is set.
 
-| # | Provider       | Status       | Headless invocation |
-| - | -------------- | ------------ | ------------------- |
-| 1 | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (live-streamed, prompt on stdin) |
-| 2 | `copilot`      | stable       | `copilot -p --allow-all-tools` |
-| 3 | `codex`        | stable       | `codex exec` (prompt on stdin) |
-| 4 | `agy`          | stable       | `agy -p` (Google Antigravity) |
-| 5 | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (prompt on stdin) |
-| 6 | `amp`          | experimental | `amp -x` |
-| 7 | `crush`        | experimental | `crush run` |
-| 8 | `goose`        | experimental | `goose run --no-session -t` |
-| 9 | `grok`         | stable       | `grok --output-format plain --single` |
-| 10 | `qwen`        | experimental | `qwen -p` |
+| #  | Provider       | Status       | Headless invocation                                                                                           |
+| -- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| 1  | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (live-streamed, prompt on stdin) |
+| 2  | `copilot`      | stable       | `copilot -p --allow-all-tools`                                                                                |
+| 3  | `codex`        | stable       | `codex exec` (prompt on stdin)                                                                                |
+| 4  | `agy`          | stable       | `agy -p` (Google Antigravity)                                                                                 |
+| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (prompt on stdin)                                              |
+| 6  | `amp`          | experimental | `amp -x`                                                                                                      |
+| 7  | `crush`        | experimental | `crush run`                                                                                                   |
+| 8  | `goose`        | experimental | `goose run --no-session -t`                                                                                   |
+| 9  | `grok`         | stable       | `grok --output-format plain --single`                                                                         |
+| 10 | `qwen`         | experimental | `qwen -p`                                                                                                     |
 
 `go run ./examples/providers` shows which are installed on your machine.
 
@@ -367,13 +369,13 @@ goes.**
 Measured on Apple silicon (macOS 26.5, Poppler 26.06, Go 1.26), five runs each,
 on a 62-page book chapter:
 
-| Stage                                     | Time |
-| ----------------------------------------- | ---- |
-| Text extraction (`pdftotext`)             | **107 ms** (≈580 pages/s) |
+| Stage                                     | Time                                     |
+| ----------------------------------------- | ---------------------------------------- |
+| Text extraction (`pdftotext`)             | **107 ms** (≈580 pages/s)                |
 | Sectioning                                | **2.1 ms** — 163,530 chars → 53 sections |
-| Claim parsing and verbatim verification   | 23 µs per claim block |
-| House-rule validation of a finished draft | 662 µs |
-| **The whole deterministic path**          | **~110 ms** |
+| Claim parsing and verbatim verification   | 23 µs per claim block                    |
+| House-rule validation of a finished draft | 662 µs                                   |
+| **The whole deterministic path**          | **~110 ms**                              |
 
 That rate is for a large document. A two-page paper is dominated by process
 startup instead, landing at 30–60 ms whatever its length.
@@ -413,14 +415,14 @@ Document-understanding toolkits do far more than pull out text — layout
 analysis, table structure, formula recognition, OCR — and their published
 figures reflect that work. This is a comparison of scope, not a race:
 
-| Tool                        | Throughput      | Hardware       | Source |
-| --------------------------- | --------------- | -------------- | ------ |
-| liteparse (PDFium, OCR off) | 1,721 pages/s   | B200 host      | [Datalab][dl] |
-| **draft (Poppler)**         | **≈580 pages/s**| Apple silicon  | measured, above |
-| Marker, fast, no OCR (CPU)  | 23.7 pages/s    | B200 host      | [Datalab][dl] |
-| Docling (pypdfium backend)  | 2.2–2.5 pages/s | Apple M3 Max   | [Docling report][dt] |
-| Docling                     | 0.32 pages/s    | x86 CPU        | [Docling paper][dp] |
-| Unstructured                | 0.24 pages/s    | x86 CPU        | [Docling paper][dp] |
+| Tool                        | Throughput       | Hardware      | Source               |
+| --------------------------- | ---------------- | ------------- | -------------------- |
+| liteparse (PDFium, OCR off) | 1,721 pages/s    | B200 host     | [Datalab][dl]        |
+| **draft (Poppler)**         | **≈580 pages/s** | Apple silicon | measured, above      |
+| Marker, fast, no OCR (CPU)  | 23.7 pages/s     | B200 host     | [Datalab][dl]        |
+| Docling (pypdfium backend)  | 2.2–2.5 pages/s  | Apple M3 Max  | [Docling report][dt] |
+| Docling                     | 0.32 pages/s     | x86 CPU       | [Docling paper][dp]  |
+| Unstructured                | 0.24 pages/s     | x86 CPU       | [Docling paper][dp]  |
 
 The trade is real, and worth stating plainly. On [olmocr-bench][dl] a
 PDFium-class text extractor scores 20.4% overall against Docling's 50.3% and
@@ -507,17 +509,17 @@ Generated frontmatter carries an author, URLs, social handles and an analytics
 ID. Override any part of it. Unset variables keep their defaults, and curated
 frontmatter fields still win over generated ones.
 
-| Variable                    | Overrides |
-| --------------------------- | --------- |
-| `DRAFT_SITE_BASE_URL`       | Canonical site root for permalinks and URLs |
-| `DRAFT_SITE_CDN`            | Asset host for banners, logos, images |
-| `DRAFT_SITE_NAME`           | Display name |
-| `DRAFT_SITE_SHORT_NAME`     | Slug-like identity used in asset paths |
+| Variable                    | Overrides                                       |
+| --------------------------- | ----------------------------------------------- |
+| `DRAFT_SITE_BASE_URL`       | Canonical site root for permalinks and URLs     |
+| `DRAFT_SITE_CDN`            | Asset host for banners, logos, images           |
+| `DRAFT_SITE_NAME`           | Display name                                    |
+| `DRAFT_SITE_SHORT_NAME`     | Slug-like identity used in asset paths          |
 | `DRAFT_SITE_EMAIL`          | Contact address for author and webmaster fields |
-| `DRAFT_SITE_TWITTER`        | Twitter/X handle |
-| `DRAFT_SITE_LOCATION`       | Humans.txt location |
-| `DRAFT_SITE_MEASUREMENT_ID` | Analytics measurement ID |
-| `DRAFT_SITE_COPYRIGHT_FROM` | First year of the copyright range |
+| `DRAFT_SITE_TWITTER`        | Twitter/X handle                                |
+| `DRAFT_SITE_LOCATION`       | Humans.txt location                             |
+| `DRAFT_SITE_MEASUREMENT_ID` | Analytics measurement ID                        |
+| `DRAFT_SITE_COPYRIGHT_FROM` | First year of the copyright range               |
 
 </details>
 
@@ -623,16 +625,16 @@ go get github.com/sebastienrousseau/draft@latest
 
 Each has its own README with a runnable quick start and an API table:
 
-| Package | What it does |
-| ------- | ------------ |
-| [`claims`](claims) | Claim parsing, the verbatim-quote gate, ledger rendering |
-| [`config`](config) | Flag + environment + default resolution |
-| [`engine`](engine) | The `Engine` seam, provider registry, Ollama, fallback chain |
-| [`frontmatter`](frontmatter) | Metadata, YAML generation, article-set regeneration |
-| [`pipeline`](pipeline) | Five-phase orchestration, retries, continuation, events |
-| [`prompt`](prompt) | Grounded claim, writing and review prompts |
-| [`rules`](rules) | Shared editorial constants |
-| [`validate`](validate) | House-rule and faithfulness checks |
+| Package                      | What it does                                                 |
+| ---------------------------- | ------------------------------------------------------------ |
+| [`claims`](claims)           | Claim parsing, the verbatim-quote gate, ledger rendering     |
+| [`config`](config)           | Flag + environment + default resolution                      |
+| [`engine`](engine)           | The `Engine` seam, provider registry, Ollama, fallback chain |
+| [`frontmatter`](frontmatter) | Metadata, YAML generation, article-set regeneration          |
+| [`pipeline`](pipeline)       | Five-phase orchestration, retries, continuation, events      |
+| [`prompt`](prompt)           | Grounded claim, writing and review prompts                   |
+| [`rules`](rules)             | Shared editorial constants                                   |
+| [`validate`](validate)       | House-rule and faithfulness checks                           |
 
 > **API stability.** While the module is `0.0.x`, the exported Go API may change
 > between releases without a deprecation cycle. Pin an exact version if you
@@ -875,29 +877,29 @@ one — no network, no model.
 Every capability has a runnable demo. No model, no session CLI, no API key, no
 network. Start with `dashboard` to see the interface itself.
 
-| Example | Run | What it shows |
-| ------- | --- | ------------- |
-| [`dashboard`](examples/dashboard/main.go) | `go run ./examples/dashboard` | The real full-screen TUI driven by an in-process engine — queue, phases, live preview and focus timer, all animating; resize to watch the layout adapt |
-| [`providers`](examples/providers/main.go) | `go run ./examples/providers` | Session providers in auto-selection order, install status, default models |
-| [`grounding`](examples/grounding/main.go) | `go run ./examples/grounding` | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation |
-| [`pipeline`](examples/pipeline/main.go) | `go run ./examples/pipeline` | The five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output |
-| [`review`](examples/review/main.go) | `go run ./examples/review` | Surgical-edit enhancement: body-only prompting, frontmatter re-attachment, set resync |
-| [`frontmatter`](examples/frontmatter/main.go) | `go run ./examples/frontmatter` | Metadata extraction, custom `Site` identity, Split/Combine round trip, the three regeneration rules |
+| Example                                       | Run                             | What it shows                                                                                                                                          |
+| --------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`dashboard`](examples/dashboard/main.go)     | `go run ./examples/dashboard`   | The real full-screen TUI driven by an in-process engine — queue, phases, live preview and focus timer, all animating; resize to watch the layout adapt |
+| [`providers`](examples/providers/main.go)     | `go run ./examples/providers`   | Session providers in auto-selection order, install status, default models                                                                              |
+| [`grounding`](examples/grounding/main.go)     | `go run ./examples/grounding`   | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation                                                          |
+| [`pipeline`](examples/pipeline/main.go)       | `go run ./examples/pipeline`    | The five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output                                                   |
+| [`review`](examples/review/main.go)           | `go run ./examples/review`      | Surgical-edit enhancement: body-only prompting, frontmatter re-attachment, set resync                                                                  |
+| [`frontmatter`](examples/frontmatter/main.go) | `go run ./examples/frontmatter` | Metadata extraction, custom `Site` identity, Split/Combine round trip, the three regeneration rules                                                    |
 
 Recipes for day-to-day use:
 
-| Command                                | What it does |
-| -------------------------------------- | ------------ |
-| `draft "2603.23420.pdf"`               | Draft one paper, engine auto-selected |
-| `draft a.pdf b.pdf c.pdf`              | Queue three papers, one draft each |
-| `draft --merge notes.md paper.pdf`     | One draft from combined sources |
-| `draft --engine ollama paper.pdf`      | Force the local model |
-| `draft --engine codex paper.pdf`       | Force a specific session provider |
-| `draft --model opus paper.pdf`         | Override the session model |
+| Command                                | What it does                               |
+| -------------------------------------- | ------------------------------------------ |
+| `draft "2603.23420.pdf"`               | Draft one paper, engine auto-selected      |
+| `draft a.pdf b.pdf c.pdf`              | Queue three papers, one draft each         |
+| `draft --merge notes.md paper.pdf`     | One draft from combined sources            |
+| `draft --engine ollama paper.pdf`      | Force the local model                      |
+| `draft --engine codex paper.pdf`       | Force a specific session provider          |
+| `draft --model opus paper.pdf`         | Override the session model                 |
 | `draft --review draft.md paper.pdf`    | Enhance an existing draft from its sources |
-| `draft --frontmatter source/x-body.md` | Regenerate the yaml and final set |
-| `draft --json paper.pdf`               | One JSON object per job, for scripting |
-| `DRAFT_NUM_CTX=2048 draft paper.pdf`   | Low-memory Ollama profile |
+| `draft --frontmatter source/x-body.md` | Regenerate the yaml and final set          |
+| `draft --json paper.pdf`               | One JSON object per job, for scripting     |
+| `DRAFT_NUM_CTX=2048 draft paper.pdf`   | Low-memory Ollama profile                  |
 
 ---
 
@@ -1010,15 +1012,15 @@ parser and mutation-tests the grounding gate each day.
 
 ## Documentation
 
-| Document | What it covers |
-| -------- | -------------- |
-| [CHANGELOG](CHANGELOG.md) | Every released change, Keep-a-Changelog format |
-| [CONTRIBUTING](CONTRIBUTING.md) | How to propose changes and what CI expects |
-| [SECURITY](SECURITY.md) | Vulnerability disclosure policy |
-| [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) | Community standards |
-| [`examples/`](examples) | A runnable demo per capability |
-| [draftlib.com](https://draftlib.com) | Project website: guides, grounding explained, examples |
-| [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation |
+| Document                                                              | What it covers                                         |
+| --------------------------------------------------------------------- | ------------------------------------------------------ |
+| [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format         |
+| [CONTRIBUTING](CONTRIBUTING.md)                                       | How to propose changes and what CI expects             |
+| [SECURITY](SECURITY.md)                                               | Vulnerability disclosure policy                        |
+| [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)                                 | Community standards                                    |
+| [`examples/`](examples)                                               | A runnable demo per capability                         |
+| [draftlib.com](https://draftlib.com)                                  | Project website: guides, grounding explained, examples |
+| [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation                              |
 
 ---
 

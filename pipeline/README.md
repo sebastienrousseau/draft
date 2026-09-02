@@ -108,15 +108,15 @@ func main() {
 
 ## API
 
-| Symbol | Signature | Purpose |
-| ------ | --------- | ------- |
-| `Runner` | `struct` | Executes jobs against an ordered engine chain |
-| `NewRunner` | `func(cfg config.Config, engines []engine.Engine, events chan<- Event) *Runner` | Construct one over `engine.Chain(cfg)` or your own slice |
-| `Run` | `func(ctx context.Context, job Job)` | Execute one job, reporting progress and a terminal event |
-| `Job` | `struct{ Sources []string; ReviewPath string }` | One unit of work |
-| `Event` | `any` | Sum type carried on the progress channel |
-| `PhaseNames` | `[5]string` | Phase labels, in execution order |
-| `NumPhases` | `const` | Phase count, for sizing UI state |
+| Symbol       | Signature                                                                       | Purpose                                                  |
+| ------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `Runner`     | `struct`                                                                        | Executes jobs against an ordered engine chain            |
+| `NewRunner`  | `func(cfg config.Config, engines []engine.Engine, events chan<- Event) *Runner` | Construct one over `engine.Chain(cfg)` or your own slice |
+| `Run`        | `func(ctx context.Context, job Job)`                                            | Execute one job, reporting progress and a terminal event |
+| `Job`        | `struct{ Sources []string; ReviewPath string }`                                 | One unit of work                                         |
+| `Event`      | `any`                                                                           | Sum type carried on the progress channel                 |
+| `PhaseNames` | `[5]string`                                                                     | Phase labels, in execution order                         |
+| `NumPhases`  | `const`                                                                         | Phase count, for sizing UI state                         |
 
 A `Job` with several `Sources` produces **one merged draft** — the CLI's
 `--merge`. One source per `Job` yields one draft per source. Setting
@@ -125,13 +125,13 @@ sources, instead of writing a new one (`--review`).
 
 ## Phases
 
-| Index | `PhaseNames` | What happens |
-| ----- | ------------ | ------------ |
-| `PhaseResolve` | Resolve source | Locate and validate the inputs |
-| `PhaseExtract` | Read and section | Text extraction in reading order, split on headings |
-| `PhaseClaims` | Extract claims | Per-section mining, verbatim-quote gate, dedupe |
-| `PhaseWrite` | Write article | Grounded generation, continued past length limits |
-| `PhaseSave` | Validate and save | House rules, faithfulness, the three-file set |
+| Index          | `PhaseNames`      | What happens                                        |
+| -------------- | ----------------- | --------------------------------------------------- |
+| `PhaseResolve` | Resolve source    | Locate and validate the inputs                      |
+| `PhaseExtract` | Read and section  | Text extraction in reading order, split on headings |
+| `PhaseClaims`  | Extract claims    | Per-section mining, verbatim-quote gate, dedupe     |
+| `PhaseWrite`   | Write article     | Grounded generation, continued past length limits   |
+| `PhaseSave`    | Validate and save | House rules, faithfulness, the three-file set       |
 
 Both write paths — generating a new draft and enhancing one with `--review` —
 run **both** gates before saving: `validate.Errors` for the house rules and
@@ -156,14 +156,14 @@ truncated.
 
 `Run` never closes the channel — the caller owns its lifecycle.
 
-| Event | Shape | Meaning |
-| ----- | ----- | ------- |
-| `LogEvent` | `string` | Human-readable progress line |
-| `PhaseEvent` | `{Index int; Status string}` | `"running"`, `"done"` or `"failed"` |
-| `EngineEvent` | `string` | Which backend is now doing the work |
-| `TokenEvent` | `string` | A chunk of the article as it streams in |
-| `DoneEvent` | `{OutputPath, RawPath string; Words int; Mode, Engine string; Duration time.Duration; Timings []PhaseTiming}` | Terminal success |
-| `ErrEvent` | `string` | Terminal failure |
+| Event         | Shape                                                                                                         | Meaning                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `LogEvent`    | `string`                                                                                                      | Human-readable progress line            |
+| `PhaseEvent`  | `{Index int; Status string}`                                                                                  | `"running"`, `"done"` or `"failed"`     |
+| `EngineEvent` | `string`                                                                                                      | Which backend is now doing the work     |
+| `TokenEvent`  | `string`                                                                                                      | A chunk of the article as it streams in |
+| `DoneEvent`   | `{OutputPath, RawPath string; Words int; Mode, Engine string; Duration time.Duration; Timings []PhaseTiming}` | Terminal success                        |
+| `ErrEvent`    | `string`                                                                                                      | Terminal failure                        |
 
 Exactly one of `DoneEvent` or `ErrEvent` is emitted per `Run`, and it carries
 the wall-clock duration plus a per-phase breakdown, so a run's cost is

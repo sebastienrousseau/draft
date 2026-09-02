@@ -86,18 +86,18 @@ func main() {
 
 ## API
 
-| Symbol | Signature | Purpose |
-| ------ | --------- | ------- |
-| `ExtractMetadata` | `func(markdown string) Metadata` | Title, subtitle, description, excerpt, keywords, tags, category, slug |
-| `Generate` | `func(markdown string, date time.Time) string` | Frontmatter from the body alone |
-| `GenerateWithOptions` | `func(markdown string, opts Options) string` | Same, honouring slug, site and existing fields |
-| `Combine` | `func(frontmatterYAML, body string) string` | Join into one publishable document |
-| `Split` | `func(content string) (string, string)` | Inverse of `Combine` |
-| `ProcessFile` | `func(inputPath string, date time.Time) (bodyPath, frontmatterPath, finalPath string, err error)` | Write or rewrite the whole set |
-| `PartOfSet` | `func(path string) bool` | Whether a path belongs to a generated set |
-| `Slugify` | `func(s string) string` | URL-friendly slug |
-| `Site` / `DefaultSite` / `SiteFromEnv` | publisher identity | See below |
-| `Options` | `struct{ Date time.Time; Slug string; Existing map[string]string; Site *Site }` | Generation inputs beyond the body |
+| Symbol                                 | Signature                                                                                         | Purpose                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ExtractMetadata`                      | `func(markdown string) Metadata`                                                                  | Title, subtitle, description, excerpt, keywords, tags, category, slug |
+| `Generate`                             | `func(markdown string, date time.Time) string`                                                    | Frontmatter from the body alone                                       |
+| `GenerateWithOptions`                  | `func(markdown string, opts Options) string`                                                      | Same, honouring slug, site and existing fields                        |
+| `Combine`                              | `func(frontmatterYAML, body string) string`                                                       | Join into one publishable document                                    |
+| `Split`                                | `func(content string) (string, string)`                                                           | Inverse of `Combine`                                                  |
+| `ProcessFile`                          | `func(inputPath string, date time.Time) (bodyPath, frontmatterPath, finalPath string, err error)` | Write or rewrite the whole set                                        |
+| `PartOfSet`                            | `func(path string) bool`                                                                          | Whether a path belongs to a generated set                             |
+| `Slugify`                              | `func(s string) string`                                                                           | URL-friendly slug                                                     |
+| `Site` / `DefaultSite` / `SiteFromEnv` | publisher identity                                                                                | See below                                                             |
+| `Options`                              | `struct{ Date time.Time; Slug string; Existing map[string]string; Site *Site }`                   | Generation inputs beyond the body                                     |
 
 ## The three regeneration rules
 

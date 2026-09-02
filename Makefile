@@ -65,6 +65,13 @@ vet: ## Run go vet
 fmt: ## Format the code
 	gofmt -s -w .
 
+.PHONY: docs-lint
+docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, links)
+	npx --yes markdownlint-cli2
+	python3 -m pip install --quiet --disable-pip-version-check codespell
+	python3 -m codespell_lib
+	python3 scripts/check-links.py
+
 .PHONY: lint
 lint: ## Run golangci-lint if installed
 	@if command -v golangci-lint >/dev/null 2>&1; then \
@@ -78,7 +85,7 @@ tidy: ## Tidy module dependencies
 	go mod tidy
 
 .PHONY: check
-check: fmt vet test ## Format, vet, and test
+check: fmt vet test docs-lint ## Format, vet, test, and lint the docs
 
 .PHONY: clean
 clean: ## Remove build artefacts

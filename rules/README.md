@@ -65,20 +65,20 @@ func main() {
 
 ## API
 
-| Symbol | Kind | Purpose |
-| ------ | ---- | ------- |
-| `MinWords`, `MaxWords` | `const` | Word-count bounds for a finished body-only draft (500–3000). Both are enforced by `validate.Errors`, and the pipeline sizes generation against `MaxWords` |
-| `MinQuoteChars` | `const` | Shortest verbatim source span a claim may cite (12) |
-| `PostLeadAsideMarker`, `ExecSummaryMarker`, `H1Prefix`, `H2Prefix` | `const` | Structural markers the writer emits and the validator checks |
-| `BannedWords`, `BannedPhrases` | `var []string` | Single tokens and multi-word clichés the house style forbids |
-| `StyleReplacements` | `var map[string]string` | Every banned term → a neutral equivalent |
-| `AssertiveVerbs` | `var []string` | Verbs that state a result as settled fact |
-| `MetricTerms` | `var []string` | Evaluation metrics that must not appear ungrounded |
-| `WriterStopwords` | `var map[string]bool` | Common words ignored when measuring token overlap |
-| `ClaimTypes`, `ClaimStrengths`, `HedgeStrengths` | `var map[string]bool` | The accepted claim taxonomy |
-| `WordForms` | `func(w string) []WordForm` | A banned word plus its common inflections, as `{Form, Kind}` pairs |
-| `InflectLike` | `func(word, kind string) string` | Inflect a word using regular English spelling rules |
-| `MetricForms` | `func(term string) []string` | Every surface form equivalent to a metric term |
+| Symbol                                                             | Kind                             | Purpose                                                                                                                                                   |
+| ------------------------------------------------------------------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MinWords`, `MaxWords`                                             | `const`                          | Word-count bounds for a finished body-only draft (500–3000). Both are enforced by `validate.Errors`, and the pipeline sizes generation against `MaxWords` |
+| `MinQuoteChars`                                                    | `const`                          | Shortest verbatim source span a claim may cite (12)                                                                                                       |
+| `PostLeadAsideMarker`, `ExecSummaryMarker`, `H1Prefix`, `H2Prefix` | `const`                          | Structural markers the writer emits and the validator checks                                                                                              |
+| `BannedWords`, `BannedPhrases`                                     | `var []string`                   | Single tokens and multi-word clichés the house style forbids                                                                                              |
+| `StyleReplacements`                                                | `var map[string]string`          | Every banned term → a neutral equivalent                                                                                                                  |
+| `AssertiveVerbs`                                                   | `var []string`                   | Verbs that state a result as settled fact                                                                                                                 |
+| `MetricTerms`                                                      | `var []string`                   | Evaluation metrics that must not appear ungrounded                                                                                                        |
+| `WriterStopwords`                                                  | `var map[string]bool`            | Common words ignored when measuring token overlap                                                                                                         |
+| `ClaimTypes`, `ClaimStrengths`, `HedgeStrengths`                   | `var map[string]bool`            | The accepted claim taxonomy                                                                                                                               |
+| `WordForms`                                                        | `func(w string) []WordForm`      | A banned word plus its common inflections, as `{Form, Kind}` pairs                                                                                        |
+| `InflectLike`                                                      | `func(word, kind string) string` | Inflect a word using regular English spelling rules                                                                                                       |
+| `MetricForms`                                                      | `func(term string) []string`     | Every surface form equivalent to a metric term                                                                                                            |
 
 `ClaimTypes` accepts `metric`, `mechanism`, `definition`, `method`, `result` and
 `limitation`. `ClaimStrengths` accepts `demonstrated`, `hedged` and

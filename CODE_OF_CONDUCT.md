@@ -53,7 +53,7 @@ individual is officially representing the community in public spaces.
 
 Instances of abusive, harassing, or otherwise unacceptable behaviour may
 be reported privately to the project maintainer at
-**sebastian.rousseau@gmail.com**. All reports will be reviewed and
+**<sebastian.rousseau@gmail.com>**. All reports will be reviewed and
 investigated promptly and fairly. Maintainers are obligated to respect
 the privacy and security of anyone who reports an incident.
 

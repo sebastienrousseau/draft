@@ -182,6 +182,21 @@ series until `0.0.999`.
   sections rather than an extrapolation from the first (which settles the
   engine chain and warms the model, and so overstates badly).
 
+- `DRAFT_CALL_TIMEOUT` bounds a single generation call (default 1800s, `0`
+  disables), so a wedged provider CLI cannot hang a run forever. The Ollama
+  backend uses its own HTTP client with dial and response-header timeouts
+  rather than the timeout-free `http.DefaultClient`.
+- `engine.Validate` reports an unknown engine name, which `Chain` cannot.
+- `DoneEvent` carries `Duration` and per-phase `Timings`, surfaced in `--json`
+  as `duration_ms` and `phases_ms`.
+- `WarnEvent` distinguishes a non-fatal problem from ordinary progress, and
+  `--json` records them per job as `warnings`.
+- `Config.Warnings` reports configuration that was recovered from rather than
+  applied silently; every numeric environment variable is now clamped at both
+  ends instead of only floored.
+- A README for each of the eight importable packages, with a runnable quick
+  start and an API table.
+
 ### Fixed
 
 - **Two papers drafted on the same day overwrote each other's claim ledger.**
@@ -191,31 +206,6 @@ series until `0.0.999`.
   per job, resetting the fallback cursor every time, so a queue of twenty
   papers re-tried and re-reported every dead backend twenty times. One Runner
   now serves the queue and keeps the backend it settled on.
-
-### Security
-
-- **A fabricated claim could pass the grounding gate using invalid UTF-8.**
-  Quote-to-source comparison lowercases both sides, and `strings.ToLower` maps
-  every invalid UTF-8 byte to U+FFFD — so two *different* invalid byte
-  sequences normalised to the same text and a quote could match a source it
-  does not occur in. That is a bypass of the one invariant the claim ledger
-  rests on. `claims.Verify` now rejects a quote that is not valid UTF-8 or that
-  contains a replacement character; accented and CJK quotes are unaffected.
-  Found by `FuzzParse`, and its input is kept as a corpus seed.
-- **Prompts now go over stdin for `codex` and `cursor-agent`.** A prompt passed
-  as a command-line argument is visible in a process listing for the duration
-  of the call, along with the source excerpts it quotes. Stdin delivery was
-  confirmed by running each CLI; `copilot`, `agy`, `grok` and `goose` were
-  confirmed *not* to read stdin and keep argument delivery.
-- **`OLLAMA_HOST` is validated.** A value that is not a valid `http`/`https`
-  URL is refused rather than concatenated into a request URL, and a host that
-  is not loopback is reported — a remote Ollama means prompts and verbatim
-  source text leave the machine.
-- **Extraction helpers are given absolute paths.** A source file named `-x.pdf`
-  would otherwise be parsed as a flag by `pdftotext` or `textutil`. Their
-  output is also capped, and source files are size-limited.
-
-### Fixed
 
 - **`--review` did not check faithfulness.** It gated only on the house style
   rules, so a surgical edit could introduce an ungrounded number or an
@@ -270,22 +260,28 @@ series until `0.0.999`.
 - **`pdftotext` failures surface the tool's own message** instead of
   `exit status 1`.
 
-### Added
+### Security
 
-- `DRAFT_CALL_TIMEOUT` bounds a single generation call (default 1800s, `0`
-  disables), so a wedged provider CLI cannot hang a run forever. The Ollama
-  backend uses its own HTTP client with dial and response-header timeouts
-  rather than the timeout-free `http.DefaultClient`.
-- `engine.Validate` reports an unknown engine name, which `Chain` cannot.
-- `DoneEvent` carries `Duration` and per-phase `Timings`, surfaced in `--json`
-  as `duration_ms` and `phases_ms`.
-- `WarnEvent` distinguishes a non-fatal problem from ordinary progress, and
-  `--json` records them per job as `warnings`.
-- `Config.Warnings` reports configuration that was recovered from rather than
-  applied silently; every numeric environment variable is now clamped at both
-  ends instead of only floored.
-- A README for each of the eight importable packages, with a runnable quick
-  start and an API table.
+- **A fabricated claim could pass the grounding gate using invalid UTF-8.**
+  Quote-to-source comparison lowercases both sides, and `strings.ToLower` maps
+  every invalid UTF-8 byte to U+FFFD — so two *different* invalid byte
+  sequences normalised to the same text and a quote could match a source it
+  does not occur in. That is a bypass of the one invariant the claim ledger
+  rests on. `claims.Verify` now rejects a quote that is not valid UTF-8 or that
+  contains a replacement character; accented and CJK quotes are unaffected.
+  Found by `FuzzParse`, and its input is kept as a corpus seed.
+- **Prompts now go over stdin for `codex` and `cursor-agent`.** A prompt passed
+  as a command-line argument is visible in a process listing for the duration
+  of the call, along with the source excerpts it quotes. Stdin delivery was
+  confirmed by running each CLI; `copilot`, `agy`, `grok` and `goose` were
+  confirmed *not* to read stdin and keep argument delivery.
+- **`OLLAMA_HOST` is validated.** A value that is not a valid `http`/`https`
+  URL is refused rather than concatenated into a request URL, and a host that
+  is not loopback is reported — a remote Ollama means prompts and verbatim
+  source text leave the machine.
+- **Extraction helpers are given absolute paths.** A source file named `-x.pdf`
+  would otherwise be parsed as a flag by `pdftotext` or `textutil`. Their
+  output is also capped, and source files are size-limited.
 
 ### Changed
 
@@ -408,6 +404,7 @@ series until `0.0.999`.
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     checksums.txt
   ```
+
 - **`--json`** runs headless and emits one JSON object per job (JSON Lines)
   on stdout — source, output path, engine, mode, word count, and status —
   leaving stderr for human progress, so runs can be piped into other tools.

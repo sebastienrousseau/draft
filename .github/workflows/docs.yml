@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: docs-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20.0.0
+        with:
+          globs: "**/*.md"
+
+      # Run codespell directly rather than through an action wrapper, so it
+      # reads .codespellrc — the single place the ignore list and its reasons
+      # live — and so `make docs-lint` locally is the same command CI runs.
+      - name: Spell check
+        run: |
+          python3 -m pip install --quiet codespell
+          codespell
+
+      # Intra-repo links only, checked by a script in this repository rather
+      # than a third-party action: it needs no network, it verifies heading
+      # anchors as well as file paths, and `make docs-lint` runs exactly this.
+      - name: Check intra-repo links
+        run: python3 scripts/check-links.py

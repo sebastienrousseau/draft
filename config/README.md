@@ -59,16 +59,16 @@ func main() {
 
 ## API
 
-| Symbol | Signature | Purpose |
-| ------ | --------- | ------- |
-| `Config` | `struct` | The fully-resolved run configuration shared across packages |
-| `Flags` | `struct` | Raw command-line values before merging |
-| `Load` | `func(flags Flags) Config` | Defaults → environment → flags |
-| `EngineAuto` / `EngineOllama` | `const` | Engine-selection sentinels; any other value names a session provider |
-| `Default*` | `const` | Every default in one place: models, context length, retries, concurrency, call timeout |
-| `OllamaHost` | `const` | `http://127.0.0.1:11434` |
-| `FocusBlock` | `const` | `25 * time.Minute`, the dashboard's focus timer |
-| `Config.Warnings` | `[]string` | Problems recovered from during resolution; print them |
+| Symbol                        | Signature                  | Purpose                                                                                |
+| ----------------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
+| `Config`                      | `struct`                   | The fully-resolved run configuration shared across packages                            |
+| `Flags`                       | `struct`                   | Raw command-line values before merging                                                 |
+| `Load`                        | `func(flags Flags) Config` | Defaults → environment → flags                                                         |
+| `EngineAuto` / `EngineOllama` | `const`                    | Engine-selection sentinels; any other value names a session provider                   |
+| `Default*`                    | `const`                    | Every default in one place: models, context length, retries, concurrency, call timeout |
+| `OllamaHost`                  | `const`                    | `http://127.0.0.1:11434`                                                               |
+| `FocusBlock`                  | `const`                    | `25 * time.Minute`, the dashboard's focus timer                                        |
+| `Config.Warnings`             | `[]string`                 | Problems recovered from during resolution; print them                                  |
 
 ## Precedence
 
@@ -91,33 +91,33 @@ took effect but did not is worse than one that was refused outright.
 
 Three resolutions can warn:
 
-| Situation | Behaviour |
-| --------- | --------- |
+| Situation                                                                    | Behaviour                                                                                                                                                                              |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `os.UserHomeDir` fails (no `HOME` — routine under systemd, cron, containers) | Falls back to the working directory, then to `os.TempDir`. `SourcesDir` and `DraftsDir` are **always absolute**, so drafts can never land in whatever directory the process started in |
-| `OLLAMA_HOST` is not a valid `http`/`https` URL | Refused in favour of the default rather than concatenated into a request URL. A bare `host:port` is normalised, not rejected |
-| `OLLAMA_HOST` is not loopback | Accepted, but reported — `draft` is documented as working offline, so a remote host means prompts and verbatim source text leave the machine |
+| `OLLAMA_HOST` is not a valid `http`/`https` URL                              | Refused in favour of the default rather than concatenated into a request URL. A bare `host:port` is normalised, not rejected                                                           |
+| `OLLAMA_HOST` is not loopback                                                | Accepted, but reported — `draft` is documented as working offline, so a remote host means prompts and verbatim source text leave the machine                                           |
 
 `Load` never returns an error: a run should not be blocked by a bad tunable it
 can recover from. `Warnings` is how it stays honest about having recovered.
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-| -------- | ------- | ------- |
-| `DRAFT_ENGINE` | `auto` | Backend selection |
-| `DRAFT_MODEL_SESSION` | — | Session-provider model override |
-| `DRAFT_MODEL` | — | Sets all three Ollama models at once |
-| `DRAFT_WRITE_MODEL` | `gemma3:4b` | Ollama writing model |
-| `DRAFT_EXTRACT_MODEL` | `gemma3:4b` | Ollama claim-extraction model |
-| `DRAFT_EDIT_MODEL` | `gemma3:4b` | Ollama surgical-review model |
-| `DRAFT_NUM_CTX` | `8192` | Ollama context window (floor 512) |
-| `DRAFT_NUM_PREDICT` | `6000` | Ollama output-token ceiling (floor 1024) |
-| `DRAFT_WRITE_RETRIES` | `2` | Rewrite attempts on rule violations |
-| `DRAFT_MAX_CONTINUE` | `3` | Continuations on a length-limited stop |
-| `DRAFT_EXTRACT_CONCURRENCY` | `4` | Parallel extraction workers (max 32) |
-| `DRAFT_CALL_TIMEOUT` | `1800` | Seconds bounding one generation call; `0` disables |
-| `DRAFT_EXPERIMENTAL` | — | `1` to let auto use experimental providers |
-| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Ollama server address |
+| Variable                    | Default                  | Purpose                                            |
+| --------------------------- | ------------------------ | -------------------------------------------------- |
+| `DRAFT_ENGINE`              | `auto`                   | Backend selection                                  |
+| `DRAFT_MODEL_SESSION`       | —                        | Session-provider model override                    |
+| `DRAFT_MODEL`               | —                        | Sets all three Ollama models at once               |
+| `DRAFT_WRITE_MODEL`         | `gemma3:4b`              | Ollama writing model                               |
+| `DRAFT_EXTRACT_MODEL`       | `gemma3:4b`              | Ollama claim-extraction model                      |
+| `DRAFT_EDIT_MODEL`          | `gemma3:4b`              | Ollama surgical-review model                       |
+| `DRAFT_NUM_CTX`             | `8192`                   | Ollama context window (floor 512)                  |
+| `DRAFT_NUM_PREDICT`         | `6000`                   | Ollama output-token ceiling (floor 1024)           |
+| `DRAFT_WRITE_RETRIES`       | `2`                      | Rewrite attempts on rule violations                |
+| `DRAFT_MAX_CONTINUE`        | `3`                      | Continuations on a length-limited stop             |
+| `DRAFT_EXTRACT_CONCURRENCY` | `4`                      | Parallel extraction workers (max 32)               |
+| `DRAFT_CALL_TIMEOUT`        | `1800`                   | Seconds bounding one generation call; `0` disables |
+| `DRAFT_EXPERIMENTAL`        | —                        | `1` to let auto use experimental providers         |
+| `OLLAMA_HOST`               | `http://127.0.0.1:11434` | Ollama server address                              |
 
 `DRAFT_CLAUDE_MODEL` is a deprecated alias for `DRAFT_MODEL_SESSION`, read only
 when the latter is unset. `DRAFT_SITE_*` (publisher identity) is read by
