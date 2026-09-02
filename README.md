@@ -1071,6 +1071,7 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 | [ARCHITECTURE](docs/ARCHITECTURE.md)                                  | How the pipeline fits together, for contributors           |
 | [Decision records](docs/adr/)                                         | Why the load-bearing choices were made                     |
 | [Packaging](docs/packaging.md)                                        | For distribution maintainers                               |
+| [Supply chain](supply-chain/)                                         | What is depended on, how it is pinned, what is checked     |
 | [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format             |
 | [SUPPORT](SUPPORT.md)                                                 | Where to take a question, and what to expect back          |
 | [GOVERNANCE](GOVERNANCE.md)                                           | Who decides what, and what gets accepted                   |

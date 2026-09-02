@@ -195,6 +195,11 @@ jobs:
         with:
           go-version: "stable"
           cache: true
+      # go.sum records a hash per module version; this proves the cache we are
+      # about to build from still matches them.
+      - name: Verify module hashes
+        run: go mod verify
+
       - name: Scan for known vulnerabilities
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
