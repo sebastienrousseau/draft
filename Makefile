@@ -53,6 +53,12 @@ mutation: ## Mutation-test the security-critical grounding gate
 	go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash ./claims \
 	  --workers 4 --test-cpu 1 --threshold-efficacy 100 --threshold-mcover 100
 
+.PHONY: api
+api: ## Report how the public API moved since the last release
+	@base=$$(git tag --sort=-v:refname | head -1); \
+	  echo "comparing against $$base"; \
+	  go run golang.org/x/exp/cmd/gorelease@latest -base "$$base"
+
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities (same check as CI)
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
