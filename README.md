@@ -50,6 +50,8 @@
 
 - [When not to use draft](#when-not-to-use-draft)
 - [Development](#development)
+- [Stability guarantees](#stability-guarantees)
+- [Minimum Go policy](#minimum-go-policy)
 - [Security](#security)
 - [Documentation](#documentation)
 - [License](#license)
@@ -957,6 +959,57 @@ parser and mutation-tests the grounding gate each day.
 
 ---
 
+## Stability guarantees
+
+While the module is `0.0.x`, the **exported Go API** may change between
+releases without a deprecation cycle. Pin an exact version if you depend on it;
+every breaking change is listed in [CHANGELOG.md](CHANGELOG.md).
+
+Two things are treated as breaking even though neither is a Go API signature:
+
+- **The CLI contract.** Flag names, their meaning, the `--json` record shape,
+  and the day-folder layout (`source/`, `yaml/`, `final/`). The `--json` record
+  carries a `schema` field so a consumer can branch on it rather than sniff for
+  fields; it is bumped when a field changes meaning or disappears, never for a
+  pure addition.
+- **What the tool produces.** `draft` is a generator, so a change to its output
+  is a change to its interface even when no signature moves: the frontmatter
+  keys it emits, the structure of a generated article, and the rules a draft
+  must satisfy to be saved. Tightening a validation rule can reject a document
+  that previously passed, so it is announced the same way an API break is.
+
+What is explicitly *not* covered: the prose a model writes. That varies by
+backend, model and temperature, and no version of this tool promises otherwise.
+
+**Deprecation window.** A deprecated flag or environment variable keeps working
+for at least one minor release, is absent from `--help` while still parsing,
+and is listed under `Deprecated` in the changelog. `--claude-model` and
+`DRAFT_CLAUDE_MODEL` are the current examples.
+
+---
+
+## Minimum Go policy
+
+The floor is **Go 1.24**, declared in `go.mod`, built and tested on every pull
+request by the `msrv` CI job — the number is enforced, not aspirational.
+
+**When it may rise.** Only for a concrete need: a standard-library API that
+removes a dependency or a hand-rolled workaround, a language feature that
+materially simplifies the code, or a security fix unavailable on the floor.
+Never merely because a newer toolchain exists.
+
+**How.** A raise is a minor-version change, listed under `Changed` in the
+changelog with the reason, and the `msrv` job is updated in the same commit —
+so the floor and its test can never disagree.
+
+**On distro compatibility.** No claim is made that the floor matches any
+particular distribution's packaged Go, because such a claim is only meaningful
+with a table that is kept current, and an aspirational compatibility claim is
+worse than none. Packagers should read the floor from `go.mod`, which is the
+single source of truth; see [docs/packaging.md](docs/packaging.md).
+
+---
+
 ## Security
 
 - **No tokens on disk.** Session backends shell out to an already
@@ -1012,15 +1065,19 @@ parser and mutation-tests the grounding gate each day.
 
 ## Documentation
 
-| Document                                                              | What it covers                                         |
-| --------------------------------------------------------------------- | ------------------------------------------------------ |
-| [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format         |
-| [CONTRIBUTING](CONTRIBUTING.md)                                       | How to propose changes and what CI expects             |
-| [SECURITY](SECURITY.md)                                               | Vulnerability disclosure policy                        |
-| [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)                                 | Community standards                                    |
-| [`examples/`](examples)                                               | A runnable demo per capability                         |
-| [draftlib.com](https://draftlib.com)                                  | Project website: guides, grounding explained, examples |
-| [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation                              |
+| Document                                                              | What it covers                                             |
+| --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [DEVELOPMENT](DEVELOPMENT.md)                                         | Toolchain, every CI gate reproduced locally, release model |
+| [ARCHITECTURE](docs/ARCHITECTURE.md)                                  | How the pipeline fits together, for contributors           |
+| [Decision records](docs/adr/)                                         | Why the load-bearing choices were made                     |
+| [Packaging](docs/packaging.md)                                        | For distribution maintainers                               |
+| [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format             |
+| [CONTRIBUTING](CONTRIBUTING.md)                                       | How to propose changes and what CI expects                 |
+| [SECURITY](SECURITY.md)                                               | Vulnerability disclosure policy                            |
+| [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)                                 | Community standards                                        |
+| [`examples/`](examples)                                               | A runnable demo per capability                             |
+| [draftlib.com](https://draftlib.com)                                  | Project website: guides, grounding explained, examples     |
+| [Go reference](https://pkg.go.dev/github.com/sebastienrousseau/draft) | Package API documentation                                  |
 
 ---
 

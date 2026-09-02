@@ -72,6 +72,10 @@ docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, lin
 	python3 -m codespell_lib
 	python3 scripts/check-links.py
 
+.PHONY: docs-fix
+docs-fix: ## Auto-fix what can be fixed in the docs (table alignment)
+	python3 scripts/align-tables.py
+
 .PHONY: lint
 lint: ## Run golangci-lint if installed
 	@if command -v golangci-lint >/dev/null 2>&1; then \
