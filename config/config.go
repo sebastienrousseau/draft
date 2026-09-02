@@ -111,6 +111,7 @@ var (
 	userHomeDir = os.UserHomeDir
 	getwd       = os.Getwd
 	tempDir     = os.TempDir
+	absPath     = filepath.Abs
 )
 
 // Load builds a Config from defaults, overlays environment variables, then
@@ -139,8 +140,8 @@ func Load(flags Flags) Config {
 		OllamaHost:         resolveOllamaHost(warn),
 		CallTimeout:        resolveCallTimeout(warn),
 		HomeDir:            home,
-		SourcesDir:         filepath.Join(home, "Drop", "Drafts", "Sources"),
-		DraftsDir:          filepath.Join(home, "Drop", "Drafts"),
+		SourcesDir:         resolveDir(warn, "DRAFT_SOURCES_DIR", home, filepath.Join(home, "Drop", "Drafts", "Sources")),
+		DraftsDir:          resolveDir(warn, "DRAFT_DRAFTS_DIR", home, filepath.Join(home, "Drop", "Drafts")),
 	}
 
 	// Flags win over environment.
@@ -161,6 +162,12 @@ func Load(flags Flags) Config {
 	}
 	if flags.PredictLength > 0 {
 		c.PredictLength = flags.PredictLength
+	}
+	if d := strings.TrimSpace(flags.DraftsDir); d != "" {
+		c.DraftsDir = absDir(warn, "--out", expandHome(d, home))
+	}
+	if d := strings.TrimSpace(flags.SourcesDir); d != "" {
+		c.SourcesDir = absDir(warn, "--sources-dir", expandHome(d, home))
 	}
 	c.ForceNew = flags.ForceNew
 	c.Merge = flags.Merge
@@ -254,11 +261,51 @@ type Flags struct {
 	Model         string
 	ContextLength int
 	PredictLength int
+	// DraftsDir and SourcesDir override where finished drafts are written and
+	// where bare filenames are resolved from. Empty means the default.
+	DraftsDir     string
+	SourcesDir    string
 	ForceNew      bool
 	Merge         bool
 	Resume        bool
 	KeepArtifacts bool
 	Experimental  bool
+}
+
+// resolveDir reads a directory from the environment, expanding a leading ~ and
+// making the result absolute. draft used to hardcode both trees under the home
+// directory with no flag and no variable, which made it unusable from CI, from
+// a container, or as a library whose caller chooses where output goes.
+func resolveDir(warn func(string, ...any), name, home, fallback string) string {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	return absDir(warn, name, expandHome(raw, home))
+}
+
+// expandHome resolves a leading ~ against home, which a shell does not do for
+// a quoted value or for an environment variable.
+func expandHome(path, home string) string {
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+// absDir makes path absolute. A relative Drafts directory writes into whatever
+// directory the process happened to start in, which is the silent-misplacement
+// bug resolveHome exists to prevent; refuse to reintroduce it by accident.
+func absDir(warn func(string, ...any), setting, path string) string {
+	abs, err := absPath(path)
+	if err != nil {
+		warn("%s %q could not be resolved to an absolute path (%v); ignoring it", setting, path, err)
+		return path
+	}
+	return abs
 }
 
 func env(name, fallback string) string {

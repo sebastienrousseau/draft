@@ -84,6 +84,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
 	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
 	fs.IntVar(&flags.PredictLength, "num-predict", 0, "Ollama max output tokens (default 6000)")
+	fs.StringVar(&flags.DraftsDir, "out", "", "directory to write drafts into (default ~/Drop/Drafts)")
+	fs.StringVar(&flags.SourcesDir, "sources-dir", "", "directory bare filenames resolve against (default ~/Drop/Drafts/Sources)")
 	fs.BoolVar(&flags.ForceNew, "force-new", false, "draft even if today's folder already has one")
 	fs.BoolVar(&flags.Merge, "merge", false, "combine all sources into one draft instead of queueing")
 	fs.BoolVar(&flags.Resume, "resume", false, "reuse a verified claim ledger from an earlier attempt")
@@ -322,6 +324,8 @@ func usage(w io.Writer) {
 		{"--experimental", "let auto mode use experimental providers"},
 		{"--num-ctx <n>", "Ollama context window (default 8192)"},
 		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
+		{"--out <dir>", "directory to write drafts into"},
+		{"--sources-dir <dir>", "directory bare filenames resolve against"},
 		{"--force-new", "draft even if today's folder already has one"},
 		{"--merge", "combine all sources into one draft"},
 		{"--resume", "reuse a verified claim ledger from an earlier attempt"},
@@ -341,10 +345,11 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "%s\n", head("ENVIRONMENT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n\n",
+	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n  %s\n\n",
 		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
 		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
 		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
+		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR,"),
 		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
 
 	fmt.Fprintf(w, "%s\n", head("OUTPUT"))

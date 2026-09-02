@@ -139,6 +139,10 @@ func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
 
 var dialTimeout = net.DialTimeout
 
+// startCommand builds the background server command; a variable so the
+// reaping path can be exercised without a real Ollama install.
+var startCommand = exec.Command
+
 // IsOnline probes public DNS endpoints with a short timeout to check for network connectivity.
 var IsOnline = func() bool {
 	conn, err := dialTimeout("tcp", "1.1.1.1:53", 300*time.Millisecond)
@@ -178,10 +182,15 @@ func EnsureOllamaRunning(host string) error {
 	if !available("ollama") {
 		return fmt.Errorf("ollama is not installed on PATH; please install Ollama from https://ollama.com")
 	}
-	cmd := exec.Command("ollama", "serve")
+	cmd := startCommand("ollama", "serve")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start 'ollama serve': %w", err)
 	}
+	// Reap the child when it eventually exits. draft does not own the
+	// server's lifetime — it is deliberately left running for the next run —
+	// but a started process that is never waited on becomes a zombie held by
+	// this process for as long as it lives.
+	go func() { _ = cmd.Wait() }()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(250 * time.Millisecond)
