@@ -28,6 +28,7 @@ import (
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
+	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/tui"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
@@ -72,6 +73,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
 	var jsonOut, dryRun bool
+	var clearCache bool
 	var reviewPath, frontmatterPath, completionShell string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
@@ -92,6 +94,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
 	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
 	fs.BoolVar(&flags.StrictNumbers, "strict-numbers", false, "fail a draft that contains a number found in no verified claim")
+	fs.BoolVar(&flags.NoCache, "no-cache", false, "ignore cached claim extractions and re-extract everything")
+	fs.BoolVar(&clearCache, "clear-cache", false, "delete every cached claim extraction and exit")
 	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
 	fs.StringVar(&frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
 	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
@@ -138,6 +142,16 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 
 	cfg := config.Load(flags)
+	if clearCache {
+		// Read the configured location before --no-cache can blank it, so
+		// `--clear-cache --no-cache` still clears the right directory.
+		if err := extractcache.Clear(config.Load(config.Flags{}).CacheDir); err != nil {
+			fmt.Fprintln(stderr, "draft:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "cleared the claim-extraction cache")
+		return 0
+	}
 	// Resolution problems that were recovered from — an unreadable home
 	// directory, an out-of-range tunable, a non-loopback Ollama host — are
 	// reported rather than applied in silence.
@@ -324,6 +338,8 @@ func usage(w io.Writer) {
 		{"--model <name>", "session-provider model override (e.g. opus)"},
 		{"--experimental", "let auto mode use experimental providers"},
 		{"--strict-numbers", "fail on a number found in no verified claim"},
+		{"--no-cache", "re-extract instead of reusing cached claims"},
+		{"--clear-cache", "delete every cached claim extraction and exit"},
 		{"--num-ctx <n>", "Ollama context window (default 8192)"},
 		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
 		{"--out <dir>", "directory to write drafts into"},
@@ -347,11 +363,12 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "%s\n", head("ENVIRONMENT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n  %s\n\n",
+	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n\n",
 		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
 		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
 		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
 		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR, DRAFT_STRICT_NUMBERS,"),
+		dim("DRAFT_CACHE_DIR, DRAFT_NO_CACHE,"),
 		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
 
 	fmt.Fprintf(w, "%s\n", head("OUTPUT"))

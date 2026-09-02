@@ -123,3 +123,23 @@ func TestPromptsStayValidUTF8WhenClipped(t *testing.T) {
 		}
 	}
 }
+
+// Cached extractions are addressed partly by this value, so it must not vary
+// between calls — the per-call nonce in the untrusted block would do exactly
+// that if it were part of the hash.
+func TestClaimVersionIsStableAndPromptSpecific(t *testing.T) {
+	first := ClaimVersion()
+	if first == "" {
+		t.Fatal("ClaimVersion() is empty")
+	}
+	for i := 0; i < 5; i++ {
+		if got := ClaimVersion(); got != first {
+			t.Fatalf("ClaimVersion() varies between calls: %q then %q", first, got)
+		}
+	}
+	// The source text is not part of the version: two different papers must
+	// share a prompt version, or the cache key would double-count the body.
+	if !strings.Contains(Claim("body one"), "body one") || !strings.Contains(Claim("body two"), "body two") {
+		t.Fatal("Claim() no longer embeds its source")
+	}
+}

@@ -19,12 +19,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sebastienrousseau/draft/claims"
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/frontmatter"
+	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/prompt"
 	"github.com/sebastienrousseau/draft/rules"
@@ -161,6 +163,13 @@ type Runner struct {
 	started    time.Time
 	phaseStart time.Time
 	timings    []PhaseTiming
+	// cache reuses claim extractions across runs, addressed by the content
+	// that produced them. Nil when caching is disabled; every method on it
+	// tolerates that, so there is no branch at the call sites.
+	cache *extractcache.Cache
+	// cacheHits counts reused extractions for this job. Written from the
+	// parallel extraction workers, so it is atomic.
+	cacheHits atomic.Int64
 }
 
 // finalize applies the standard post-processing to a raw generation: clean it,
@@ -185,6 +194,7 @@ func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) 
 			engine.KindEdit:    shared,
 		},
 		events: events,
+		cache:  extractcache.Open(cfg.CacheDir),
 	}
 }
 
@@ -206,7 +216,7 @@ func NewRoutedRunner(cfg config.Config, events chan<- Event) *Runner {
 		byName[name] = cs
 		chains[k] = cs
 	}
-	return &Runner{cfg: cfg, chains: chains, events: events}
+	return &Runner{cfg: cfg, chains: chains, events: events, cache: extractcache.Open(cfg.CacheDir)}
 }
 
 // SetEvents points the Runner at the channel for the next Run. A Runner is
@@ -525,9 +535,8 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	r.ledgerPath = ledgerPath
 	raw := make([]string, len(sections))
 
-	extract := func(body string) (string, error) {
-		return r.generateText(ctx, engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature})
-	}
+	r.cacheHits.Store(0)
+	extract := func(body string) (string, error) { return r.extractOne(ctx, body, nil) }
 
 	// Section 0 settles the engine via the chain.
 	r.log(fmt.Sprintf("claim section 1/%d", len(sections)))
@@ -559,14 +568,14 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 			go func(i int) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				res, err := pinned.Generate(ctx, engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(sections[i].Body), Temperature: extractTemperature})
+				text, err := r.extractOne(ctx, sections[i].Body, pinned)
 				mu.Lock()
 				defer mu.Unlock()
 				if err != nil {
 					failed = append(failed, i)
 					return
 				}
-				raw[i] = res.Text
+				raw[i] = text
 			}(i)
 		}
 		wg.Wait()
@@ -596,6 +605,10 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 			return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
 		}
 		raw[i] = text
+	}
+
+	if hits := r.cacheHits.Load(); hits > 0 {
+		r.log(fmt.Sprintf("reused %d cached extraction(s); use --no-cache to force a fresh run", hits))
 	}
 
 	var records []claims.Record
@@ -648,6 +661,65 @@ func (r *Runner) extractConcurrency() int {
 		return ollamaExtractConcurrency
 	}
 	return n
+}
+
+// extractOne returns a section's raw extraction, reusing a cached one when the
+// same section, prompt, engine and model produced it before.
+//
+// direct names the backend to call straight through, which the parallel path
+// uses so its workers cannot race on the chain cursor; nil routes through the
+// chain, so a failure can still fall back.
+//
+// The cached text is never trusted on its own account: the caller still runs
+// claims.Parse over it against the freshly read section, so a stale entry can
+// only ever yield fewer verified claims, never an ungrounded one.
+func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engine) (string, error) {
+	serving := direct
+	if serving == nil {
+		serving = r.chainFor(engine.KindExtract).active()
+	}
+	if key := r.extractKey(body, serving); key != "" {
+		if text, ok := r.cache.Get(key); ok {
+			r.cacheHits.Add(1)
+			return text, nil
+		}
+	}
+
+	req := engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature}
+	var text string
+	var err error
+	if direct != nil {
+		var res engine.Result
+		res, err = direct.Generate(ctx, req)
+		text = res.Text
+	} else {
+		text, err = r.generateText(ctx, req)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// Address the entry to the backend that actually served it: the chain may
+	// have failed over between the lookup above and this point, and storing
+	// it under the wrong name would serve one model's output for another.
+	actual := direct
+	if actual == nil {
+		actual = r.chainFor(engine.KindExtract).active()
+	}
+	if key := r.extractKey(body, actual); key != "" {
+		if putErr := r.cache.Put(key, text); putErr != nil {
+			r.warn("could not cache the extraction: " + putErr.Error())
+		}
+	}
+	return text, nil
+}
+
+// extractKey addresses one section's extraction against a specific backend.
+func (r *Runner) extractKey(body string, e engine.Engine) string {
+	if e == nil || r.cache == nil {
+		return ""
+	}
+	return extractcache.Key(body, prompt.ClaimVersion(), e.Name(), engine.ResolveModel(r.cfg, e))
 }
 
 // generateText runs a request through the engine chain and returns its text.

@@ -102,6 +102,9 @@ type Config struct {
 	HomeDir    string
 	SourcesDir string
 	DraftsDir  string
+	// CacheDir holds cached claim extractions, addressed by content. Empty
+	// disables caching entirely.
+	CacheDir string
 
 	// Warnings records configuration problems that were recovered from rather
 	// than fatal: an unreadable home directory, an out-of-range tunable, a
@@ -111,10 +114,11 @@ type Config struct {
 }
 
 var (
-	userHomeDir = os.UserHomeDir
-	getwd       = os.Getwd
-	tempDir     = os.TempDir
-	absPath     = filepath.Abs
+	userHomeDir  = os.UserHomeDir
+	getwd        = os.Getwd
+	tempDir      = os.TempDir
+	absPath      = filepath.Abs
+	userCacheDir = os.UserCacheDir
 )
 
 // Load builds a Config from defaults, overlays environment variables, then
@@ -145,6 +149,7 @@ func Load(flags Flags) Config {
 		HomeDir:            home,
 		SourcesDir:         resolveDir(warn, "DRAFT_SOURCES_DIR", home, filepath.Join(home, "Drop", "Drafts", "Sources")),
 		DraftsDir:          resolveDir(warn, "DRAFT_DRAFTS_DIR", home, filepath.Join(home, "Drop", "Drafts")),
+		CacheDir:           resolveDir(warn, "DRAFT_CACHE_DIR", home, defaultCacheDir(home)),
 	}
 
 	// Flags win over environment.
@@ -178,6 +183,9 @@ func Load(flags Flags) Config {
 	c.KeepArtifacts = flags.KeepArtifacts
 	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
 	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
+	if flags.NoCache || envBool("DRAFT_NO_CACHE") {
+		c.CacheDir = ""
+	}
 	c.Warnings = warnings
 	return c
 }
@@ -275,6 +283,17 @@ type Flags struct {
 	KeepArtifacts bool
 	Experimental  bool
 	StrictNumbers bool
+	NoCache       bool
+}
+
+// defaultCacheDir is the per-user cache location, following the platform
+// convention rather than putting scratch data in the drafts tree — a cache is
+// reproducible from the sources and must never look like output.
+func defaultCacheDir(home string) string {
+	if dir, err := userCacheDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "draft", "extract")
+	}
+	return filepath.Join(home, ".cache", "draft", "extract")
 }
 
 // envBool reads a boolean environment variable in the forms users actually

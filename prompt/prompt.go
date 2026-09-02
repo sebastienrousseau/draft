@@ -9,6 +9,8 @@
 package prompt
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -32,6 +34,20 @@ const maxContinueTailChars = 4000
 
 // Claim builds the extraction prompt for a single source section.
 func Claim(source string) string {
+	return claimWith(Untrusted("UNTRUSTED SOURCE DOCUMENT", source))
+}
+
+// ClaimVersion identifies the extraction instructions, so cached extractions
+// are invalidated by a prompt edit rather than silently serving output that
+// different instructions produced. It hashes the template with an empty
+// untrusted block, which excludes the per-call nonce that would otherwise make
+// every prompt — and so every version — unique.
+func ClaimVersion() string {
+	sum := sha256.Sum256([]byte(claimWith("")))
+	return hex.EncodeToString(sum[:8])
+}
+
+func claimWith(sourceBlock string) string {
 	return fmt.Sprintf(`You extract verified facts from a source document. You do NOT summarize, interpret, rephrase for style, or add anything. You are building a claim list that a later writing step will rely on, so a wrong or unsupported entry is worse than a missing one.
 
 ## RULES
@@ -55,7 +71,7 @@ Order records by where they appear in the SOURCE, top to bottom.
 If the SOURCE section contains no extractable claims, return exactly: NONE.
 
 ## SOURCE
-%s`, Untrusted("UNTRUSTED SOURCE DOCUMENT", source))
+%s`, sourceBlock)
 }
 
 // EffectiveStyle returns the style-calibration text the writing prompt will

@@ -495,3 +495,62 @@ func TestRunJSONFlagViaRun(t *testing.T) {
 		t.Errorf("--json should emit a record even on failure: %q", out.String())
 	}
 }
+
+func TestRunClearCache(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DRAFT_CACHE_DIR", dir)
+	// A shard with an entry in it, which Clear must remove.
+	shard := filepath.Join(dir, "ab")
+	if err := os.MkdirAll(shard, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shard, "abc.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb strings.Builder
+	if code := run([]string{"--clear-cache"}, &out, &errb); code != 0 {
+		t.Fatalf("exit code %d, stderr %q", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "cleared") {
+		t.Errorf("stdout = %q", out.String())
+	}
+	if _, err := os.Stat(shard); !os.IsNotExist(err) {
+		t.Error("--clear-cache left the shard behind")
+	}
+}
+
+func TestRunClearCacheReportsFailure(t *testing.T) {
+	// A cache path that is a file, so reading it as a directory fails.
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRAFT_CACHE_DIR", file)
+
+	var out, errb strings.Builder
+	if code := run([]string{"--clear-cache"}, &out, &errb); code != 1 {
+		t.Fatalf("exit code %d, want 1 (stderr %q)", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "draft:") {
+		t.Errorf("stderr = %q", errb.String())
+	}
+}
+
+// --clear-cache must clear the configured location even alongside --no-cache,
+// which blanks CacheDir for the run.
+func TestRunClearCacheIgnoresNoCache(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DRAFT_CACHE_DIR", dir)
+	shard := filepath.Join(dir, "cd")
+	if err := os.MkdirAll(shard, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	if code := run([]string{"--clear-cache", "--no-cache"}, &out, &errb); code != 0 {
+		t.Fatalf("exit code %d, stderr %q", code, errb.String())
+	}
+	if _, err := os.Stat(shard); !os.IsNotExist(err) {
+		t.Error("--clear-cache --no-cache did not clear the configured directory")
+	}
+}
