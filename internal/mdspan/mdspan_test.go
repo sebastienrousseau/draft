@@ -65,22 +65,40 @@ func TestOutsideProtectedWithNoSpansAppliesToAll(t *testing.T) {
 	}
 }
 
-func TestBlankProtectedKeepsLengthAndNewlines(t *testing.T) {
-	in := "a\n```\nx\n```\nb"
-	got := BlankProtected(in)
-	if len(got) != len(in) {
-		t.Errorf("BlankProtected() len = %d, want %d", len(got), len(in))
+// Every protected span opens with one of four characters; a draft carrying
+// none of them must not pay for the alternation scan.
+func TestProtectedSkipsDocumentsWithNoDelimiters(t *testing.T) {
+	if locs := Protected("plain prose with no code and no quotation at all"); locs != nil {
+		t.Errorf("Protected() = %v, want nil", locs)
 	}
-	if strings.Count(got, "\n") != strings.Count(in, "\n") {
-		t.Errorf("BlankProtected() changed the line count")
-	}
-	if strings.Contains(got, "x") {
-		t.Errorf("BlankProtected() left protected content: %q", got)
+	// The pre-check must not swallow a real span.
+	if locs := Protected("a ~~~\nx\n~~~ b"); len(locs) != 1 {
+		t.Errorf("Protected() found %d spans, want 1", len(locs))
 	}
 }
 
-func TestBlankProtectedWithNoSpansIsIdentity(t *testing.T) {
-	if got := BlankProtected("plain"); got != "plain" {
-		t.Errorf("BlankProtected() = %q, want %q", got, "plain")
+func TestCovers(t *testing.T) {
+	s := `a "one" b "two" c`
+	spans := Protected(s)
+	if len(spans) != 2 {
+		t.Fatalf("expected 2 spans, got %d", len(spans))
+	}
+	for _, tc := range []struct {
+		offset int
+		want   bool
+	}{
+		{0, false},              // 'a'
+		{spans[0][0], true},     // opening quote
+		{spans[0][1] - 1, true}, // closing quote
+		{spans[0][1], false},    // just past it
+		{spans[1][0], true},     // second span
+		{len(s) - 1, false},     // 'c'
+	} {
+		if got := Covers(spans, tc.offset); got != tc.want {
+			t.Errorf("Covers(spans, %d) = %v, want %v", tc.offset, got, tc.want)
+		}
+	}
+	if Covers(nil, 0) {
+		t.Error("Covers(nil, 0) = true")
 	}
 }

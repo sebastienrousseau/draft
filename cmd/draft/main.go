@@ -40,7 +40,11 @@ var version = "dev"
 
 var (
 	readBuildInfo = debug.ReadBuildInfo
-	runTeaProgram = func(m tea.Model, opts ...tea.ProgramOption) (tea.Model, error) {
+	// clearExtractCache is a variable so the failure path is testable on every
+	// platform: reading a plain file as a directory errors on Unix and
+	// succeeds on Windows, so a test cannot portably provoke it for real.
+	clearExtractCache = extractcache.Clear
+	runTeaProgram     = func(m tea.Model, opts ...tea.ProgramOption) (tea.Model, error) {
 		return tea.NewProgram(m, opts...).Run()
 	}
 )
@@ -146,7 +150,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	if clearCache {
 		// Read the configured location before --no-cache can blank it, so
 		// `--clear-cache --no-cache` still clears the right directory.
-		if err := extractcache.Clear(config.Load(config.Flags{}).CacheDir); err != nil {
+		if err := clearExtractCache(config.Load(config.Flags{}).CacheDir); err != nil {
 			fmt.Fprintln(stderr, "draft:", err)
 			return 1
 		}

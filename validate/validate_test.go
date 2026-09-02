@@ -190,3 +190,30 @@ func hasNumberComplaint(msgs []string) bool {
 	}
 	return false
 }
+
+// A banned phrase inside a quotation is the source's wording. It must be
+// exonerated — and a second occurrence outside one must still be caught.
+func TestBannedPhrasesAreFilteredByPosition(t *testing.T) {
+	base := "# Title\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\n" +
+		strings.Repeat("word ", 600) + "."
+
+	quotedOnly := base + "\n\nThe paper says \"furthermore the result holds\".\n"
+	for _, e := range Errors(quotedOnly) {
+		if strings.Contains(e, "banned phrases") {
+			t.Errorf("flagged a banned phrase that only occurs inside a quotation: %q", e)
+		}
+	}
+
+	// Same phrase quoted first, then used by the writer: the later, unquoted
+	// occurrence must still fail.
+	alsoUnquoted := quotedOnly + "\n\nFurthermore, the effect is clear.\n"
+	var found bool
+	for _, e := range Errors(alsoUnquoted) {
+		if strings.Contains(e, "banned phrases") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missed an unquoted banned phrase that also appears quoted: %v", Errors(alsoUnquoted))
+	}
+}

@@ -5,6 +5,7 @@ package extractcache
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -156,12 +157,12 @@ func TestClearToleratesAMissingDirectory(t *testing.T) {
 }
 
 func TestClearReportsAnUnreadableDirectory(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "a-file")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := Clear(file); err == nil {
-		t.Error("Clear() on a file should report an error")
+	orig := readDir
+	readDir = func(string) ([]os.DirEntry, error) { return nil, errors.New("permission denied") }
+	defer func() { readDir = orig }()
+
+	if err := Clear(t.TempDir()); err == nil {
+		t.Error("Clear() should report a directory it cannot read")
 	}
 }
 

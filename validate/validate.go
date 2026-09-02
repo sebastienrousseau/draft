@@ -73,15 +73,43 @@ func Errors(md string) []string {
 	// because enforceStyle refuses to rewrite them — attributing different
 	// words to a source is worse than a cliché — and a rule the repair pass
 	// cannot satisfy would otherwise drive an unfixable rewrite loop.
-	lowered := strings.ToLower(mdspan.BlankProtected(md))
-	if hits := bannedWordRe.FindAllString(lowered, -1); len(hits) > 0 {
-		errs = append(errs, "contains banned words: "+strings.Join(dedupeStrings(hits), ", "))
-	}
+	//
+	// The spans are located only once something has been found to exonerate.
+	// Locating them costs a scan of the whole document, and the overwhelming
+	// majority of drafts reach here with no banned vocabulary at all — the
+	// repair pass has already removed it — so paying up front made every
+	// clean draft subsidise the rare dirty one.
+	lowered := strings.ToLower(md)
+	wordHits := bannedWordRe.FindAllStringIndex(lowered, -1)
 	var phrases []string
 	for _, p := range rules.BannedPhrases {
 		if strings.Contains(lowered, p) {
 			phrases = append(phrases, p)
 		}
+	}
+
+	if len(wordHits) > 0 || len(phrases) > 0 {
+		// Spans are located in the lowered text so offsets agree: lowercasing
+		// cannot move a quote or a backtick, which are all the delimiters
+		// involved.
+		protected := mdspan.Protected(lowered)
+		var words []string
+		for _, loc := range wordHits {
+			if mdspan.Covers(protected, loc[0]) {
+				continue
+			}
+			words = append(words, lowered[loc[0]:loc[1]])
+		}
+		if len(words) > 0 {
+			errs = append(errs, "contains banned words: "+strings.Join(dedupeStrings(words), ", "))
+		}
+		kept := phrases[:0]
+		for _, p := range phrases {
+			if indexOutsideProtected(lowered, p, protected) >= 0 {
+				kept = append(kept, p)
+			}
+		}
+		phrases = kept
 	}
 	if len(phrases) > 0 {
 		errs = append(errs, "contains banned phrases: "+strings.Join(phrases, ", "))
@@ -102,6 +130,23 @@ type Options struct {
 	// so the real false-positive rate can be measured on a corpus before it
 	// becomes the default.
 	StrictNumbers bool
+}
+
+// indexOutsideProtected returns the offset of the first occurrence of term in s
+// that does not fall inside a protected span, or -1.
+func indexOutsideProtected(s, term string, protected [][]int) int {
+	for from := 0; from <= len(s)-len(term); {
+		i := strings.Index(s[from:], term)
+		if i < 0 {
+			return -1
+		}
+		at := from + i
+		if !mdspan.Covers(protected, at) {
+			return at
+		}
+		from = at + 1
+	}
+	return -1
 }
 
 // Faithfulness cross-checks a draft against the verified claim ledger with the
@@ -255,8 +300,15 @@ func ungroundedNumbers(article string, records []claims.Record, blocking bool) [
 			allowed[n] = true
 		}
 	}
+	// Stripping list markers costs a pass over the article, so only do it when
+	// the answer blocks a save. In advisory mode everything is reported
+	// anyway, so nothing is hidden by leaving them in.
+	scan := article
+	if blocking {
+		scan = orderedListMarker.ReplaceAllString(article, "")
+	}
 	var ungrounded []string
-	for n := range claims.Numbers(orderedListMarker.ReplaceAllString(article, "")) {
+	for n := range claims.Numbers(scan) {
 		if allowed[n] {
 			continue
 		}

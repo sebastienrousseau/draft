@@ -115,30 +115,35 @@ func TestDirectoriesAreConfigurable(t *testing.T) {
 		}
 	})
 
+	// Absolute paths are built from t.TempDir rather than written as POSIX
+	// literals: filepath.Abs("/tmp/out") is "D:\\tmp\\out" on Windows, so a
+	// hardcoded "/tmp/out" asserts something only true on Unix.
 	t.Run("environment overrides", func(t *testing.T) {
 		home := t.TempDir()
 		withHome(t, home)
-		t.Setenv("DRAFT_DRAFTS_DIR", "/tmp/out")
-		t.Setenv("DRAFT_SOURCES_DIR", "/tmp/src")
+		out, src := filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "src")
+		t.Setenv("DRAFT_DRAFTS_DIR", out)
+		t.Setenv("DRAFT_SOURCES_DIR", src)
 		c := Load(Flags{})
-		if c.DraftsDir != "/tmp/out" {
-			t.Errorf("DraftsDir = %q, want /tmp/out", c.DraftsDir)
+		if c.DraftsDir != out {
+			t.Errorf("DraftsDir = %q, want %q", c.DraftsDir, out)
 		}
-		if c.SourcesDir != "/tmp/src" {
-			t.Errorf("SourcesDir = %q, want /tmp/src", c.SourcesDir)
+		if c.SourcesDir != src {
+			t.Errorf("SourcesDir = %q, want %q", c.SourcesDir, src)
 		}
 	})
 
 	t.Run("flags beat the environment", func(t *testing.T) {
 		home := t.TempDir()
 		withHome(t, home)
-		t.Setenv("DRAFT_DRAFTS_DIR", "/tmp/env")
-		c := Load(Flags{DraftsDir: "/tmp/flag", SourcesDir: "/tmp/flagsrc"})
-		if c.DraftsDir != "/tmp/flag" {
-			t.Errorf("DraftsDir = %q, want /tmp/flag", c.DraftsDir)
+		out, src := filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "src")
+		t.Setenv("DRAFT_DRAFTS_DIR", filepath.Join(t.TempDir(), "env"))
+		c := Load(Flags{DraftsDir: out, SourcesDir: src})
+		if c.DraftsDir != out {
+			t.Errorf("DraftsDir = %q, want %q", c.DraftsDir, out)
 		}
-		if c.SourcesDir != "/tmp/flagsrc" {
-			t.Errorf("SourcesDir = %q, want /tmp/flagsrc", c.SourcesDir)
+		if c.SourcesDir != src {
+			t.Errorf("SourcesDir = %q, want %q", c.SourcesDir, src)
 		}
 	})
 

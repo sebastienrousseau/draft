@@ -523,12 +523,11 @@ func TestRunClearCache(t *testing.T) {
 }
 
 func TestRunClearCacheReportsFailure(t *testing.T) {
-	// A cache path that is a file, so reading it as a directory fails.
-	file := filepath.Join(t.TempDir(), "not-a-dir")
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("DRAFT_CACHE_DIR", file)
+	orig := clearExtractCache
+	clearExtractCache = func(string) error { return errors.New("permission denied") }
+	defer func() { clearExtractCache = orig }()
+
+	t.Setenv("DRAFT_CACHE_DIR", t.TempDir())
 
 	var out, errb strings.Builder
 	if code := run([]string{"--clear-cache"}, &out, &errb); code != 1 {

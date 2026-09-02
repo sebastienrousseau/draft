@@ -27,6 +27,11 @@ import (
 	"github.com/sebastienrousseau/draft/internal/atomicfile"
 )
 
+// readDir is os.ReadDir, as a variable so the failure path is testable on
+// every platform. Reading a plain file as a directory errors on Unix and
+// succeeds on Windows, so a test cannot portably provoke it for real.
+var readDir = os.ReadDir
+
 // MaxAge bounds how long an entry stays usable. Extraction output is
 // deterministic given the same section, prompt, engine and model, so the limit
 // is about reclaiming disk rather than correctness.
@@ -125,7 +130,7 @@ func Clear(dir string) error {
 	if dir == "" {
 		return nil
 	}
-	entries, err := os.ReadDir(dir)
+	entries, err := readDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

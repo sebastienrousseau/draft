@@ -37,7 +37,16 @@ var protectedPat = regexp.MustCompile(
 
 // Protected returns the byte ranges of s that must not be rewritten, in order
 // and non-overlapping.
-func Protected(s string) [][]int { return protectedPat.FindAllStringIndex(s, -1) }
+func Protected(s string) [][]int {
+	// Every protected span opens with one of these four characters, and the
+	// alternation above costs roughly 90ns per byte to discover otherwise.
+	// A draft with no code and no quotation is common enough to be worth the
+	// single cheap pass.
+	if !strings.ContainsAny(s, "`~\"\u201c") {
+		return nil
+	}
+	return protectedPat.FindAllStringIndex(s, -1)
+}
 
 // OutsideProtected applies fn to each region of s that is not protected and
 // returns the result with the protected regions restored verbatim.
@@ -62,21 +71,25 @@ func OutsideProtected(s string, fn func(string) string) string {
 	return b.String()
 }
 
-// BlankProtected returns s with every protected region replaced by spaces,
-// preserving both byte length and line structure so a scan over the result
-// reports offsets and line numbers that still refer to the original.
-func BlankProtected(s string) string {
-	locs := Protected(s)
-	if len(locs) == 0 {
-		return s
-	}
-	b := []byte(s)
-	for _, loc := range locs {
-		for i := loc[0]; i < loc[1]; i++ {
-			if b[i] != '\n' {
-				b[i] = ' '
-			}
+// Covers reports whether offset falls inside one of the spans, which must be
+// the ordered, non-overlapping output of Protected.
+//
+// Filtering match offsets is cheaper than blanking the document: blanking
+// copies the whole string twice — once to mutate and once to re-materialise —
+// on every validation of every draft, to answer a question a comparison
+// already answers.
+func Covers(spans [][]int, offset int) bool {
+	lo, hi := 0, len(spans)
+	for lo < hi {
+		mid := (lo + hi) / 2
+		switch {
+		case offset < spans[mid][0]:
+			hi = mid
+		case offset >= spans[mid][1]:
+			lo = mid + 1
+		default:
+			return true
 		}
 	}
-	return string(b)
+	return false
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -179,8 +180,10 @@ func TestPromptFileIsStagedPrivatelyAndPassedByPath(t *testing.T) {
 func TestPromptFileFailureIsReported(t *testing.T) {
 	origMk := mkTempDir
 	// A directory that does not exist makes the staging write fail without
-	// needing an unwritable filesystem.
-	mkTempDir = func(string, string) (string, error) { return "/nonexistent-draft-sandbox", nil }
+	// needing an unwritable filesystem. Built from t.TempDir so the path is
+	// real for the platform rather than a POSIX literal.
+	missing := filepath.Join(t.TempDir(), "never-created")
+	mkTempDir = func(string, string) (string, error) { return missing, nil }
 	defer func() { mkTempDir = origMk }()
 
 	origExec := execCommand
