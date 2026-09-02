@@ -3,6 +3,9 @@ version = 1
 [[annotations]]
 path = [
   "**.md",
+  # devcontainer.json is JSON with comments, which reuse cannot parse for
+  # tags; annotate it here rather than leave it uncovered.
+  ".devcontainer/devcontainer.json",
   "go.mod",
   "go.sum",
   "Makefile",

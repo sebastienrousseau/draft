@@ -38,6 +38,13 @@ jobs:
       - name: Check intra-repo links
         run: python3 scripts/check-links.py
 
+      # A version in a citation file or a changelog heading is a claim, and
+      # claims drift silently.
+      - name: Check version consistency
+        run: |
+          git fetch --tags --quiet
+          python3 scripts/verify-release-versions.py
+
   # The manual is built on every pull request so it cannot rot between
   # releases, and published only from main. Its pages are the repository's own
   # Markdown, assembled by scripts/build-manual.py, so a chapter can never

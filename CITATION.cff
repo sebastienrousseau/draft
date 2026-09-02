@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+cff-version: 1.2.0
+title: draft
+message: >-
+  If you use this software in work you publish, please cite it using
+  these metadata.
+type: software
+authors:
+  - given-names: Sebastien
+    family-names: Rousseau
+    email: sebastian.rousseau@gmail.com
+    orcid: null
+repository-code: https://github.com/sebastienrousseau/draft
+url: https://draftlib.com
+abstract: >-
+  A command-line tool and Go library that turns research papers into
+  publication-ready Markdown drafts in which every sentence is grounded
+  in a fact it can prove. Claims are mined from the source and admitted
+  only when their supporting quote occurs verbatim in it, so the model
+  that writes the article never sees an unverified fact.
+keywords:
+  - grounded-generation
+  - hallucination-prevention
+  - claim-verification
+  - document-processing
+  - golang
+  - command-line-tool
+  - local-first
+license: MIT OR Apache-2.0
+version: 0.0.32

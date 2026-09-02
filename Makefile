@@ -71,6 +71,7 @@ docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, lin
 	python3 -m pip install --quiet --disable-pip-version-check codespell
 	python3 -m codespell_lib
 	python3 scripts/check-links.py
+	python3 scripts/verify-release-versions.py
 
 .PHONY: manual
 manual: ## Build the rendered user manual into .gen/site

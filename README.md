@@ -1072,6 +1072,9 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 | [Decision records](docs/adr/)                                         | Why the load-bearing choices were made                     |
 | [Packaging](docs/packaging.md)                                        | For distribution maintainers                               |
 | [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format             |
+| [SUPPORT](SUPPORT.md)                                                 | Where to take a question, and what to expect back          |
+| [GOVERNANCE](GOVERNANCE.md)                                           | Who decides what, and what gets accepted                   |
+| [AGENTS](AGENTS.md)                                                   | Invariants for AI-assisted contributors                    |
 | [CONTRIBUTING](CONTRIBUTING.md)                                       | How to propose changes and what CI expects                 |
 | [SECURITY](SECURITY.md)                                               | Vulnerability disclosure policy                            |
 | [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)                                 | Community standards                                        |

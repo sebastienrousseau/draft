@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Template. Replace pkgver and the checksum, then makepkg -si.
+# Build from source rather than the release binary, per AUR convention.
+# Maintainer: Sebastien Rousseau <sebastian.rousseau@gmail.com>
+pkgname=draft
+pkgver=0.0.32
+pkgrel=1
+pkgdesc="Turn research papers into grounded Markdown drafts"
+arch=('x86_64' 'aarch64')
+url="https://github.com/sebastienrousseau/draft"
+license=('MIT' 'Apache-2.0')
+depends=('glibc')
+optdepends=('poppler: PDF sources'
+            'ollama: offline generation')
+makedepends=('go>=1.24' 'git')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # replace with the real checksum
+
+build() {
+  cd "$pkgname-$pkgver"
+  export CGO_ENABLED=0
+  export GOFLAGS="-trimpath -mod=readonly -modcacherw"
+  go build -ldflags "-s -w -X main.version=$pkgver" -o build/draft ./cmd/draft
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  go test ./...
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  # The upstream GNUmakefile implements the whole install contract, so this
+  # stays correct when the file list changes.
+  make -f GNUmakefile install PREFIX=/usr DESTDIR="$pkgdir" BIN_DIR=build
+}
