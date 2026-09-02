@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -20,6 +21,31 @@ import (
 // execCommand builds the command used to invoke a provider CLI. It is a package
 // variable so tests can substitute a fake command without spawning processes.
 var execCommand = exec.CommandContext
+
+// mkTempDir is os.MkdirTemp, as a variable so the failure path is testable.
+var mkTempDir = os.MkdirTemp
+
+// sessionEnv is the environment handed to a provider subprocess.
+//
+// draft's own configuration is removed: DRAFT_* names steer draft, and letting
+// them reach an agent that reads its own environment lets one tool's settings
+// silently redirect another's. Everything else is passed through, deliberately.
+// A tight allowlist reads as the safer choice and is not: every provider finds
+// its credentials somewhere different in the environment, so a list that is
+// wrong breaks authentication and the failure surfaces as a confusing provider
+// error rather than as a security decision. The isolation that actually bounds
+// the blast radius is the empty working directory and the absence of tool
+// grants, not the variable list.
+func sessionEnv(environ []string) []string {
+	out := make([]string, 0, len(environ))
+	for _, kv := range environ {
+		if strings.HasPrefix(kv, "DRAFT_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
 
 // Session generates text by driving a token-free agent CLI (Claude, Codex,
 // Gemini, Copilot, Cursor, Amp, Crush, Goose, Grok, Qwen, ...) in headless
@@ -62,12 +88,34 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		defer cancel()
 	}
 
+	// Run the provider in an empty directory of our own, never the user's.
+	//
+	// A provider CLI started in the working directory loads whatever agent
+	// configuration lives there — CLAUDE.md, AGENTS.md, .mcp.json, project
+	// settings — and draft's prompts carry verbatim text from a third-party
+	// document. Inheriting that context both widens the blast radius of a
+	// crafted source and pays for MCP server startup on every one of the
+	// dozen-plus calls a paper costs.
+	dir, err := mkTempDir("", "draft-session-")
+	if err != nil {
+		return Result{}, fmt.Errorf("%s: could not create an isolated working directory: %w", s.provider.Name, err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
 	args := append([]string{}, s.provider.Args...)
 	if s.provider.ModelFlag != "" && s.model != "" && s.model != "default" {
 		args = append(args, s.provider.ModelFlag, s.model)
 	}
 
 	cmd := execCommand(ctx, s.provider.Bin, args...)
+	cmd.Dir = dir
+	// Filter whatever environment the command already carries, rather than
+	// replacing it: exec.CommandContext leaves Env nil to mean "inherit", but
+	// a caller that has set one deliberately must keep it.
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	cmd.Env = sessionEnv(cmd.Env)
 	if s.provider.PromptViaStdin {
 		cmd.Stdin = strings.NewReader(req.Prompt)
 		if s.provider.StdinPlaceholder != "" {

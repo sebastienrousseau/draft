@@ -67,10 +67,10 @@ type Provider struct {
 // argument delivery until someone can run them.
 var Providers = []Provider{
 	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
-	{Name: "copilot", Bin: "copilot", Args: []string{"-p", "--allow-all-tools"}},
+	{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
 	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
 	{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
-	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text", "--force"}, ModelFlag: "--model", PromptViaStdin: true},
+	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
 	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
 	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
 	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}, Experimental: true},

@@ -55,7 +55,7 @@ Order records by where they appear in the SOURCE, top to bottom.
 If the SOURCE section contains no extractable claims, return exactly: NONE.
 
 ## SOURCE
-%s`, source)
+%s`, Untrusted("UNTRUSTED SOURCE DOCUMENT", source))
 }
 
 // EffectiveStyle returns the style-calibration text the writing prompt will
@@ -135,7 +135,7 @@ Write a %d-%d word article for technical readers and founders titled around the 
 		houseStyleRules,
 		outputSkeleton,
 		minWords, maxWords,
-		ledger,
+		Untrusted("UNTRUSTED VERIFIED CLAIMS", ledger),
 	)
 }
 
@@ -209,9 +209,9 @@ Use this only to understand nearby wording. Do not add factual claims from this 
 ## DRAFT
 %s`,
 		houseStyleRules,
-		ledger,
-		clip(research, MaxReviewSourceChars),
-		clip(draft, MaxDraftChars),
+		Untrusted("UNTRUSTED VERIFIED CLAIMS", ledger),
+		Untrusted("UNTRUSTED SOURCE DOCUMENT", clip(research, MaxReviewSourceChars)),
+		Untrusted("UNTRUSTED DRAFT UNDER REVIEW", clip(draft, MaxDraftChars)),
 	)
 }
 

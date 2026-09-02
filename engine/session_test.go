@@ -180,7 +180,7 @@ func TestSessionPromptViaArg(t *testing.T) {
 		if !strings.Contains(res.Text, "arg prompt") {
 			t.Errorf("prompt should be the final arg, got %q", res.Text)
 		}
-		if !strings.Contains(res.Text, "--allow-all-tools") {
+		if !strings.Contains(res.Text, "-p") {
 			t.Errorf("provider args should be present, got %q", res.Text)
 		}
 	})
