@@ -76,3 +76,51 @@ func TestPhaseMillis(t *testing.T) {
 		t.Error("a zero-duration phase should still appear")
 	}
 }
+
+// The completion list is derived from the help table, so a flag added to one
+// cannot go missing from the other. The old hand-kept copy carried that
+// promise in a comment and had fallen four flags behind.
+func TestCompletionFlagsCoverEveryDocumentedFlag(t *testing.T) {
+	documented := map[string]bool{}
+	for _, f := range flagHelp {
+		for _, part := range strings.Split(f[0], ",") {
+			name, _, _ := strings.Cut(strings.TrimSpace(part), " ")
+			if strings.HasPrefix(name, "--") {
+				documented[name] = true
+			}
+		}
+	}
+	offered := map[string]bool{}
+	for _, f := range completionFlags {
+		offered[f] = true
+	}
+	for name := range documented {
+		if !offered[name] {
+			t.Errorf("%s is documented but not offered by completion", name)
+		}
+	}
+	for name := range offered {
+		if !documented[name] {
+			t.Errorf("%s is offered by completion but not documented", name)
+		}
+	}
+}
+
+// Every flag the help text documents must actually be registered, or the help
+// promises something the parser rejects.
+func TestEveryDocumentedFlagIsRegistered(t *testing.T) {
+	var out, errb strings.Builder
+	for _, f := range flagHelp {
+		name, _, _ := strings.Cut(f[0], " ")
+		if !strings.HasPrefix(name, "--") || name == "--help" {
+			continue
+		}
+		out.Reset()
+		errb.Reset()
+		// An unknown flag exits 2 with "flag provided but not defined".
+		run([]string{name + "=x"}, &out, &errb)
+		if strings.Contains(errb.String(), "not defined") {
+			t.Errorf("%s is documented but not registered", name)
+		}
+	}
+}

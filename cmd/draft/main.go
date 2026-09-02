@@ -286,6 +286,42 @@ func resolveSource(cfg config.Config, arg string) (string, error) {
 	return "", fmt.Errorf("research file not found: %s", arg)
 }
 
+// flagHelp is the flag reference: the single table the help text renders and
+// the shell completions are derived from.
+//
+// completionFlags used to be a second hand-maintained list whose comment
+// claimed it was derived from this one. It was not — it had silently fallen
+// four flags behind, which is exactly the drift that comment promised could
+// not happen. Deriving it removes the possibility rather than the claim.
+var flagHelp = [][2]string{
+	{"--engine <mode>", "auto (default), ollama, or a provider name"},
+	{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
+	{"--write-engine <m>", "backend for writing (default: --engine)"},
+	{"--model <name>", "session-provider model override (e.g. opus)"},
+	{"--experimental", "let auto mode use experimental providers"},
+	{"--strict-numbers", "fail on a number found in no verified claim"},
+	{"--no-cache", "re-extract instead of reusing cached claims"},
+	{"--clear-cache", "delete every cached claim extraction and exit"},
+	{"--num-ctx <n>", "Ollama context window (default 8192)"},
+	{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
+	{"--out <dir>", "directory to write drafts into"},
+	{"--sources-dir <dir>", "directory bare filenames resolve against"},
+	{"--force-new", "draft even if today's folder already has one"},
+	{"--merge", "combine all sources into one draft"},
+	{"--resume", "reuse a verified claim ledger from an earlier attempt"},
+	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
+	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
+	{"--combine <file>", "alias for --frontmatter"},
+	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
+	{"--print", "run without the TUI; print draft paths to stdout"},
+	{"--json", "run without the TUI; one JSON object per job on stdout"},
+	{"--dry-run", "report what a run would do, without calling a model"},
+	{"--doctor", "check that this machine can run draft, and exit"},
+	{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
+	{"--version", "print version and exit"},
+	{"-h, --help", "show this help"},
+}
+
 // usage prints the branded help: the logo and wordmark, then coral section
 // headings over the reference text. Colour is dropped automatically when the
 // output is not a terminal, and DRAFT_SHOW_LOGO=0 suppresses the logo.
@@ -336,34 +372,7 @@ func usage(w io.Writer) {
 `, strings.Join(engine.ProviderNames(), ", "))
 
 	fmt.Fprintf(w, "%s\n", head("FLAGS"))
-	for _, f := range [][2]string{
-		{"--engine <mode>", "auto (default), ollama, or a provider name"},
-		{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
-		{"--write-engine <m>", "backend for writing (default: --engine)"},
-		{"--model <name>", "session-provider model override (e.g. opus)"},
-		{"--experimental", "let auto mode use experimental providers"},
-		{"--strict-numbers", "fail on a number found in no verified claim"},
-		{"--no-cache", "re-extract instead of reusing cached claims"},
-		{"--clear-cache", "delete every cached claim extraction and exit"},
-		{"--num-ctx <n>", "Ollama context window (default 8192)"},
-		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
-		{"--out <dir>", "directory to write drafts into"},
-		{"--sources-dir <dir>", "directory bare filenames resolve against"},
-		{"--force-new", "draft even if today's folder already has one"},
-		{"--merge", "combine all sources into one draft"},
-		{"--resume", "reuse a verified claim ledger from an earlier attempt"},
-		{"--review <draft.md>", "enhance an existing draft with surgical edits"},
-		{"--frontmatter <file>", "regenerate frontmatter and the final article"},
-		{"--combine <file>", "alias for --frontmatter"},
-		{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
-		{"--print", "run without the TUI; print draft paths to stdout"},
-		{"--json", "run without the TUI; one JSON object per job on stdout"},
-		{"--dry-run", "report what a run would do, without calling a model"},
-		{"--doctor", "check that this machine can run draft, and exit"},
-		{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
-		{"--version", "print version and exit"},
-		{"-h, --help", "show this help"},
-	} {
+	for _, f := range flagHelp {
 		fmt.Fprintf(w, "  %s%s%s\n", flag(f[0]), strings.Repeat(" ", max(1, 23-len(f[0]))), dim(f[1]))
 	}
 	fmt.Fprintln(w)
