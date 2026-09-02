@@ -6,6 +6,7 @@ package prompt
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/sebastienrousseau/draft/rules"
 )
@@ -100,5 +101,45 @@ func TestReviewPrompt(t *testing.T) {
 	// short inputs pass through unclipped (the other clip branch).
 	if !strings.Contains(Review("short research", "d", "l"), "short research") {
 		t.Error("short research should not be clipped")
+	}
+}
+
+// A half rune normalises to U+FFFD, and claims.Verify rejects any quote that
+// contains one — so a carelessly clipped prompt silently costs verified claims.
+func TestPromptsStayValidUTF8WhenClipped(t *testing.T) {
+	// 3-byte runes, so cuts at 4000 and 6000 bytes land mid-rune for some
+	// prefix lengths. Sweep the offsets rather than trusting one alignment.
+	for pad := 0; pad < 3; pad++ {
+		body := strings.Repeat("x", pad) + strings.Repeat("字", 4000)
+
+		if out := ContinueWriting(body); !utf8.ValidString(out) {
+			t.Errorf("ContinueWriting(pad=%d) produced invalid UTF-8", pad)
+		}
+		if out := Review(body, "draft", "ledger"); !utf8.ValidString(out) {
+			t.Errorf("Review(research, pad=%d) produced invalid UTF-8", pad)
+		}
+		if out := Review("research", body, "ledger"); !utf8.ValidString(out) {
+			t.Errorf("Review(draft, pad=%d) produced invalid UTF-8", pad)
+		}
+	}
+}
+
+// Cached extractions are addressed partly by this value, so it must not vary
+// between calls — the per-call nonce in the untrusted block would do exactly
+// that if it were part of the hash.
+func TestClaimVersionIsStableAndPromptSpecific(t *testing.T) {
+	first := ClaimVersion()
+	if first == "" {
+		t.Fatal("ClaimVersion() is empty")
+	}
+	for i := 0; i < 5; i++ {
+		if got := ClaimVersion(); got != first {
+			t.Fatalf("ClaimVersion() varies between calls: %q then %q", first, got)
+		}
+	}
+	// The source text is not part of the version: two different papers must
+	// share a prompt version, or the cache key would double-count the body.
+	if !strings.Contains(Claim("body one"), "body one") || !strings.Contains(Claim("body two"), "body two") {
+		t.Fatal("Claim() no longer embeds its source")
 	}
 }

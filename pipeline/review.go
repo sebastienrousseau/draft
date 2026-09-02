@@ -110,8 +110,8 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	// sources were supplied today. Failing on a violation the edit did not
 	// introduce makes an existing article permanently unreviewable for a reason
 	// the review had nothing to do with.
-	before := reviewViolations(draftBody, records)
-	after := reviewViolations(enhanced, records)
+	before := reviewViolations(draftBody, records, r.validateOptions())
+	after := reviewViolations(enhanced, records, r.validateOptions())
 	if introduced := newViolations(before, after); len(introduced) > 0 {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, enhanced, fmt.Errorf("enhanced draft broke the rules:\n- %s", strings.Join(introduced, "\n- ")))
@@ -121,7 +121,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	for _, e := range before {
 		r.warn("pre-existing: " + e)
 	}
-	_, warnings := validate.Faithfulness(enhanced, records)
+	_, warnings := validate.FaithfulnessWithOptions(enhanced, records, r.validateOptions())
 	for _, w := range warnings {
 		r.warn("review: " + w)
 	}
@@ -134,12 +134,16 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	r.log(fmt.Sprintf("applied %d surgical edit(s)", len(edits)))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{
-		OutputPath: job.ReviewPath,
-		Words:      validate.WordCount(enhanced),
-		Mode:       "review",
-		Engine:     r.writerName(),
-		Duration:   time.Since(r.started),
-		Timings:    append([]PhaseTiming(nil), r.timings...),
+		OutputPath:    job.ReviewPath,
+		Words:         validate.WordCount(enhanced),
+		Mode:          "review",
+		Engine:        r.writerName(),
+		Model:         r.writerModel(),
+		PromptVersion: prompt.ClaimVersion(),
+		Sources:       append([]SourceDigest(nil), r.sourceDigests...),
+		LedgerSHA256:  r.ledgerDigest,
+		Duration:      time.Since(r.started),
+		Timings:       append([]PhaseTiming(nil), r.timings...),
 	})
 	return nil
 }
@@ -170,9 +174,9 @@ func saveEnhanced(path, originalFM, body string) error {
 
 // reviewViolations is every hard violation in an article: the house rules plus
 // the grounding checks, in one list so two articles can be compared.
-func reviewViolations(article string, records []claims.Record) []string {
+func reviewViolations(article string, records []claims.Record, opts validate.Options) []string {
 	errs := validate.Errors(article)
-	factErrs, _ := validate.Faithfulness(article, records)
+	factErrs, _ := validate.FaithfulnessWithOptions(article, records, opts)
 	return append(errs, factErrs...)
 }
 

@@ -6,6 +6,8 @@ package validate
 import (
 	"strings"
 	"testing"
+
+	"github.com/sebastienrousseau/draft/claims"
 )
 
 func TestEndsSentence(t *testing.T) {
@@ -105,5 +107,113 @@ func TestErrorsEachMissingElement(t *testing.T) {
 		if !hasSubstr(Errors(in), want) {
 			t.Errorf("expected error %q for its input", want)
 		}
+	}
+}
+
+// enforceStyle refuses to rewrite a quotation, so failing the draft for a
+// banned word inside one would be a rule the repair pass can never satisfy —
+// an unfixable rewrite loop.
+func TestErrorsIgnoresBannedWordsInsideQuotations(t *testing.T) {
+	base := "# Title\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\n" +
+		strings.Repeat("word ", 600) + "."
+	quoted := base + "\n\nThe paper states: \"we leverage it\".\n"
+	for _, e := range Errors(quoted) {
+		if strings.Contains(e, "banned words") {
+			t.Errorf("Errors() flagged a banned word inside a quotation: %q", e)
+		}
+	}
+
+	// The same word in the writer's own prose must still fail.
+	unquoted := base + "\n\nWe leverage it.\n"
+	var found bool
+	for _, e := range Errors(unquoted) {
+		if strings.Contains(e, "banned words") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Errors() missed a banned word in unquoted prose: %v", Errors(unquoted))
+	}
+}
+
+// A number in the article that appears in no claim is the clearest sign of
+// invention. Warning about it and saving anyway is hard to defend for a tool
+// whose promise is that every sentence is grounded.
+func TestStrictNumbersPromotesInventionToAnError(t *testing.T) {
+	recs := []claims.Record{{Claim: "throughput reached 12 pages/s", SourceQuote: "throughput reached 12 pages/s"}}
+	article := "The model improved by 34%, reaching 12 pages/s."
+
+	errs, warnings := Faithfulness(article, recs)
+	if hasNumberComplaint(errs) {
+		t.Error("default policy should not block on an ungrounded number")
+	}
+	if !hasNumberComplaint(warnings) {
+		t.Errorf("default policy should warn, got %v", warnings)
+	}
+
+	errs, warnings = FaithfulnessWithOptions(article, recs, Options{StrictNumbers: true})
+	if !hasNumberComplaint(errs) {
+		t.Errorf("strict policy should block, got errs %v", errs)
+	}
+	if hasNumberComplaint(warnings) {
+		t.Error("strict policy should not also warn")
+	}
+}
+
+// The two dominant false positives must not fail an honest draft.
+func TestStrictNumbersIgnoresStructureAndYears(t *testing.T) {
+	recs := []claims.Record{{Claim: "a claim", SourceQuote: "a claim"}}
+	for _, tc := range []struct{ name, article string }{
+		{"ordered list", "1. first item\n2. second item\n3. third item\n"},
+		{"publication year", "The approach was described in 2019 and refined later.\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			errs, _ := FaithfulnessWithOptions(tc.article, recs, Options{StrictNumbers: true})
+			if hasNumberComplaint(errs) {
+				t.Errorf("strict policy blocked on %s: %v", tc.name, errs)
+			}
+		})
+	}
+	// Both are still reported when the result is only advisory, so nothing is
+	// hidden from a reader of the warnings.
+	_, warnings := Faithfulness("The approach was described in 2019.", recs)
+	if !hasNumberComplaint(warnings) {
+		t.Error("advisory mode should still report a year")
+	}
+}
+
+func hasNumberComplaint(msgs []string) bool {
+	for _, m := range msgs {
+		if strings.Contains(m, "numbers not found in any claim") {
+			return true
+		}
+	}
+	return false
+}
+
+// A banned phrase inside a quotation is the source's wording. It must be
+// exonerated — and a second occurrence outside one must still be caught.
+func TestBannedPhrasesAreFilteredByPosition(t *testing.T) {
+	base := "# Title\n\n<aside class=\"post-lead\"></aside>\n\nExecutive Summary\n\n## S\n\n" +
+		strings.Repeat("word ", 600) + "."
+
+	quotedOnly := base + "\n\nThe paper says \"furthermore the result holds\".\n"
+	for _, e := range Errors(quotedOnly) {
+		if strings.Contains(e, "banned phrases") {
+			t.Errorf("flagged a banned phrase that only occurs inside a quotation: %q", e)
+		}
+	}
+
+	// Same phrase quoted first, then used by the writer: the later, unquoted
+	// occurrence must still fail.
+	alsoUnquoted := quotedOnly + "\n\nFurthermore, the effect is clear.\n"
+	var found bool
+	for _, e := range Errors(alsoUnquoted) {
+		if strings.Contains(e, "banned phrases") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missed an unquoted banned phrase that also appears quoted: %v", Errors(alsoUnquoted))
 	}
 }

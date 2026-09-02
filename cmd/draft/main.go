@@ -28,6 +28,7 @@ import (
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
+	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/tui"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
@@ -39,7 +40,11 @@ var version = "dev"
 
 var (
 	readBuildInfo = debug.ReadBuildInfo
-	runTeaProgram = func(m tea.Model, opts ...tea.ProgramOption) (tea.Model, error) {
+	// clearExtractCache is a variable so the failure path is testable on every
+	// platform: reading a plain file as a directory errors on Unix and
+	// succeeds on Windows, so a test cannot portably provoke it for real.
+	clearExtractCache = extractcache.Clear
+	runTeaProgram     = func(m tea.Model, opts ...tea.ProgramOption) (tea.Model, error) {
 		return tea.NewProgram(m, opts...).Run()
 	}
 )
@@ -72,6 +77,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	flags := config.Flags{}
 	var showVersion, headless bool
 	var jsonOut, dryRun bool
+	var clearCache, doctor bool
 	var reviewPath, frontmatterPath, completionShell string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
@@ -84,11 +90,16 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
 	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
 	fs.IntVar(&flags.PredictLength, "num-predict", 0, "Ollama max output tokens (default 6000)")
+	fs.StringVar(&flags.DraftsDir, "out", "", "directory to write drafts into (default ~/Drop/Drafts)")
+	fs.StringVar(&flags.SourcesDir, "sources-dir", "", "directory bare filenames resolve against (default ~/Drop/Drafts/Sources)")
 	fs.BoolVar(&flags.ForceNew, "force-new", false, "draft even if today's folder already has one")
 	fs.BoolVar(&flags.Merge, "merge", false, "combine all sources into one draft instead of queueing")
 	fs.BoolVar(&flags.Resume, "resume", false, "reuse a verified claim ledger from an earlier attempt")
 	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
 	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
+	fs.BoolVar(&flags.StrictNumbers, "strict-numbers", false, "fail a draft that contains a number found in no verified claim")
+	fs.BoolVar(&flags.NoCache, "no-cache", false, "ignore cached claim extractions and re-extract everything")
+	fs.BoolVar(&clearCache, "clear-cache", false, "delete every cached claim extraction and exit")
 	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
 	fs.StringVar(&frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
 	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
@@ -96,6 +107,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
+	fs.BoolVar(&doctor, "doctor", false, "check that this machine can run draft, and exit")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err := fs.Parse(argv); err != nil {
@@ -135,6 +147,16 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 
 	cfg := config.Load(flags)
+	if clearCache {
+		// Read the configured location before --no-cache can blank it, so
+		// `--clear-cache --no-cache` still clears the right directory.
+		if err := clearExtractCache(config.Load(config.Flags{}).CacheDir); err != nil {
+			fmt.Fprintln(stderr, "draft:", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "cleared the claim-extraction cache")
+		return 0
+	}
 	// Resolution problems that were recovered from — an unreadable home
 	// directory, an out-of-range tunable, a non-loopback Ollama host — are
 	// reported rather than applied in silence.
@@ -146,6 +168,10 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	if err := engine.Validate(cfg); err != nil {
 		fmt.Fprintln(stderr, "draft:", err)
 		return 2
+	}
+
+	if doctor {
+		return runDoctor(cfg, defaultProbes(), stdout)
 	}
 
 	args := fs.Args()
@@ -264,6 +290,42 @@ func resolveSource(cfg config.Config, arg string) (string, error) {
 	return "", fmt.Errorf("research file not found: %s", arg)
 }
 
+// flagHelp is the flag reference: the single table the help text renders and
+// the shell completions are derived from.
+//
+// completionFlags used to be a second hand-maintained list whose comment
+// claimed it was derived from this one. It was not — it had silently fallen
+// four flags behind, which is exactly the drift that comment promised could
+// not happen. Deriving it removes the possibility rather than the claim.
+var flagHelp = [][2]string{
+	{"--engine <mode>", "auto (default), ollama, or a provider name"},
+	{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
+	{"--write-engine <m>", "backend for writing (default: --engine)"},
+	{"--model <name>", "session-provider model override (e.g. opus)"},
+	{"--experimental", "let auto mode use experimental providers"},
+	{"--strict-numbers", "fail on a number found in no verified claim"},
+	{"--no-cache", "re-extract instead of reusing cached claims"},
+	{"--clear-cache", "delete every cached claim extraction and exit"},
+	{"--num-ctx <n>", "Ollama context window (default 8192)"},
+	{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
+	{"--out <dir>", "directory to write drafts into"},
+	{"--sources-dir <dir>", "directory bare filenames resolve against"},
+	{"--force-new", "draft even if today's folder already has one"},
+	{"--merge", "combine all sources into one draft"},
+	{"--resume", "reuse a verified claim ledger from an earlier attempt"},
+	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
+	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
+	{"--combine <file>", "alias for --frontmatter"},
+	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
+	{"--print", "run without the TUI; print draft paths to stdout"},
+	{"--json", "run without the TUI; one JSON object per job on stdout"},
+	{"--dry-run", "report what a run would do, without calling a model"},
+	{"--doctor", "check that this machine can run draft, and exit"},
+	{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
+	{"--version", "print version and exit"},
+	{"-h, --help", "show this help"},
+}
+
 // usage prints the branded help: the logo and wordmark, then coral section
 // headings over the reference text. Colour is dropped automatically when the
 // output is not a terminal, and DRAFT_SHOW_LOGO=0 suppresses the logo.
@@ -314,37 +376,18 @@ func usage(w io.Writer) {
 `, strings.Join(engine.ProviderNames(), ", "))
 
 	fmt.Fprintf(w, "%s\n", head("FLAGS"))
-	for _, f := range [][2]string{
-		{"--engine <mode>", "auto (default), ollama, or a provider name"},
-		{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
-		{"--write-engine <m>", "backend for writing (default: --engine)"},
-		{"--model <name>", "session-provider model override (e.g. opus)"},
-		{"--experimental", "let auto mode use experimental providers"},
-		{"--num-ctx <n>", "Ollama context window (default 8192)"},
-		{"--num-predict <n>", "Ollama max output tokens (default 6000)"},
-		{"--force-new", "draft even if today's folder already has one"},
-		{"--merge", "combine all sources into one draft"},
-		{"--resume", "reuse a verified claim ledger from an earlier attempt"},
-		{"--review <draft.md>", "enhance an existing draft with surgical edits"},
-		{"--frontmatter <file>", "regenerate frontmatter and the final article"},
-		{"--combine <file>", "alias for --frontmatter"},
-		{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
-		{"--print", "run without the TUI; print draft paths to stdout"},
-		{"--json", "run without the TUI; one JSON object per job on stdout"},
-		{"--dry-run", "report what a run would do, without calling a model"},
-		{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
-		{"--version", "print version and exit"},
-		{"-h, --help", "show this help"},
-	} {
+	for _, f := range flagHelp {
 		fmt.Fprintf(w, "  %s%s%s\n", flag(f[0]), strings.Repeat(" ", max(1, 23-len(f[0]))), dim(f[1]))
 	}
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "%s\n", head("ENVIRONMENT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n\n",
+	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n\n",
 		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
 		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
 		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
+		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR, DRAFT_STRICT_NUMBERS,"),
+		dim("DRAFT_CACHE_DIR, DRAFT_NO_CACHE,"),
 		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
 
 	fmt.Fprintf(w, "%s\n", head("OUTPUT"))

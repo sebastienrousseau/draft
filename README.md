@@ -137,6 +137,30 @@ PDF, Markdown and text work everywhere. DOCX is macOS only.
 
 ## Quick start
 
+Check the machine before committing to a run:
+
+```console
+$ draft --doctor
+SOURCE TOOLING
+  ok  pdftotext              /opt/homebrew/bin/pdftotext
+  ok  textutil               /usr/bin/textutil
+
+BACKENDS
+  ok  claude                 session provider
+  ok  ollama                 responding at http://127.0.0.1:11434
+
+PATHS
+  ok  drafts (--out)         ~/Drop/Drafts
+  ok  sources                ~/Drop/Drafts/Sources
+  ok  cache                  ~/Library/Caches/draft/extract
+
+  Ready. Run `draft --dry-run <source>` to check a specific paper.
+```
+
+`--doctor` reports the machine; `--dry-run` reports one paper. Between them
+nothing about a run should be a surprise.
+
+
 ```sh
 # One paper. Online it picks your agent CLI; offline it uses Ollama.
 # Bare filenames resolve against ~/Drop/Drafts/Sources.
@@ -268,28 +292,34 @@ takes the first installed provider, skipping experimental rows unless
 draft [flags] <source> [more-sources...]
 ```
 
-| Flag                 | Description                                              |
-| -------------------- | -------------------------------------------------------- |
-| `--engine <mode>`    | `auto` (default), `ollama`, or a provider name           |
-| `--model <name>`     | Session-provider model override (e.g. `opus`)            |
-| `--experimental`     | Let auto mode use experimental providers                 |
-| `--num-ctx <n>`      | Ollama context window (default `8192`)                   |
-| `--num-predict <n>`  | Ollama max output tokens (default `6000`)                |
-| `--force-new`        | Draft even if today's folder already has one             |
-| `--merge`            | Combine all sources into one draft                       |
-| `--resume`           | Reuse a verified claim ledger from an earlier attempt    |
-| `--dry-run`          | Report what a run would do, without calling a model      |
-| `--extract-engine <m>` | Backend for claim extraction (default: `--engine`)     |
-| `--write-engine <m>` | Backend for writing the article (default: `--engine`)    |
-| `--review <draft>`   | Enhance an existing draft with surgical edits            |
-| `--frontmatter <f>`  | Regenerate frontmatter + final document from an article  |
-| `--combine <f>`      | Alias for `--frontmatter`                                |
-| `--keep-artifacts`   | Keep the claim ledger beside a successful draft          |
-| `--print`            | Run without the TUI; print draft paths to stdout         |
-| `--json`             | Run without the TUI; one JSON object per job on stdout   |
-| `--completion <sh>`  | Print a completion script: `bash`, `zsh`, or `fish`      |
-| `--version`          | Print version and exit                                   |
-| `-h, --help`         | Show help                                                |
+| Flag                   | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| `--engine <mode>`      | `auto` (default), `ollama`, or a provider name            |
+| `--model <name>`       | Session-provider model override (e.g. `opus`)             |
+| `--experimental`       | Let auto mode use experimental providers                  |
+| `--strict-numbers`     | Fail a draft carrying a number found in no verified claim |
+| `--out <dir>`          | Directory to write drafts into (default `~/Drop/Drafts`)  |
+| `--sources-dir <dir>`  | Directory bare filenames resolve against                  |
+| `--no-cache`           | Re-extract instead of reusing cached claims               |
+| `--clear-cache`        | Delete every cached claim extraction and exit             |
+| `--doctor`             | Check that this machine can run draft, and exit           |
+| `--num-ctx <n>`        | Ollama context window (default `8192`)                    |
+| `--num-predict <n>`    | Ollama max output tokens (default `6000`)                 |
+| `--force-new`          | Draft even if today's folder already has one              |
+| `--merge`              | Combine all sources into one draft                        |
+| `--resume`             | Reuse a verified claim ledger from an earlier attempt     |
+| `--dry-run`            | Report what a run would do, without calling a model       |
+| `--extract-engine <m>` | Backend for claim extraction (default: `--engine`)        |
+| `--write-engine <m>`   | Backend for writing the article (default: `--engine`)     |
+| `--review <draft>`     | Enhance an existing draft with surgical edits             |
+| `--frontmatter <f>`    | Regenerate frontmatter + final document from an article   |
+| `--combine <f>`        | Alias for `--frontmatter`                                 |
+| `--keep-artifacts`     | Keep the claim ledger beside a successful draft           |
+| `--print`              | Run without the TUI; print draft paths to stdout          |
+| `--json`               | Run without the TUI; one JSON object per job on stdout    |
+| `--completion <sh>`    | Print a completion script: `bash`, `zsh`, or `fish`       |
+| `--version`            | Print version and exit                                    |
+| `-h, --help`           | Show help                                                 |
 
 `--claude-model` is a deprecated alias for `--model`. It still parses, is
 absent from `draft --help`, and may be removed in a future release.
@@ -355,6 +385,28 @@ Everything after that is model latency. On a 12-section paper against a local
 Ollama model, claim extraction runs to roughly ten minutes; the Go code
 accounts for well under a second of it. That ratio is the whole design.
 
+### Extraction is cached by content
+
+Extraction is where the wall clock goes, and the same section extracted by the
+same engine and model produces the same result. Each one is therefore stored
+under a hash of the section text, the extraction prompt, the engine and the
+model — so redrafting a paper, renaming it, or a `--merge` that overlaps an
+earlier run all skip it.
+
+Measured on a one-section source against `claude`, the second run of the same
+paper:
+
+| Run    | Extract phase | Ledger digest           |
+| ------ | ------------- | ----------------------- |
+| First  | **15,108 ms** | `b8d8e8e1…`             |
+| Second | **1 ms**      | `b8d8e8e1…` (identical) |
+
+A cached entry is never trusted on its own account. It is re-parsed and
+re-verified against the freshly read source exactly as a fresh extraction is,
+so a stale entry can only ever produce *fewer* verified claims, never an
+ungrounded one — the same property that makes `--resume` safe. Entries expire
+after 30 days. `--no-cache` skips it; `--clear-cache` empties it.
+
 ### How that compares
 
 Document-understanding toolkits do far more than pull out text — layout
@@ -409,27 +461,32 @@ Flags beat environment variables. Environment variables beat defaults.
 <details>
 <summary><strong>Environment variables</strong></summary>
 
-| Variable                    | Default                  | Purpose |
-| --------------------------- | ------------------------ | ------- |
-| `DRAFT_ENGINE`              | `auto`                   | Backend selection (auto, ollama, provider) |
-| `DRAFT_EXTRACT_ENGINE`      | —                        | Backend for claim extraction (default: `DRAFT_ENGINE`) |
-| `DRAFT_WRITE_ENGINE`        | —                        | Backend for writing the article |
-| `DRAFT_EDIT_ENGINE`         | —                        | Backend for `--review` edits |
-| `DRAFT_MODEL_SESSION`       | —                        | Session-provider model override |
-| `DRAFT_MODEL`               | —                        | Sets all Ollama models at once |
-| `DRAFT_WRITE_MODEL`         | `gemma3:4b`              | Ollama writing model |
-| `DRAFT_EXTRACT_MODEL`       | `gemma3:4b`              | Ollama claim-extraction model |
-| `DRAFT_EDIT_MODEL`          | `gemma3:4b`              | Ollama surgical-review model |
-| `DRAFT_NUM_CTX`             | `8192`                   | Ollama context window |
-| `DRAFT_NUM_PREDICT`         | `6000`                   | Ollama output-token ceiling (auto-scaled per draft) |
-| `DRAFT_WRITE_RETRIES`       | `2`                      | Rewrite attempts on rule violations |
-| `DRAFT_MAX_CONTINUE`        | `3`                      | Max continuations on a length-limited stop |
-| `DRAFT_EXTRACT_CONCURRENCY` | `4`                      | Parallel extraction workers (session engines) |
-| `DRAFT_CALL_TIMEOUT`        | `1800`                   | Seconds bounding a single generation call; `0` disables |
-| `DRAFT_EXPERIMENTAL`        | —                        | `1` to let auto use experimental providers |
-| `DRAFT_SHOW_LOGO`           | —                        | `0` to suppress the logo in the CLI and dashboard |
-| `DRAFT_SITE_*`              | see below                | Frontmatter publisher identity |
-| `OLLAMA_HOST`               | `http://127.0.0.1:11434` | Ollama server address |
+| Variable                    | Default                         | Purpose                                                 |
+| --------------------------- | ------------------------------- | ------------------------------------------------------- |
+| `DRAFT_ENGINE`              | `auto`                          | Backend selection (auto, ollama, provider)              |
+| `DRAFT_EXTRACT_ENGINE`      | —                               | Backend for claim extraction (default: `DRAFT_ENGINE`)  |
+| `DRAFT_WRITE_ENGINE`        | —                               | Backend for writing the article                         |
+| `DRAFT_EDIT_ENGINE`         | —                               | Backend for `--review` edits                            |
+| `DRAFT_MODEL_SESSION`       | —                               | Session-provider model override                         |
+| `DRAFT_MODEL`               | —                               | Sets all Ollama models at once                          |
+| `DRAFT_WRITE_MODEL`         | `gemma3:4b`                     | Ollama writing model                                    |
+| `DRAFT_EXTRACT_MODEL`       | `gemma3:4b`                     | Ollama claim-extraction model                           |
+| `DRAFT_EDIT_MODEL`          | `gemma3:4b`                     | Ollama surgical-review model                            |
+| `DRAFT_NUM_CTX`             | `8192`                          | Ollama context window                                   |
+| `DRAFT_NUM_PREDICT`         | `6000`                          | Ollama output-token ceiling (auto-scaled per draft)     |
+| `DRAFT_WRITE_RETRIES`       | `2`                             | Rewrite attempts on rule violations                     |
+| `DRAFT_MAX_CONTINUE`        | `3`                             | Max continuations on a length-limited stop              |
+| `DRAFT_EXTRACT_CONCURRENCY` | `4`                             | Parallel extraction workers (session engines)           |
+| `DRAFT_CALL_TIMEOUT`        | `1800`                          | Seconds bounding a single generation call; `0` disables |
+| `DRAFT_EXPERIMENTAL`        | —                               | `1` to let auto use experimental providers              |
+| `DRAFT_STRICT_NUMBERS`      | —                               | `1` to fail a draft carrying an ungrounded number       |
+| `DRAFT_DRAFTS_DIR`          | `~/Drop/Drafts`                 | Where finished drafts are written                       |
+| `DRAFT_SOURCES_DIR`         | `~/Drop/Drafts/Sources`         | Where bare filenames resolve from                       |
+| `DRAFT_CACHE_DIR`           | `$XDG_CACHE_HOME/draft/extract` | Cached claim extractions                                |
+| `DRAFT_NO_CACHE`            | —                               | `1` to ignore the extraction cache                      |
+| `DRAFT_SHOW_LOGO`           | —                               | `0` to suppress the logo in the CLI and dashboard       |
+| `DRAFT_SITE_*`              | see below                       | Frontmatter publisher identity                          |
+| `OLLAMA_HOST`               | `http://127.0.0.1:11434`        | Ollama server address                                   |
 
 Every numeric variable is clamped at both ends. A value outside its range is
 not silently ignored: the default is used and a warning is printed to stderr,
@@ -902,21 +959,37 @@ parser and mutation-tests the grounding gate each day.
 
 - **No tokens on disk.** Session backends shell out to an already
   authenticated CLI. `draft` never reads, stores or logs an API key.
-- **Prompts go over stdin where the CLI supports it.** A prompt passed as a
+- **Prompts stay out of `argv` where the CLI allows it.** A prompt passed as a
   command-line argument is visible in a process listing for the duration of the
-  call, along with the source excerpts it quotes. `claude`, `codex` and
-  `cursor-agent` are driven over stdin and are not affected. The rest were
-  confirmed not to read stdin — their prompt flags require a value — so they
-  still use an argument. On a shared host, prefer one of those three, or Ollama.
-- **Prompt-injection aware.** Template and source text are quoted as untrusted
-  evidence, and the writing prompt tells the model to ignore any instructions
-  found inside them.
-- **Know your agent's trust surface.** Session providers run in
-  non-interactive modes, some of which auto-approve tool use — for example
-  `copilot --allow-all-tools`, `cursor-agent --force`, `amp -x`. `draft` asks
-  only for text, but you are still handing a PDF to an agent that *can* act.
-  Treat sources as untrusted input, and prefer Ollama for material you do not
-  trust.
+  call, along with the source excerpts it quotes. `claude`, `codex`,
+  `cursor-agent` and `goose` are driven over stdin; `grok` receives the prompt
+  through a `0600` file inside the call's private directory. `copilot` ignores
+  stdin and offers no prompt-file flag, and `agy` offers only an NDJSON turn
+  protocol, so those two still use an argument. On a shared host, prefer any of
+  the others, or Ollama.
+- **No tools are granted.** `draft` only ever asks a provider for text, so no
+  provider is invoked with a flag that lets the agent act on your machine.
+  `copilot --allow-all-tools` and `cursor-agent --force` (its own help calls
+  that an alias for `--yolo`, "Run Everything") were removed, and a test pins
+  the invocation table against a list of known tool-granting flags so one
+  cannot be reintroduced.
+- **Providers run in an empty directory.** Each call gets a fresh temporary
+  working directory, removed when it returns, so a source document cannot reach
+  an agent that has loaded the `CLAUDE.md`, `AGENTS.md`, `.mcp.json` or project
+  settings sitting in whatever directory you launched `draft` from. `DRAFT_*`
+  is stripped from the child environment.
+- **Untrusted text is fenced.** Source documents, the claim ledger and the
+  draft under review are wrapped in a nonce-delimited block carrying an
+  explicit instruction that the contents are data, never directions. The nonce
+  is fresh per call, so a document cannot close its own block and continue as
+  though it were the operator. The ledger is fenced too: a `SOURCE_QUOTE` is
+  verbatim source by construction, so whoever controls the PDF controls what
+  reaches the writing prompt.
+
+  This is defence in depth, not a guarantee — no prompt-level measure wins an
+  adversarial text game outright. The empty working directory and the absence
+  of tool grants are what bound the damage. Still prefer Ollama for material
+  you genuinely do not trust.
 - **Grounding as a safety control.** Ungrounded numbers and silent metric
   conversions are flagged. Unverifiable claims never reach the writer.
 - **Cancellation means cancellation.** Quitting the dashboard, or Ctrl+C in

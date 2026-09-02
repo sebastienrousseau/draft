@@ -91,7 +91,10 @@ type Config struct {
 	Resume             bool // reuse a verified claim ledger from an earlier attempt
 	KeepArtifacts      bool // keep prompt/ledger files beside a successful draft
 	Experimental       bool // let auto-selection consider experimental providers
-	OllamaHost         string
+	// StrictNumbers blocks a save when the article carries a number that
+	// appears in no verified claim, instead of only warning.
+	StrictNumbers bool
+	OllamaHost    string
 
 	// CallTimeout bounds a single generation call (0 = no timeout).
 	CallTimeout time.Duration
@@ -99,6 +102,9 @@ type Config struct {
 	HomeDir    string
 	SourcesDir string
 	DraftsDir  string
+	// CacheDir holds cached claim extractions, addressed by content. Empty
+	// disables caching entirely.
+	CacheDir string
 
 	// Warnings records configuration problems that were recovered from rather
 	// than fatal: an unreadable home directory, an out-of-range tunable, a
@@ -108,9 +114,11 @@ type Config struct {
 }
 
 var (
-	userHomeDir = os.UserHomeDir
-	getwd       = os.Getwd
-	tempDir     = os.TempDir
+	userHomeDir  = os.UserHomeDir
+	getwd        = os.Getwd
+	tempDir      = os.TempDir
+	absPath      = filepath.Abs
+	userCacheDir = os.UserCacheDir
 )
 
 // Load builds a Config from defaults, overlays environment variables, then
@@ -139,8 +147,9 @@ func Load(flags Flags) Config {
 		OllamaHost:         resolveOllamaHost(warn),
 		CallTimeout:        resolveCallTimeout(warn),
 		HomeDir:            home,
-		SourcesDir:         filepath.Join(home, "Drop", "Drafts", "Sources"),
-		DraftsDir:          filepath.Join(home, "Drop", "Drafts"),
+		SourcesDir:         resolveDir(warn, "DRAFT_SOURCES_DIR", home, filepath.Join(home, "Drop", "Drafts", "Sources")),
+		DraftsDir:          resolveDir(warn, "DRAFT_DRAFTS_DIR", home, filepath.Join(home, "Drop", "Drafts")),
+		CacheDir:           resolveDir(warn, "DRAFT_CACHE_DIR", home, defaultCacheDir(home)),
 	}
 
 	// Flags win over environment.
@@ -162,11 +171,21 @@ func Load(flags Flags) Config {
 	if flags.PredictLength > 0 {
 		c.PredictLength = flags.PredictLength
 	}
+	if d := strings.TrimSpace(flags.DraftsDir); d != "" {
+		c.DraftsDir = absDir(warn, "--out", expandHome(d, home))
+	}
+	if d := strings.TrimSpace(flags.SourcesDir); d != "" {
+		c.SourcesDir = absDir(warn, "--sources-dir", expandHome(d, home))
+	}
 	c.ForceNew = flags.ForceNew
 	c.Merge = flags.Merge
 	c.Resume = flags.Resume
 	c.KeepArtifacts = flags.KeepArtifacts
-	c.Experimental = flags.Experimental || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "1") || strings.EqualFold(os.Getenv("DRAFT_EXPERIMENTAL"), "true")
+	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
+	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
+	if flags.NoCache || envBool("DRAFT_NO_CACHE") {
+		c.CacheDir = ""
+	}
 	c.Warnings = warnings
 	return c
 }
@@ -254,11 +273,74 @@ type Flags struct {
 	Model         string
 	ContextLength int
 	PredictLength int
+	// DraftsDir and SourcesDir override where finished drafts are written and
+	// where bare filenames are resolved from. Empty means the default.
+	DraftsDir     string
+	SourcesDir    string
 	ForceNew      bool
 	Merge         bool
 	Resume        bool
 	KeepArtifacts bool
 	Experimental  bool
+	StrictNumbers bool
+	NoCache       bool
+}
+
+// defaultCacheDir is the per-user cache location, following the platform
+// convention rather than putting scratch data in the drafts tree — a cache is
+// reproducible from the sources and must never look like output.
+func defaultCacheDir(home string) string {
+	if dir, err := userCacheDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "draft", "extract")
+	}
+	return filepath.Join(home, ".cache", "draft", "extract")
+}
+
+// envBool reads a boolean environment variable in the forms users actually
+// write. It is deliberately narrow: anything else is false rather than an
+// error, because a mistyped opt-in flag should not stop a run.
+func envBool(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
+}
+
+// resolveDir reads a directory from the environment, expanding a leading ~ and
+// making the result absolute. draft used to hardcode both trees under the home
+// directory with no flag and no variable, which made it unusable from CI, from
+// a container, or as a library whose caller chooses where output goes.
+func resolveDir(warn func(string, ...any), name, home, fallback string) string {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	return absDir(warn, name, expandHome(raw, home))
+}
+
+// expandHome resolves a leading ~ against home, which a shell does not do for
+// a quoted value or for an environment variable.
+func expandHome(path, home string) string {
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+// absDir makes path absolute. A relative Drafts directory writes into whatever
+// directory the process happened to start in, which is the silent-misplacement
+// bug resolveHome exists to prevent; refuse to reintroduce it by accident.
+func absDir(warn func(string, ...any), setting, path string) string {
+	abs, err := absPath(path)
+	if err != nil {
+		warn("%s %q could not be resolved to an absolute path (%v); ignoring it", setting, path, err)
+		return path
+	}
+	return abs
 }
 
 func env(name, fallback string) string {

@@ -3,7 +3,23 @@
 
 package config
 
-import "testing"
+import (
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// withHome pins the home directory for one test, restoring the real resolver
+// afterwards so the tests stay independent of the machine they run on.
+func withHome(t *testing.T, home string) {
+	t.Helper()
+	orig := userHomeDir
+	userHomeDir = func() (string, error) { return home, nil }
+	t.Cleanup(func() { userHomeDir = orig })
+	t.Setenv("DRAFT_DRAFTS_DIR", "")
+	t.Setenv("DRAFT_SOURCES_DIR", "")
+}
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("DRAFT_ENGINE", "")
@@ -80,5 +96,126 @@ func TestSessionModelPrecedence(t *testing.T) {
 	t.Setenv("DRAFT_CLAUDE_MODEL", "opus")
 	if c := Load(Flags{}); c.Model != "sonnet" {
 		t.Errorf("DRAFT_MODEL_SESSION should win over the alias, got %q", c.Model)
+	}
+}
+
+// draft hardcoded both trees under the home directory with no flag and no
+// variable, which made it unusable from CI, from a container, or as a library
+// whose caller chooses where output goes.
+func TestDirectoriesAreConfigurable(t *testing.T) {
+	t.Run("defaults under home", func(t *testing.T) {
+		home := t.TempDir()
+		withHome(t, home)
+		c := Load(Flags{})
+		if want := filepath.Join(home, "Drop", "Drafts"); c.DraftsDir != want {
+			t.Errorf("DraftsDir = %q, want %q", c.DraftsDir, want)
+		}
+		if want := filepath.Join(home, "Drop", "Drafts", "Sources"); c.SourcesDir != want {
+			t.Errorf("SourcesDir = %q, want %q", c.SourcesDir, want)
+		}
+	})
+
+	// Absolute paths are built from t.TempDir rather than written as POSIX
+	// literals: filepath.Abs("/tmp/out") is "D:\\tmp\\out" on Windows, so a
+	// hardcoded "/tmp/out" asserts something only true on Unix.
+	t.Run("environment overrides", func(t *testing.T) {
+		home := t.TempDir()
+		withHome(t, home)
+		out, src := filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "src")
+		t.Setenv("DRAFT_DRAFTS_DIR", out)
+		t.Setenv("DRAFT_SOURCES_DIR", src)
+		c := Load(Flags{})
+		if c.DraftsDir != out {
+			t.Errorf("DraftsDir = %q, want %q", c.DraftsDir, out)
+		}
+		if c.SourcesDir != src {
+			t.Errorf("SourcesDir = %q, want %q", c.SourcesDir, src)
+		}
+	})
+
+	t.Run("flags beat the environment", func(t *testing.T) {
+		home := t.TempDir()
+		withHome(t, home)
+		out, src := filepath.Join(t.TempDir(), "out"), filepath.Join(t.TempDir(), "src")
+		t.Setenv("DRAFT_DRAFTS_DIR", filepath.Join(t.TempDir(), "env"))
+		c := Load(Flags{DraftsDir: out, SourcesDir: src})
+		if c.DraftsDir != out {
+			t.Errorf("DraftsDir = %q, want %q", c.DraftsDir, out)
+		}
+		if c.SourcesDir != src {
+			t.Errorf("SourcesDir = %q, want %q", c.SourcesDir, src)
+		}
+	})
+
+	t.Run("tilde expands", func(t *testing.T) {
+		home := t.TempDir()
+		withHome(t, home)
+		c := Load(Flags{DraftsDir: "~/elsewhere", SourcesDir: "~"})
+		if want := filepath.Join(home, "elsewhere"); c.DraftsDir != want {
+			t.Errorf("DraftsDir = %q, want %q", c.DraftsDir, want)
+		}
+		if c.SourcesDir != home {
+			t.Errorf("SourcesDir = %q, want %q", c.SourcesDir, home)
+		}
+	})
+
+	// A relative Drafts directory writes into whatever directory the process
+	// happened to start in — the silent-misplacement bug resolveHome exists to
+	// prevent.
+	t.Run("relative becomes absolute", func(t *testing.T) {
+		home := t.TempDir()
+		withHome(t, home)
+		c := Load(Flags{DraftsDir: "drafts"})
+		if !filepath.IsAbs(c.DraftsDir) {
+			t.Errorf("DraftsDir = %q, want an absolute path", c.DraftsDir)
+		}
+	})
+}
+
+// filepath.Abs fails only when the working directory cannot be read. Keep the
+// value rather than dropping it, and say so.
+func TestAbsDirReportsAnUnresolvablePath(t *testing.T) {
+	orig := absPath
+	absPath = func(string) (string, error) { return "", errors.New("no cwd") }
+	defer func() { absPath = orig }()
+
+	home := t.TempDir()
+	withHome(t, home)
+	c := Load(Flags{DraftsDir: "relative"})
+	if c.DraftsDir != "relative" {
+		t.Errorf("DraftsDir = %q, want the unresolved value kept", c.DraftsDir)
+	}
+	var warned bool
+	for _, w := range c.Warnings {
+		if strings.Contains(w, "--out") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("expected a warning naming the setting, got %v", c.Warnings)
+	}
+}
+
+func TestStrictNumbersOptIn(t *testing.T) {
+	home := t.TempDir()
+	withHome(t, home)
+	if Load(Flags{}).StrictNumbers {
+		t.Error("StrictNumbers should be off by default")
+	}
+	if !Load(Flags{StrictNumbers: true}).StrictNumbers {
+		t.Error("the flag should enable it")
+	}
+	for _, v := range []string{"1", "true", "TRUE", "yes", "on"} {
+		t.Setenv("DRAFT_STRICT_NUMBERS", v)
+		if !Load(Flags{}).StrictNumbers {
+			t.Errorf("DRAFT_STRICT_NUMBERS=%q should enable it", v)
+		}
+	}
+	// A mistyped opt-in must not stop a run.
+	for _, v := range []string{"", "0", "off", "nope"} {
+		t.Setenv("DRAFT_STRICT_NUMBERS", v)
+		if Load(Flags{}).StrictNumbers {
+			t.Errorf("DRAFT_STRICT_NUMBERS=%q should not enable it", v)
+		}
 	}
 }

@@ -12,6 +12,13 @@ on:
   # push does not duplicate the pull_request run.
   pull_request:
     branches: ["**"]
+  # main went three weeks without a verified run once, because ci.yml only
+  # fires on a push to it and a quiet period looks identical to a green one.
+  # A weekly run means an external break — a new Go release, a new advisory —
+  # surfaces on its own rather than on the next contributor's PR.
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -71,11 +78,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "stable"
+          # Pinned deliberately, and pinned TOGETHER with the linter below.
+          #
+          # golangci-lint embeds go/types from the toolchain it was built
+          # with, so a pinned linter against a floating `stable` breaks on
+          # every Go release: v2.12.2 met Go 1.27 and panicked inside
+          # go/types, turning the job red for a reason unrelated to this
+          # code. `golangci-lint run` was clean locally throughout, which is
+          # the worst kind of red — it trains everyone to ignore the check.
+          #
+          # Bump these two as a pair, never one alone. The linter always lags
+          # a new Go release, so this version trails `stable` by design; the
+          # build, test and vuln jobs above still run on `stable`.
+          go-version: "1.26"
           cache: true
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.12.2
+          version: v2.13.2
           # Skip the remote JSON-schema fetch (flaky CDN); config is verified locally.
           verify: false
 

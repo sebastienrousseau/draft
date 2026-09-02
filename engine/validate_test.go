@@ -51,10 +51,11 @@ func TestChainFallsBackOnUnknownEngine(t *testing.T) {
 // LookupProvider scans Providers rather than an index frozen at init, so a
 // caller that extends the registry is not silently ignored.
 func TestLookupProviderSeesRegistryMutation(t *testing.T) {
-	original := Providers
-	t.Cleanup(func() { Providers = original })
+	t.Cleanup(ResetProviders)
 
-	Providers = append(append([]Provider{}, original...), Provider{Name: "housecat", Bin: "housecat"})
+	if err := Register(Provider{Name: "housecat", Bin: "housecat"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, ok := LookupProvider("housecat"); !ok {
 		t.Error("LookupProvider did not see a provider appended to the registry")
 	}

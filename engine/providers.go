@@ -4,11 +4,13 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -32,6 +34,12 @@ type Provider struct {
 	// PromptViaStdin sends the prompt on stdin instead of as a positional
 	// argument. When false, StdinPlaceholder (if set) is still appended.
 	PromptViaStdin bool
+	// PromptFileFlag, when non-empty, writes the prompt to a private file
+	// inside the call's sandbox directory and passes its path with this flag
+	// (e.g. "--prompt-file"). It is the second-best delivery after stdin, and
+	// far better than argv: a positional prompt carries the verbatim source
+	// text into the process listing, where any local user can read it.
+	PromptFileFlag string
 	// StdinPlaceholder is appended as a positional argument when the prompt is
 	// delivered on stdin and the CLI needs a marker (e.g. "-").
 	StdinPlaceholder string
@@ -45,8 +53,8 @@ type Provider struct {
 	StreamJSON bool
 }
 
-// Providers is the registry of supported session CLIs, in auto-selection
-// preference order. The first non-experimental one found on PATH becomes the
+// defaultProviders is the built-in registry of supported session CLIs, in
+// auto-selection preference order. The first non-experimental one found on PATH becomes the
 // default online backend. Invocations were derived from each CLI's own --help.
 //
 // claude, copilot, codex, grok, agy, and cursor-agent are verified end to end
@@ -55,36 +63,102 @@ type Provider struct {
 // been verified for a full article, so auto-selection skips them unless
 // --experimental is set.
 //
-// PromptViaStdin is set only where stdin delivery was confirmed by running the
-// CLI, because a prompt passed as an argument is visible in a process listing
-// along with the source text it quotes. Confirmed reading stdin: claude, codex
-// ("Reading prompt from stdin..."), cursor-agent (answered a stdin prompt).
-// Confirmed NOT to: copilot (ignored a stdin prompt entirely), agy and grok and
-// goose (their prompt flags require a value, so there is nothing to read stdin
-// into). Unverifiable when checked: amp (out of credits), qwen (no auth
-// configured), crush (no provider configured) — their documentation suggests
-// stdin support, but guessing here would break a working provider, so they keep
-// argument delivery until someone can run them.
-var Providers = []Provider{
-	{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
-	{Name: "copilot", Bin: "copilot", Args: []string{"-p", "--allow-all-tools"}},
-	{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
-	{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
-	{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text", "--force"}, ModelFlag: "--model", PromptViaStdin: true},
-	{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
-	{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
-	{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-t"}, Experimental: true},
-	{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}},
-	{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+// The prompt is kept out of argv wherever the CLI allows it, because a
+// positional prompt is visible in a process listing — along with the verbatim
+// source text it quotes — to any other user on the machine.
+//
+// Confirmed reading stdin: claude, codex ("Reading prompt from stdin..."),
+// cursor-agent (answered a stdin prompt), and goose, whose `run -i <FILE>`
+// documents "Use - for stdin" (an earlier note here recorded goose as
+// argv-only, which its own --help contradicts).
+//
+// Confirmed to accept a prompt file: grok, via `--prompt-file <PATH>`
+// ("Single-turn prompt from a file").
+//
+// Confirmed NOT to read stdin: copilot (ignored a stdin prompt entirely).
+// agy offers only --input-format stream-json, an NDJSON turn protocol rather
+// than a plain prompt, so it keeps argv until that is implemented.
+// Unverifiable when checked: amp (out of credits), qwen (no auth configured),
+// crush (no provider configured) — their documentation suggests stdin support,
+// but guessing here would break a working provider, so they keep argument
+// delivery until someone can run them.
+func defaultProviders() []Provider {
+	return []Provider{
+		{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
+		{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
+		{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
+		{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
+		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
+		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
+		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
+		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
+		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
+		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+	}
+}
+
+// registry holds the provider table behind a lock.
+//
+// It used to be an exported slice, and LookupProvider's comment documented
+// that callers may append to it. For a package meant to be embedded that is a
+// data race the detector can only catch by luck: a consumer registering a
+// provider while a run is in flight races every Chain, LookupProvider and
+// FirstAvailableProvider call at once. For a library the public surface is the
+// product, so the table is reached only through these accessors.
+var registry = struct {
+	mu   sync.RWMutex
+	list []Provider
+}{list: defaultProviders()}
+
+// Providers returns the registered session CLIs in auto-selection preference
+// order. The result is a copy: mutating it does not change the registry, and
+// Register is the supported way to extend it.
+func Providers() []Provider {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	return append([]Provider(nil), registry.list...)
+}
+
+// Register adds a provider, or replaces the entry with the same name. A
+// provider needs at least a name and a binary to be runnable; anything less
+// would fail later, at the point of a generation call, with a far worse
+// message.
+func Register(p Provider) error {
+	if strings.TrimSpace(p.Name) == "" {
+		return errors.New("provider needs a name")
+	}
+	if strings.TrimSpace(p.Bin) == "" {
+		return fmt.Errorf("provider %q needs a binary to look up on PATH", p.Name)
+	}
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	for i := range registry.list {
+		if registry.list[i].Name == p.Name {
+			registry.list[i] = p
+			return nil
+		}
+	}
+	registry.list = append(registry.list, p)
+	return nil
+}
+
+// ResetProviders restores the built-in table, discarding anything registered.
+// It exists so a test that registers a provider can undo it.
+func ResetProviders() {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	registry.list = defaultProviders()
 }
 
 // LookupProvider returns the provider spec for name and whether it exists.
 //
-// It scans Providers rather than consulting an index built at init: Providers
-// is exported and therefore mutable, and an index would silently disagree with
-// it the moment a caller appended a provider. Ten entries make the scan free.
+// It scans rather than consulting an index built at init: the registry is
+// extensible, and an index would silently disagree with it the moment a caller
+// registered a provider. Ten entries make the scan free.
 func LookupProvider(name string) (Provider, bool) {
-	for _, p := range Providers {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	for _, p := range registry.list {
 		if p.Name == name {
 			return p, true
 		}
@@ -94,8 +168,10 @@ func LookupProvider(name string) (Provider, bool) {
 
 // ProviderNames returns every registered provider name in preference order.
 func ProviderNames() []string {
-	names := make([]string, len(Providers))
-	for i, p := range Providers {
+	registry.mu.RLock()
+	defer registry.mu.RUnlock()
+	names := make([]string, len(registry.list))
+	for i, p := range registry.list {
 		names[i] = p.Name
 	}
 	return names
@@ -126,7 +202,7 @@ func IsAvailable(name string) bool {
 // installed, in preference order. Experimental providers are considered only
 // when includeExperimental is true.
 func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
-	for _, p := range Providers {
+	for _, p := range Providers() {
 		if p.Experimental && !includeExperimental {
 			continue
 		}
@@ -138,6 +214,10 @@ func FirstAvailableProvider(includeExperimental bool) (Provider, bool) {
 }
 
 var dialTimeout = net.DialTimeout
+
+// startCommand builds the background server command; a variable so the
+// reaping path can be exercised without a real Ollama install.
+var startCommand = exec.Command
 
 // IsOnline probes public DNS endpoints with a short timeout to check for network connectivity.
 var IsOnline = func() bool {
@@ -178,10 +258,15 @@ func EnsureOllamaRunning(host string) error {
 	if !available("ollama") {
 		return fmt.Errorf("ollama is not installed on PATH; please install Ollama from https://ollama.com")
 	}
-	cmd := exec.Command("ollama", "serve")
+	cmd := startCommand("ollama", "serve")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start 'ollama serve': %w", err)
 	}
+	// Reap the child when it eventually exits. draft does not own the
+	// server's lifetime — it is deliberately left running for the next run —
+	// but a started process that is never waited on becomes a zombie held by
+	// this process for as long as it lives.
+	go func() { _ = cmd.Wait() }()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		time.Sleep(250 * time.Millisecond)

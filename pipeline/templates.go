@@ -12,6 +12,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/internal/pdf"
+	"github.com/sebastienrousseau/draft/internal/runes"
 )
 
 const (
@@ -64,10 +65,7 @@ func loadTemplates(cfg config.Config) string {
 		if text == "" {
 			continue
 		}
-		excerpt := text
-		if len(excerpt) > maxTemplateExcerptChars {
-			excerpt = excerpt[:maxTemplateExcerptChars]
-		}
+		excerpt := runes.CutHead(text, maxTemplateExcerptChars)
 		// Only the prose excerpt is shown, as a tone sample. A heading outline used
 		// to be included, but a literal model copied those headings verbatim into
 		// unrelated drafts; heading structure comes from the OUTPUT SKELETON instead.

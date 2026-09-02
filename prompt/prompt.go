@@ -9,10 +9,13 @@
 package prompt
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/sebastienrousseau/draft/internal/runes"
 	"github.com/sebastienrousseau/draft/rules"
 )
 
@@ -25,8 +28,26 @@ const (
 	MaxDraftChars        = 80000
 )
 
+// maxContinueTailChars is how much of the partial draft a continuation prompt
+// echoes back so the model can resume mid-sentence.
+const maxContinueTailChars = 4000
+
 // Claim builds the extraction prompt for a single source section.
 func Claim(source string) string {
+	return claimWith(Untrusted("UNTRUSTED SOURCE DOCUMENT", source))
+}
+
+// ClaimVersion identifies the extraction instructions, so cached extractions
+// are invalidated by a prompt edit rather than silently serving output that
+// different instructions produced. It hashes the template with an empty
+// untrusted block, which excludes the per-call nonce that would otherwise make
+// every prompt — and so every version — unique.
+func ClaimVersion() string {
+	sum := sha256.Sum256([]byte(claimWith("")))
+	return hex.EncodeToString(sum[:8])
+}
+
+func claimWith(sourceBlock string) string {
 	return fmt.Sprintf(`You extract verified facts from a source document. You do NOT summarize, interpret, rephrase for style, or add anything. You are building a claim list that a later writing step will rely on, so a wrong or unsupported entry is worse than a missing one.
 
 ## RULES
@@ -50,7 +71,7 @@ Order records by where they appear in the SOURCE, top to bottom.
 If the SOURCE section contains no extractable claims, return exactly: NONE.
 
 ## SOURCE
-%s`, source)
+%s`, sourceBlock)
 }
 
 // EffectiveStyle returns the style-calibration text the writing prompt will
@@ -130,17 +151,17 @@ Write a %d-%d word article for technical readers and founders titled around the 
 		houseStyleRules,
 		outputSkeleton,
 		minWords, maxWords,
-		ledger,
+		Untrusted("UNTRUSTED VERIFIED CLAIMS", ledger),
 	)
 }
 
 // ContinueWriting nudges a backend that stopped on a length limit to finish the
 // article seamlessly from where it left off.
 func ContinueWriting(partial string) string {
-	tail := partial
-	if len(tail) > 4000 {
-		tail = tail[len(tail)-4000:]
-	}
+	// Cut on a rune boundary: a half rune normalises to U+FFFD, and
+	// claims.Verify rejects any quote containing one, so a carelessly cut
+	// continuation costs verified claims later in the run.
+	tail := runes.CutTail(partial, maxContinueTailChars)
 	return fmt.Sprintf(`Continue the Markdown article below exactly where it stops. Do not repeat any text already written, do not add a preamble, and do not restart. Output only the continuation, finishing the current sentence and completing the article so it ends on a clear final thought.
 
 ## ARTICLE SO FAR (tail)
@@ -204,9 +225,9 @@ Use this only to understand nearby wording. Do not add factual claims from this 
 ## DRAFT
 %s`,
 		houseStyleRules,
-		ledger,
-		clip(research, MaxReviewSourceChars),
-		clip(draft, MaxDraftChars),
+		Untrusted("UNTRUSTED VERIFIED CLAIMS", ledger),
+		Untrusted("UNTRUSTED SOURCE DOCUMENT", clip(research, MaxReviewSourceChars)),
+		Untrusted("UNTRUSTED DRAFT UNDER REVIEW", clip(draft, MaxDraftChars)),
 	)
 }
 
@@ -216,9 +237,11 @@ func joinSorted(in []string) string {
 	return strings.Join(cp, ", ")
 }
 
+// clip bounds s to n bytes, backing up to a rune boundary so the prompt can
+// never carry a half-decoded character.
 func clip(s string, n int) string {
 	if len(s) > n {
-		return s[:n]
+		return runes.CutHead(s, n)
 	}
 	return s
 }

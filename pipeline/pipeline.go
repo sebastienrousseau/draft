@@ -17,14 +17,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sebastienrousseau/draft/claims"
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/frontmatter"
+	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/prompt"
 	"github.com/sebastienrousseau/draft/rules"
@@ -96,6 +99,12 @@ type (
 		Status   string // "done" or "failed"
 		Duration time.Duration
 	}
+	// SourceDigest identifies one input by content, so a draft can be traced
+	// back to exactly the file that produced it.
+	SourceDigest struct {
+		Path   string
+		SHA256 string
+	}
 	// DoneEvent is the terminal success event.
 	DoneEvent struct {
 		OutputPath string
@@ -103,6 +112,14 @@ type (
 		Words      int
 		Mode       string
 		Engine     string
+		// Model, PromptVersion, Sources and LedgerSHA256 form the run
+		// manifest. A tool that sells authenticity should be able to say what
+		// produced a given draft: which backend and model, which version of
+		// the extraction instructions, and which bytes went in.
+		Model         string
+		PromptVersion string
+		Sources       []SourceDigest
+		LedgerSHA256  string
 		// Duration is the wall-clock time for the whole job, and Timings the
 		// per-phase breakdown, so --json output can be compared across runs
 		// rather than only read.
@@ -123,6 +140,35 @@ var slugRepeat = regexp.MustCompile(`-{2,}`)
 type chainState struct {
 	engines []engine.Engine
 	cur     int
+	// demotedAt is when the cursor last advanced past a failing engine.
+	demotedAt time.Time
+}
+
+// timeNow is a variable so the rehabilitation clock is testable.
+var timeNow = time.Now
+
+// rehabilitationDelay is how long a demoted engine stays demoted before the
+// chain probes it again.
+//
+// Stickiness is right for a provider that is genuinely dead — not logged in,
+// uninstalled — because retrying it costs a failed call per job. It is wrong
+// for one that blipped: a single flaky moment on the first paper otherwise
+// demotes a forty-paper queue to the local model for its entire life, and the
+// cost of that is every remaining article written by a 4B model instead of
+// the backend the user chose. A failed call is cheap and fails fast; a
+// silently downgraded queue is expensive and invisible. Probing occasionally
+// is the cheaper mistake.
+const rehabilitationDelay = 15 * time.Minute
+
+// rehabilitate returns the chain to its preferred engine once a demoted one
+// has had long enough to recover, and reports whether it did.
+func (c *chainState) rehabilitate(now time.Time) bool {
+	if c == nil || c.cur == 0 || c.demotedAt.IsZero() || now.Sub(c.demotedAt) < rehabilitationDelay {
+		return false
+	}
+	c.cur = 0
+	c.demotedAt = time.Time{}
+	return true
 }
 
 func (c *chainState) active() engine.Engine {
@@ -158,9 +204,20 @@ type Runner struct {
 	// started, phaseStart and timings record how long the run and each phase
 	// took, reported on DoneEvent so a run's cost is measurable rather than
 	// merely felt.
-	started    time.Time
-	phaseStart time.Time
-	timings    []PhaseTiming
+	// sourceDigests and ledgerDigest record what went into the current job,
+	// reported on DoneEvent as a run manifest.
+	sourceDigests []SourceDigest
+	ledgerDigest  string
+	started       time.Time
+	phaseStart    time.Time
+	timings       []PhaseTiming
+	// cache reuses claim extractions across runs, addressed by the content
+	// that produced them. Nil when caching is disabled; every method on it
+	// tolerates that, so there is no branch at the call sites.
+	cache *extractcache.Cache
+	// cacheHits counts reused extractions for this job. Written from the
+	// parallel extraction workers, so it is atomic.
+	cacheHits atomic.Int64
 }
 
 // finalize applies the standard post-processing to a raw generation: clean it,
@@ -185,6 +242,7 @@ func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) 
 			engine.KindEdit:    shared,
 		},
 		events: events,
+		cache:  extractcache.Open(cfg.CacheDir),
 	}
 }
 
@@ -206,7 +264,7 @@ func NewRoutedRunner(cfg config.Config, events chan<- Event) *Runner {
 		byName[name] = cs
 		chains[k] = cs
 	}
-	return &Runner{cfg: cfg, chains: chains, events: events}
+	return &Runner{cfg: cfg, chains: chains, events: events, cache: extractcache.Open(cfg.CacheDir)}
 }
 
 // SetEvents points the Runner at the channel for the next Run. A Runner is
@@ -238,6 +296,8 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 	r.done = ctx.Done()
 	r.started = time.Now()
 	r.timings = nil
+	r.sourceDigests = nil
+	r.ledgerDigest = ""
 
 	// The cursor is deliberately NOT reset here. A Runner reused across a queue
 	// keeps the backend it settled on, so a dead provider is tried once for the
@@ -332,12 +392,16 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	r.log("saved " + shortPath(r.cfg, outputPath))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{
-		OutputPath: outputPath,
-		Words:      words,
-		Mode:       "draft",
-		Engine:     r.writerName(),
-		Duration:   time.Since(r.started),
-		Timings:    append([]PhaseTiming(nil), r.timings...),
+		OutputPath:    outputPath,
+		Words:         words,
+		Mode:          "draft",
+		Engine:        r.writerName(),
+		Model:         r.writerModel(),
+		PromptVersion: prompt.ClaimVersion(),
+		Sources:       append([]SourceDigest(nil), r.sourceDigests...),
+		LedgerSHA256:  r.ledgerDigest,
+		Duration:      time.Since(r.started),
+		Timings:       append([]PhaseTiming(nil), r.timings...),
 	})
 	return nil
 }
@@ -483,6 +547,9 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 	failed := 0
 
 	for _, src := range sources {
+		if sum, err := fileSHA256(src); err == nil {
+			r.sourceDigests = append(r.sourceDigests, SourceDigest{Path: src, SHA256: sum})
+		}
 		text, err := pdf.Extract(ctx, src)
 		if err != nil {
 			// Cancellation is not a skippable per-file problem.
@@ -525,9 +592,8 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	r.ledgerPath = ledgerPath
 	raw := make([]string, len(sections))
 
-	extract := func(body string) (string, error) {
-		return r.generateText(ctx, engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature})
-	}
+	r.cacheHits.Store(0)
+	extract := func(body string) (string, error) { return r.extractOne(ctx, body, nil) }
 
 	// Section 0 settles the engine via the chain.
 	r.log(fmt.Sprintf("claim section 1/%d", len(sections)))
@@ -559,14 +625,14 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 			go func(i int) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				res, err := pinned.Generate(ctx, engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(sections[i].Body), Temperature: extractTemperature})
+				text, err := r.extractOne(ctx, sections[i].Body, pinned)
 				mu.Lock()
 				defer mu.Unlock()
 				if err != nil {
 					failed = append(failed, i)
 					return
 				}
-				raw[i] = res.Text
+				raw[i] = text
 			}(i)
 		}
 		wg.Wait()
@@ -598,6 +664,10 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 		raw[i] = text
 	}
 
+	if hits := r.cacheHits.Load(); hits > 0 {
+		r.log(fmt.Sprintf("reused %d cached extraction(s); use --no-cache to force a fresh run", hits))
+	}
+
 	var records []claims.Record
 	dropped := 0
 	for i, sec := range sections {
@@ -612,7 +682,9 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	// Report what actually happened. Logging "claims saved" unconditionally
 	// after a discarded write tells the user a fact-checking artefact exists
 	// when it may not.
-	if err := os.WriteFile(ledgerPath, []byte(claims.RenderLedger(records, dropped)+"\n"), 0o644); err != nil {
+	ledgerText := claims.RenderLedger(records, dropped) + "\n"
+	r.ledgerDigest = sha256Hex(ledgerText)
+	if err := os.WriteFile(ledgerPath, []byte(ledgerText), 0o644); err != nil {
 		r.ledgerPath = ""
 		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
 	} else {
@@ -629,6 +701,21 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 // memory pressure a shared GPU cannot absorb.
 const ollamaExtractConcurrency = 2
 
+// ollamaParallelism reports how many extraction calls the local server will
+// genuinely serve at once.
+//
+// The constant above was measured on an 8 GB machine, where two workers gave
+// ~1.8x the throughput of one. Treating it as a ceiling leaves a larger
+// machine idle: a host started with OLLAMA_NUM_PARALLEL=4 has four slots and
+// queues anything beyond them, so reading the server's own setting is both
+// safe and strictly better. Absent the variable, nothing has changed.
+func ollamaParallelism() int {
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("OLLAMA_NUM_PARALLEL"))); err == nil && v > ollamaExtractConcurrency {
+		return v
+	}
+	return ollamaExtractConcurrency
+}
+
 // extractConcurrency is the number of parallel extraction workers for the settled
 // engine: the configured value for a session provider (independent subprocesses),
 // and a small, capped amount for Ollama (concurrent requests to one local server).
@@ -644,10 +731,71 @@ func (r *Runner) extractConcurrency() int {
 	if e := r.chainFor(engine.KindExtract).active(); e != nil {
 		extractor = e.Name()
 	}
-	if extractor == "ollama" && n > ollamaExtractConcurrency {
-		return ollamaExtractConcurrency
+	if extractor == "ollama" {
+		if limit := ollamaParallelism(); n > limit {
+			return limit
+		}
 	}
 	return n
+}
+
+// extractOne returns a section's raw extraction, reusing a cached one when the
+// same section, prompt, engine and model produced it before.
+//
+// direct names the backend to call straight through, which the parallel path
+// uses so its workers cannot race on the chain cursor; nil routes through the
+// chain, so a failure can still fall back.
+//
+// The cached text is never trusted on its own account: the caller still runs
+// claims.Parse over it against the freshly read section, so a stale entry can
+// only ever yield fewer verified claims, never an ungrounded one.
+func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engine) (string, error) {
+	serving := direct
+	if serving == nil {
+		serving = r.chainFor(engine.KindExtract).active()
+	}
+	if key := r.extractKey(body, serving); key != "" {
+		if text, ok := r.cache.Get(key); ok {
+			r.cacheHits.Add(1)
+			return text, nil
+		}
+	}
+
+	req := engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature}
+	var text string
+	var err error
+	if direct != nil {
+		var res engine.Result
+		res, err = direct.Generate(ctx, req)
+		text = res.Text
+	} else {
+		text, err = r.generateText(ctx, req)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// Address the entry to the backend that actually served it: the chain may
+	// have failed over between the lookup above and this point, and storing
+	// it under the wrong name would serve one model's output for another.
+	actual := direct
+	if actual == nil {
+		actual = r.chainFor(engine.KindExtract).active()
+	}
+	if key := r.extractKey(body, actual); key != "" {
+		if putErr := r.cache.Put(key, text); putErr != nil {
+			r.warn("could not cache the extraction: " + putErr.Error())
+		}
+	}
+	return text, nil
+}
+
+// extractKey addresses one section's extraction against a specific backend.
+func (r *Runner) extractKey(body string, e engine.Engine) string {
+	if e == nil || r.cache == nil {
+		return ""
+	}
+	return extractcache.Key(body, prompt.ClaimVersion(), e.Name(), engine.ResolveModel(r.cfg, e))
 }
 
 // generateText runs a request through the engine chain and returns its text.
@@ -799,8 +947,17 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 				markdown = r.continueGeneration(ctx, markdown)
 			}
 		}
+		// Repair what a deterministic edit can settle before spending another
+		// generation on it. A rewrite is the most expensive call in the run.
+		if repaired, removed := repairDuplicates(markdown); removed > 0 {
+			if len(validate.Errors(repaired)) <= len(validate.Errors(markdown)) {
+				markdown = repaired
+				r.log(fmt.Sprintf("removed %d near-duplicate paragraph(s) without regenerating", removed))
+			}
+		}
+
 		styleErrs := validate.Errors(markdown)
-		factErrs, warnings := validate.Faithfulness(markdown, records)
+		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
 		errs = append(append([]string{}, styleErrs...), factErrs...)
 		if len(errs) == 0 {
 			for _, w := range warnings {
@@ -819,6 +976,11 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 // against a dead provider.
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
 	cs := r.chainFor(req.Kind)
+	if cs.rehabilitate(timeNow()) {
+		r.log("retrying " + cs.engines[0].Name() + " after its earlier failure")
+		r.engineName = cs.engines[0].Name()
+		r.emit(EngineEvent(r.engineName))
+	}
 	var lastErr error
 	for cs != nil && cs.cur < len(cs.engines) {
 		// A cancelled run must not keep walking the chain. Without this check
@@ -844,6 +1006,7 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		lastErr = err
 		r.warn(fmt.Sprintf("%s failed (%v)", e.Name(), err))
 		cs.cur++
+		cs.demotedAt = timeNow()
 		if cs.cur < len(cs.engines) {
 			r.engineName = cs.engines[cs.cur].Name()
 			r.emit(EngineEvent(r.engineName))
@@ -854,6 +1017,11 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		lastErr = errors.New("no engine available")
 	}
 	return engine.Result{}, lastErr
+}
+
+// writerModel is the model the writing backend used, for the run manifest.
+func (r *Runner) writerModel() string {
+	return engine.ResolveModel(r.cfg, r.chainFor(engine.KindWrite).active())
 }
 
 // writerName is the engine that produced the article, which is the one worth
@@ -1025,6 +1193,11 @@ func (r *Runner) phase(index int, status string) {
 		}
 	}
 	r.emit(PhaseEvent{Index: index, Status: status})
+}
+
+// validateOptions is the validation policy for this run.
+func (r *Runner) validateOptions() validate.Options {
+	return validate.Options{StrictNumbers: r.cfg.StrictNumbers}
 }
 
 func (r *Runner) log(msg string) { r.emit(LogEvent(msg)) }

@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -493,5 +495,110 @@ func TestRunJSONFlagViaRun(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"ok":false`) {
 		t.Errorf("--json should emit a record even on failure: %q", out.String())
+	}
+}
+
+func TestRunClearCache(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DRAFT_CACHE_DIR", dir)
+	// A shard with an entry in it, which Clear must remove.
+	shard := filepath.Join(dir, "ab")
+	if err := os.MkdirAll(shard, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shard, "abc.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb strings.Builder
+	if code := run([]string{"--clear-cache"}, &out, &errb); code != 0 {
+		t.Fatalf("exit code %d, stderr %q", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "cleared") {
+		t.Errorf("stdout = %q", out.String())
+	}
+	if _, err := os.Stat(shard); !os.IsNotExist(err) {
+		t.Error("--clear-cache left the shard behind")
+	}
+}
+
+func TestRunClearCacheReportsFailure(t *testing.T) {
+	orig := clearExtractCache
+	clearExtractCache = func(string) error { return errors.New("permission denied") }
+	defer func() { clearExtractCache = orig }()
+
+	t.Setenv("DRAFT_CACHE_DIR", t.TempDir())
+
+	var out, errb strings.Builder
+	if code := run([]string{"--clear-cache"}, &out, &errb); code != 1 {
+		t.Fatalf("exit code %d, want 1 (stderr %q)", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "draft:") {
+		t.Errorf("stderr = %q", errb.String())
+	}
+}
+
+// --clear-cache must clear the configured location even alongside --no-cache,
+// which blanks CacheDir for the run.
+func TestRunClearCacheIgnoresNoCache(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DRAFT_CACHE_DIR", dir)
+	shard := filepath.Join(dir, "cd")
+	if err := os.MkdirAll(shard, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	if code := run([]string{"--clear-cache", "--no-cache"}, &out, &errb); code != 0 {
+		t.Fatalf("exit code %d, stderr %q", code, errb.String())
+	}
+	if _, err := os.Stat(shard); !os.IsNotExist(err) {
+		t.Error("--clear-cache --no-cache did not clear the configured directory")
+	}
+}
+
+// A tool that sells authenticity should be able to answer "what made this?"
+// without the asker having to trust the answer.
+func TestJSONCarriesASchemaAndRunManifest(t *testing.T) {
+	cfg, full := tmpSource(t, "paper.txt")
+	jobs := []pipeline.Job{{Sources: []string{full}}}
+	var out strings.Builder
+	if failures := runHeadlessJSON(context.Background(), cfg, pipeline.NewRunner(cfg, []engine.Engine{stubEngine{}}, nil), jobs, &out, io.Discard); failures != 0 {
+		t.Fatalf("%d failures", failures)
+	}
+
+	var rec jobRecord
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out.String())), &rec); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out.String())
+	}
+	if rec.Schema != jobRecordSchema {
+		t.Errorf("schema = %d, want %d", rec.Schema, jobRecordSchema)
+	}
+	if rec.Manifest == nil {
+		t.Fatal("no manifest on a successful job")
+	}
+	if rec.Manifest.DraftVersion == "" {
+		t.Error("manifest has no draft version")
+	}
+	if rec.Manifest.PromptVersion == "" {
+		t.Error("manifest has no prompt version")
+	}
+	if rec.Manifest.LedgerSHA256 == "" {
+		t.Error("manifest has no ledger digest")
+	}
+	if len(rec.Manifest.Sources) != 1 {
+		t.Fatalf("manifest lists %d source(s), want 1", len(rec.Manifest.Sources))
+	}
+	src := rec.Manifest.Sources[0]
+	if src.Path != full {
+		t.Errorf("manifest source path = %q, want %q", src.Path, full)
+	}
+	// The digest must be of the bytes that actually went in.
+	data, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	if src.SHA256 != hex.EncodeToString(sum[:]) {
+		t.Errorf("manifest digest %q does not match the source file", src.SHA256)
 	}
 }

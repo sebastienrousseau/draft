@@ -9,12 +9,25 @@ import (
 	"strings"
 )
 
-// completionFlags is the flag list offered by every shell's completion. It is
-// derived from the same table the help text uses, so the two cannot drift.
-var completionFlags = []string{
-	"--engine", "--model", "--experimental", "--num-ctx", "--num-predict",
-	"--force-new", "--merge", "--review", "--frontmatter", "--combine",
-	"--keep-artifacts", "--print", "--json", "--completion", "--version", "--help",
+// completionFlags is the flag list offered by every shell's completion,
+// derived from flagHelp so the two genuinely cannot drift. The old hand-kept
+// copy carried the same promise in a comment and had fallen four flags behind.
+var completionFlags = flagNames(flagHelp)
+
+// flagNames strips the value placeholder from each help entry ("--out <dir>"
+// becomes "--out") and drops the combined "-h, --help" form, which no shell
+// wants offered as one token.
+func flagNames(help [][2]string) []string {
+	out := make([]string, 0, len(help))
+	for _, f := range help {
+		for _, part := range strings.Split(f[0], ",") {
+			name, _, _ := strings.Cut(strings.TrimSpace(part), " ")
+			if strings.HasPrefix(name, "--") {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 // completionEngines are the values --engine accepts beyond provider names.

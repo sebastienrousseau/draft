@@ -118,7 +118,7 @@ func chainForName(cfg config.Config, name string) []Engine {
 		return []Engine{ollama}
 	case config.EngineAuto, "":
 		var chain []Engine
-		for _, p := range Providers {
+		for _, p := range Providers() {
 			if p.Experimental && !cfg.Experimental {
 				continue
 			}
