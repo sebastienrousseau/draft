@@ -1,0 +1,102 @@
+{
+  "cases": [
+    {
+      "name": "01-exact-quote",
+      "why": "A quote copied verbatim, with every number present in it, is the baseline the gate exists to admit.",
+      "verified": 1,
+      "dropped": 0,
+      "survives": [
+        "1024 documents per second"
+      ]
+    },
+    {
+      "name": "02-paraphrased-quote",
+      "why": "A model that rewrites the span instead of copying it must be dropped: a paraphrase cannot be checked against the source.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
+    },
+    {
+      "name": "03-number-absent-from-quote",
+      "why": "A real quote attached to an invented figure is the most dangerous shape: the quote verifies, the number does not appear in it.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
+    },
+    {
+      "name": "04-thousands-separator",
+      "why": "Sources write 1,024 and models write 1024. Normalisation must treat them as the same number, or honest claims are lost.",
+      "verified": 1,
+      "dropped": 0,
+      "survives": [
+        "1024 shards"
+      ]
+    },
+    {
+      "name": "05-smart-quotes",
+      "why": "Typeset sources use curly quotes; models emit straight ones. The comparison must not fail on punctuation the author never chose.",
+      "verified": 1,
+      "dropped": 0,
+      "survives": [
+        "consistent across every run"
+      ]
+    },
+    {
+      "name": "06-dangling-fragment",
+      "why": "A span cut mid-clause is not evidence of anything; the claim it supports cannot be checked against a sentence that never ends.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
+    },
+    {
+      "name": "07-quote-too-short",
+      "why": "A span short enough to occur by chance proves nothing, so it is refused before it can ground a claim.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
+    },
+    {
+      "name": "08-invalid-type",
+      "why": "TYPE is a closed vocabulary. A value outside it means the model improvised the schema, which is not a record to trust.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
+    },
+    {
+      "name": "09-invalid-strength",
+      "why": "STRENGTH carries the hedging. An unrecognised value would let a speculative result be written as settled fact.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
+    },
+    {
+      "name": "10-hedged-claim-survives",
+      "why": "Hedged is a legitimate strength, not a defect. Dropping it would silently discard every limitation a paper states.",
+      "verified": 1,
+      "dropped": 0,
+      "survives": [
+        "may generalise"
+      ]
+    },
+    {
+      "name": "11-mixed-section",
+      "why": "A realistic section: several candidates, only some verifiable. This is the case that moves if extraction quality or gate strictness changes.",
+      "verified": 3,
+      "dropped": 2,
+      "survives": [
+        "580 pages per second",
+        "14 megabytes",
+        "23.7 pages per second"
+      ]
+    },
+    {
+      "name": "12-duplicate-claims",
+      "why": "Models restate the same fact in adjacent blocks. Both verify, so only de-duplication keeps the ledger honest about how much was found.",
+      "verified": 2,
+      "dropped": 0,
+      "survives": [
+        "1024 shards"
+      ]
+    }
+  ]
+}

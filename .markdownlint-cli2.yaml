@@ -13,6 +13,11 @@ ignores:
   # Generated: .gen/manual is copied from the sources already linted here, so
   # linting it again reports every finding twice and can never find a new one.
   - ".gen/**"
+  # Fixtures. testdata holds inputs in whatever shape the code under test
+  # expects — model-output records, fuzz corpora — not documentation. Linting
+  # them enforces prose rules on data and, worse, invites "fixing" a fixture
+  # until the test it pins no longer means anything.
+  - "**/testdata/**"
 
 config:
   # Go is tab-indented by gofmt, so every fenced Go block necessarily contains

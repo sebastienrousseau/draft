@@ -1,0 +1,32 @@
+{
+  "_why": [
+    "Live recall baseline: how many claims a real backend extracts from each",
+    "corpus source and gets past the grounding gate.",
+    "",
+    "This is NOT the `verified` count in corpus.json. Those describe crafted",
+    "extractions — paraphrases, invented numbers, invalid schema — recorded to",
+    "pin the gate. A real model given the same source produces good output and",
+    "verifies more, so comparing live counts against them measures nothing.",
+    "",
+    "Baselines are specific to the engine and model that produced them, and",
+    "will drift as models change. They are a tripwire for a prompt edit that",
+    "costs most of the recall, not an exact expectation."
+  ],
+  "engine": "claude",
+  "model": "sonnet",
+  "recorded_at": "2026-09-03",
+  "cases": {
+    "01-exact-quote": 2,
+    "02-paraphrased-quote": 1,
+    "03-number-absent-from-quote": 1,
+    "04-thousands-separator": 1,
+    "05-smart-quotes": 1,
+    "06-dangling-fragment": 2,
+    "07-quote-too-short": 1,
+    "08-invalid-type": 1,
+    "09-invalid-strength": 1,
+    "10-hedged-claim-survives": 1,
+    "11-mixed-section": 4,
+    "12-duplicate-claims": 1
+  }
+}

@@ -64,7 +64,7 @@ def realign(block: list[str]) -> list[str]:
 def main() -> int:
     changed = []
     for path in sorted(glob.glob("**/*.md", recursive=True)):
-        if path.startswith(("node_modules", ".git", ".gen")):
+        if path.startswith(("node_modules", ".git", ".gen")) or "/testdata/" in path:
             continue
         lines = open(path, encoding="utf-8").read().split("\n")
         out, i, fenced = [], 0, False

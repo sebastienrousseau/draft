@@ -131,6 +131,41 @@ does not otherwise need them, which trades real design for a number.
 98% is high enough that a new untested branch is visible in the diff, and the
 gate excludes `examples/` because those are demonstrations, not library code.
 
+### The grounding corpus
+
+`claims/testdata/corpus/` holds twelve sections with realistic model output.
+Each case names the rule it guards, and the test pins how many candidate claims
+survive the gate and how many are refused.
+
+```console
+make corpus       # against the recorded extractions; runs in CI
+make corpus-live  # against a real backend; needs one, costs a call per case
+```
+
+The two halves catch different regressions, and neither substitutes for the
+other:
+
+- **`make corpus`** replays recorded extractions, so it is deterministic and
+  runs on every push. It catches a change to *verification* — loosening the
+  number check, for instance, makes the invented "34% improvement" in
+  `03-number-absent-from-quote` survive.
+- **`make corpus-live`** asks a real backend to extract from the same sources
+  and compares against `baseline-live.json`. It catches the other half: a
+  reworded `prompt.Claim` that quietly makes the model return fewer usable
+  claims. Nothing about that is visible in a diff, and the cost only shows up
+  as thinner articles weeks later.
+
+**Run `make corpus-live` before merging any change to `prompt.Claim`.** It is
+not in CI because GitHub's runners have neither an agent CLI nor an Ollama
+server, and a workflow step that always skips is theatre rather than a gate.
+
+The live comparison is against `baseline-live.json`, *not* the `verified`
+counts in `corpus.json`. Those describe deliberately bad extractions recorded
+to pin the gate; a real model produces good output and verifies more, so
+comparing the two measures nothing. Baselines are specific to the engine and
+model that recorded them and drift as models change, which is why the check
+fails only on a collapse rather than on any difference.
+
 ### The grounding gate is mutation-tested
 
 `claims` is the package that decides whether a claim is trustworthy, so line
