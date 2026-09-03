@@ -62,15 +62,16 @@ jobs:
           python3 -m pip install --quiet mkdocs mkdocs-material
           python3 scripts/build-manual.py
           python3 -m mkdocs build
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.ref == 'refs/heads/main'
         with:
           path: .gen/site
 
-  # Publishing is separate and only runs on main. It is inert until GitHub
-  # Pages is switched to the "GitHub Actions" source in repository settings,
-  # which is deliberately left as a human decision: draftlib.com already
-  # exists, and a second site should be a choice, not a side effect.
+  # Publishing is separate and only runs on main. Pages is configured with the
+  # "GitHub Actions" source, so a failure here is a real failure: the deploy
+  # step is NOT allowed to continue on error. It was, while Pages was still
+  # unconfigured — and that reported a 404 deployment as a green job, which is
+  # precisely the kind of check that teaches people to ignore checks.
   publish:
     name: publish manual
     needs: manual
@@ -84,5 +85,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
-        continue-on-error: true
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
