@@ -51,13 +51,29 @@ jobs:
         run: |
           set -euo pipefail
           archive=$(ls dist/draft_*_linux_amd64.tar.gz | head -1)
+          # List once into a file rather than piping per entry. `grep -q` exits
+          # on its first match, which closes the pipe; GNU tar then fails with
+          # "stdout: write error" and pipefail turns a found file into a
+          # missing one. bsdtar tolerates it, so this only ever failed on the
+          # Linux runner.
+          tar tzf "$archive" > /tmp/archive-contents.txt
+          missing=0
           for f in share/man/man1/draft.1 \
                    share/bash-completion/completions/draft \
                    share/zsh/site-functions/_draft \
                    share/fish/vendor_completions.d/draft.fish \
                    LICENSE-MIT LICENSE-APACHE README.md CHANGELOG.md draft; do
-            tar tzf "$archive" | grep -qx "$f" || { echo "missing from archive: $f"; exit 1; }
+            if ! grep -qx "$f" /tmp/archive-contents.txt; then
+              echo "missing from archive: $f"
+              missing=1
+            fi
           done
+          if [ "$missing" -ne 0 ]; then
+            echo "--- archive contains ---"
+            cat /tmp/archive-contents.txt
+            exit 1
+          fi
+          echo "archive carries its documentation"
 
       - name: Attest build provenance
         if: github.event_name != 'workflow_dispatch'
