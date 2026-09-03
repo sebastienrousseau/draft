@@ -8,8 +8,13 @@ claim, and claims drift silently. This checks the ones that can be checked
 mechanically:
 
   1. every git tag has a changelog entry;
-  2. CITATION.cff names the newest tag;
+  2. CITATION.cff names the newest version the changelog calls released;
   3. any changelog heading that claims a release with no tag behind it.
+
+(2) compares against the changelog rather than the newest tag on purpose. The
+citation describes the version being shipped, and the changelog entry for a
+release necessarily exists before its tag does — comparing against tags would
+make it impossible to prepare a release without a red build.
 
 (3) is reported but does not fail: cutting a release, or relabelling a section
 that was never released, is a maintainer decision and not something CI should
@@ -49,14 +54,16 @@ def main() -> int:
         if t not in changelog_versions:
             problems.append(f"tag v{t} has no '## [{t}]' section in {CHANGELOG}")
 
-    # 2. The citation must name the newest release.
+    # 2. The citation must name the version being shipped.
+    newest_documented = changelog_versions[0] if changelog_versions else newest
     citation = open(CITATION, encoding="utf-8").read()
     m = re.search(r"^version:\s*(\S+)\s*$", citation, re.M)
     if not m:
         problems.append(f"{CITATION} has no version field")
-    elif m.group(1) != newest:
+    elif m.group(1) != newest_documented:
         problems.append(
-            f"{CITATION} says version {m.group(1)}, but the newest tag is v{newest}"
+            f"{CITATION} says version {m.group(1)}, but the newest release "
+            f"documented in {CHANGELOG} is {newest_documented}"
         )
 
     # 3. A documented release with no tag is a version users cannot install.

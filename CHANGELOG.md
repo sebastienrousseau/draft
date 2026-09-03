@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-09-03
+
 ### Security
 
 - **Bounded the blast radius of a crafted source document.** `draft` puts a
@@ -64,6 +66,20 @@ series until `0.0.999`.
   model, a hash of the extraction instructions, the ledger digest and the
   SHA-256 of every source file.
 
+- **A Unix install contract.** `GNUmakefile` implements `make install` and
+  `make uninstall` honouring `PREFIX` and `DESTDIR`, installing to FHS
+  paths, and CI verifies the staged tree against the exact list
+  `docs/packaging.md` promises packagers.
+- **`draft --man`** generates a roff manual page from the same tables
+  `--help` renders, so the packaged documentation cannot describe a
+  different program than the binary beside it.
+- **Native packages.** Releases now carry `.deb`, `.rpm` and `.apk` built
+  from the same binaries the archives do, and the archives themselves now
+  contain the manpage, shell completions and licence texts rather than a
+  bare binary.
+- **A release dry run** (`workflow_dispatch`), so new release machinery can
+  be exercised before a tag makes its failure permanent.
+
 ### Changed
 
 - **Claim extractions are cached by content** rather than by date. The only
@@ -88,18 +104,34 @@ series until `0.0.999`.
   every read of it in a concurrent program. Use `engine.Providers()` to read and
   `engine.Register` to extend.
 
+- Bumped `actions/attest-build-provenance` v4.1.1 -> v4.2.2 (both call
+  sites in `release.yml`).
+
+- **Documentation is gated.** markdownlint, codespell, an intra-repo link
+  and heading-anchor check, and a version-consistency check all run on every
+  push. The repository had 615 markdownlint findings and no gate; it now has
+  none.
+- **Every exported name must carry a doc comment** (revive's `exported`
+  rule), and a new `api surface` job reports how the public API moved since
+  the last release.
+- Bumped `anchore/sbom-action/download-syft` v0.24.0 -> v0.24.2.
+
 ### Documentation
 
 - **`docs/AUDIT-2026-09.md`** — a full architecture, performance, security and
   product audit against 2026-2027 market context, with the roadmap these changes
   implement.
 
-## [0.0.33] - 2026-08-11
-
-### Changed
-
-- Bumped `actions/attest-build-provenance` v4.1.1 -> v4.2.2 (both call
-  sites in `release.yml`).
+- **A rendered user manual, a development guide and decision records.**
+  `DEVELOPMENT.md` maps every CI job to the one command that reproduces it
+  locally; `docs/ARCHITECTURE.md` describes the package graph, the five
+  phases and the invariants each has a test for; `docs/adr/` records five
+  decisions with their alternatives and what each costs. The manual is
+  assembled from these same files, so a chapter cannot disagree with the
+  document it came from.
+- **`docs/packaging.md` and `pkg/`** for distribution maintainers, plus
+  `supply-chain/` recording what is depended on and how it is pinned.
+- **`GOVERNANCE.md`, `SUPPORT.md`, `AGENTS.md` and `CITATION.cff`.**
 
 ## [0.0.32] - 2026-08-04
 
