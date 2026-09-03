@@ -6,7 +6,10 @@
 # can never disagree with the file it came from.
 site_name: draft
 site_description: Research papers in. Publication-ready Markdown out.
-site_url: https://sebastienrousseau.github.io/draft/
+# The account serves Pages from a custom domain, so project pages live
+# under it rather than at github.io. This drives canonical links and the
+# sitemap, so a wrong value is a wrong <link rel=canonical> on every page.
+site_url: https://sebastienrousseau.com/draft/
 repo_url: https://github.com/sebastienrousseau/draft
 repo_name: sebastienrousseau/draft
 edit_uri: ""
