@@ -48,6 +48,14 @@ fuzz: ## Run each fuzz target briefly (FUZZTIME=30s make fuzz)
 	@go test ./frontmatter/ -run FuzzExtractMetadata -fuzz FuzzExtractMetadata -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./pipeline/ -run FuzzParseSurgicalEdits -fuzz FuzzParseSurgicalEdits -fuzztime $(or $(FUZZTIME),20s)
 
+.PHONY: corpus
+corpus: ## Run the grounding corpus against the recorded extractions
+	go test ./claims/ -run Corpus -v
+
+.PHONY: corpus-live
+corpus-live: ## Measure live recall on the corpus (needs a backend; costs a call per case)
+	DRAFT_CORPUS_LIVE=1 go test ./pipeline/ -run TestCorpusLiveRecall -v -timeout 20m
+
 .PHONY: mutation
 mutation: ## Mutation-test the security-critical grounding gate
 	go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash ./claims \

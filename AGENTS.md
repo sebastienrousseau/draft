@@ -46,9 +46,13 @@ fail proves nothing, and "green on my machine" is not the full gate.
    would fail without it, in the same commit. "I'll add tests later" means no.
 5. **The mutation gate on `claims` must stay at 100% efficacy.** A surviving
    mutant is a missing assertion, not a flaky tool.
-6. **Comments say why, not what.** The codebase is written this way throughout;
+6. **Editing `prompt.Claim` means running `make corpus-live`.** A reworded
+   extraction instruction can cost most of the recall without changing a single
+   test, because every test replays recorded output. The live corpus is the
+   only thing that measures it, and it is not in CI — so it is on you.
+7. **Comments say why, not what.** The codebase is written this way throughout;
    match it. A comment restating the line below it is noise.
-7. **British English** in prose and comments.
+8. **British English** in prose and comments.
 
 ## Security rules
 
