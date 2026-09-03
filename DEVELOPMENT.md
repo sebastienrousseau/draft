@@ -173,12 +173,15 @@ this rule lives in the Cloudflare configuration and not in this repository.
 
 The practical consequence: **an external image added to the documentation will
 render on GitHub and be silently blocked on the site.** The README's shields.io
-badges hit exactly this — the markup was correct and the images returned
-`200 image/svg+xml`, but the browser refused to load them because
-`img.shields.io` was not in `img-src`.
+badges hit exactly this on the day the manual first published — the markup was
+correct and the images returned `200 image/svg+xml`, but the browser refused to
+load them because `img.shields.io` was not in `img-src`. It has since been
+added, so the badges render; the constraint itself has not gone away.
 
-If you add an image from a new origin, add that origin to the CSP's `img-src`
-too. To check what the site currently allows:
+The failure gives you nothing to go on: no server-side error, no CI failure,
+just an empty space where the image should be. If you add an image from a new
+origin, add that origin to the CSP's `img-src` too. To check what the site
+currently allows:
 
 ```console
 curl -sSI https://sebastienrousseau.com/draft/ | grep -i content-security-policy
