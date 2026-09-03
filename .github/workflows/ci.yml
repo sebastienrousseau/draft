@@ -174,7 +174,7 @@ jobs:
       - name: Compare against the last release
         run: |
           set -uo pipefail
-          go install golang.org/x/exp/cmd/gorelease@latest
+          go install golang.org/x/exp/cmd/gorelease@v0.0.0-20260824195058-e88cd73687aa
           base=$(git tag --sort=-v:refname | head -1)
           if [ -z "$base" ]; then echo "no tags yet"; exit 0; fi
           {
@@ -200,9 +200,12 @@ jobs:
       - name: Verify module hashes
         run: go mod verify
 
+      # Pinned, not @latest. This freezes the scanner, not the advisories:
+      # govulncheck fetches the vulnerability database at run time, so a new
+      # CVE is still caught the day it lands.
       - name: Scan for known vulnerabilities
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
           govulncheck ./...
 
   reuse:

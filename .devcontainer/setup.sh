@@ -13,7 +13,7 @@ sudo apt-get install -y -qq poppler-utils groff
 
 echo "==> Lint and docs tooling"
 python3 -m pip install --quiet --disable-pip-version-check \
-  codespell mkdocs mkdocs-material pre-commit
+  codespell==2.4.3 mkdocs==1.6.1 mkdocs-material==9.7.7 pre-commit==4.6.2
 
 # Pinned together with the Go toolchain; see the comment in ci.yml.
 echo "==> golangci-lint"
