@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Spell-check policy. Each ignored word is a real word in this codebase, listed
+# with its reason; an unexplained ignore list is how a spell checker stops
+# finding anything.
+#
+#   rouge        the ROUGE summarisation metric, in rules.MetricTerms.
+#                "Correcting" it to "rogue" would silently break the
+#                metric-grounding check.
+#   wont cant    apostrophe-free contractions in frontmatter's stopword list.
+#   isnt arent   The tokeniser strips apostrophes before matching, so the
+#   dont         stopwords must be spelled without them.
+#   unparseable  the spelling used throughout this codebase and common in
+#                software English; codespell prefers "unparsable".
+#   mesure       French, in a deliberately multibyte UTF-8 preview test
+#                ("mesure très précise").
+[codespell]
+ignore-words-list = rouge,wont,cant,isnt,arent,dont,unparseable,mesure
+skip = ./.git,./.gen,./node_modules,./bin,./build,./coverage.out,./coverage.filtered.out,./go.sum,*.pdf,./claims/testdata,./internal/pdf/testdata,./.crush

@@ -132,8 +132,6 @@ type (
 
 var slugRepeat = regexp.MustCompile(`-{2,}`)
 
-// Runner executes jobs against an ordered chain of engines, advancing to the
-// next when one fails and sticking with the survivor.
 // chainState is one ordered engine chain plus the cursor into it. Each request
 // kind owns one, so extraction failing over to Ollama does not drag writing
 // down with it — the two are separately configurable and separately sticky.
@@ -178,6 +176,13 @@ func (c *chainState) active() engine.Engine {
 	return c.engines[c.cur]
 }
 
+// Runner executes jobs against an ordered chain of engines, advancing to the
+// next when one fails and sticking with the survivor. It is UI-agnostic:
+// progress is reported through the Event channel, so the dashboard, --print
+// and --json are three consumers of the same stream.
+//
+// A Runner is reused across a queue, which is what lets a dead provider be
+// tried once for the whole run rather than once per paper.
 type Runner struct {
 	cfg config.Config
 	// chains holds one chainState per request kind. A Runner built by

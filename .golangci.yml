@@ -24,6 +24,13 @@ linters:
       rules:
         - name: unused-parameter
           disabled: true
+        # Every exported name in a package meant to be imported must carry a
+        # doc comment. This is the one lint rule that is really a promise to
+        # library users, so it is enforced rather than encouraged.
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - disableStutteringCheck
   exclusions:
     rules:
       - path: _test\.go

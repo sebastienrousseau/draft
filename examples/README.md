@@ -25,28 +25,28 @@ Start with `dashboard` to see the interface itself. Every example is a
 
 ## The examples
 
-| Example | Run | What it shows |
-| ------- | --- | ------------- |
-| [`dashboard`](dashboard/main.go) | `go run ./examples/dashboard` | The real full-screen TUI driven by an in-process engine — queue, phases, live preview and focus timer, all animating; resize to watch the layout adapt |
-| [`providers`](providers/main.go) | `go run ./examples/providers` | Session providers in auto-selection order, install status, default models |
-| [`grounding`](grounding/main.go) | `go run ./examples/grounding` | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation |
-| [`pipeline`](pipeline/main.go) | `go run ./examples/pipeline` | The five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output |
-| [`review`](review/main.go) | `go run ./examples/review` | Surgical-edit enhancement: body-only prompting, frontmatter re-attachment, set resync |
-| [`frontmatter`](frontmatter/main.go) | `go run ./examples/frontmatter` | Metadata extraction, custom `Site` identity, Split/Combine round trip, the three regeneration rules |
+| Example                              | Run                             | What it shows                                                                                                                                          |
+| ------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`dashboard`](dashboard/main.go)     | `go run ./examples/dashboard`   | The real full-screen TUI driven by an in-process engine — queue, phases, live preview and focus timer, all animating; resize to watch the layout adapt |
+| [`providers`](providers/main.go)     | `go run ./examples/providers`   | Session providers in auto-selection order, install status, default models                                                                              |
+| [`grounding`](grounding/main.go)     | `go run ./examples/grounding`   | Claim verification against a source, ledger rendering, grounded prompt, house-rule validation                                                          |
+| [`pipeline`](pipeline/main.go)       | `go run ./examples/pipeline`    | The five-phase pipeline end to end, merged multi-source drafting, streamed events, day-folder output                                                   |
+| [`review`](review/main.go)           | `go run ./examples/review`      | Surgical-edit enhancement: body-only prompting, frontmatter re-attachment, set resync                                                                  |
+| [`frontmatter`](frontmatter/main.go) | `go run ./examples/frontmatter` | Metadata extraction, custom `Site` identity, Split/Combine round trip, the three regeneration rules                                                    |
 
 ## What they demonstrate
 
 Each example is built around one seam of the library, so the package it
 exercises is the package to read next:
 
-| Example | Packages exercised |
-| ------- | ------------------ |
-| `dashboard` | `config`, `engine`, `pipeline`, `internal/tui` |
-| `providers` | `engine` (`Providers`, `ProviderNames`, `LookupProvider`) |
-| `grounding` | `claims`, `prompt`, `rules`, `validate` |
-| `pipeline` | `config`, `engine`, `pipeline` |
-| `review` | `config`, `engine`, `frontmatter`, `pipeline` |
-| `frontmatter` | `frontmatter` |
+| Example       | Packages exercised                                        |
+| ------------- | --------------------------------------------------------- |
+| `dashboard`   | `config`, `engine`, `pipeline`, `internal/tui`            |
+| `providers`   | `engine` (`Providers`, `ProviderNames`, `LookupProvider`) |
+| `grounding`   | `claims`, `prompt`, `rules`, `validate`                   |
+| `pipeline`    | `config`, `engine`, `pipeline`                            |
+| `review`      | `config`, `engine`, `frontmatter`, `pipeline`             |
+| `frontmatter` | `frontmatter`                                             |
 
 The pattern every example shares is the `engine.Engine` seam — a two-method
 interface a demo backend can satisfy in a dozen lines:

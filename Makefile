@@ -12,8 +12,8 @@ build: ## Compile the binary to ./bin/draft
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/draft
 
-.PHONY: install
-install: ## Install the binary into GOPATH/bin
+.PHONY: install-go
+install-go: ## Install the binary into GOPATH/bin (see GNUmakefile for the FHS install)
 	go install -ldflags '$(LDFLAGS)' ./cmd/draft
 
 .PHONY: run
@@ -53,6 +53,12 @@ mutation: ## Mutation-test the security-critical grounding gate
 	go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash ./claims \
 	  --workers 4 --test-cpu 1 --threshold-efficacy 100 --threshold-mcover 100
 
+.PHONY: api
+api: ## Report how the public API moved since the last release
+	@base=$$(git tag --sort=-v:refname | head -1); \
+	  echo "comparing against $$base"; \
+	  go run golang.org/x/exp/cmd/gorelease@latest -base "$$base"
+
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities (same check as CI)
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -64,6 +70,33 @@ vet: ## Run go vet
 .PHONY: fmt
 fmt: ## Format the code
 	gofmt -s -w .
+
+.PHONY: docs-lint
+docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, links)
+	npx --yes markdownlint-cli2
+	python3 -m pip install --quiet --disable-pip-version-check codespell
+	python3 -m codespell_lib
+	python3 scripts/check-links.py
+	python3 scripts/verify-release-versions.py
+	@# Assembling the manual needs no dependencies and catches a root document
+	@# that was added without a page, which is otherwise only found by the
+	@# full mkdocs build in `make manual`.
+	python3 scripts/build-manual.py
+
+.PHONY: manual
+manual: ## Build the rendered user manual into .gen/site
+	python3 -m pip install --quiet --disable-pip-version-check mkdocs mkdocs-material
+	python3 scripts/build-manual.py
+	python3 -m mkdocs build
+
+.PHONY: manual-serve
+manual-serve: ## Serve the manual locally with live reload
+	python3 scripts/build-manual.py
+	python3 -m mkdocs serve
+
+.PHONY: docs-fix
+docs-fix: ## Auto-fix what can be fixed in the docs (table alignment)
+	python3 scripts/align-tables.py
 
 .PHONY: lint
 lint: ## Run golangci-lint if installed
@@ -78,7 +111,7 @@ tidy: ## Tidy module dependencies
 	go mod tidy
 
 .PHONY: check
-check: fmt vet test ## Format, vet, and test
+check: fmt vet test docs-lint ## Format, vet, test, and lint the docs
 
 .PHONY: clean
 clean: ## Remove build artefacts
@@ -86,5 +119,7 @@ clean: ## Remove build artefacts
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@# -h suppresses the filename prefix: MAKEFILE_LIST holds both this file
+	@# and GNUmakefile, and without it awk reads the filename as the target.
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'

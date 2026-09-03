@@ -116,21 +116,21 @@ func main() {
 
 ## API
 
-| Symbol | Signature | Purpose |
-| ------ | --------- | ------- |
-| `Engine` | `interface{ Name() string; Generate(context.Context, Request) (Result, error) }` | The seam every backend implements |
-| `Request` | `struct{ Kind; Prompt string; Temperature float64; NumPredict int; OnChunk func(string) }` | One generation call |
-| `Result` | `struct{ Text string; Truncated bool }` | Its outcome |
-| `Kind` | `KindExtract`, `KindWrite`, `KindEdit` | Which stage the request belongs to, so a backend can pick a model |
-| `Chain` | `func(cfg config.Config) []Engine` | The ordered list of engines to try |
-| `Validate` | `func(cfg config.Config) error` | Rejects an engine name that does not exist; call once before `Chain` |
-| `NewOllama` | `func(cfg config.Config) *Ollama` | Local HTTP backend |
-| `NewSession` | `func(name string, cfg config.Config) (*Session, bool)` | Named session-provider backend; `false` if unknown |
-| `Providers` | `[]Provider` | The registry, in auto-selection preference order |
-| `ProviderNames` | `func() []string` | Every registered name, in that order |
-| `LookupProvider` | `func(name string) (Provider, bool)` | Spec for one provider |
-| `FirstAvailableProvider` | `func(includeExperimental bool) (Provider, bool)` | First registered provider whose CLI is on `PATH` |
-| `ResolveModel` | `func(cfg config.Config, e Engine) string` | The model label an engine will use, for display |
+| Symbol                   | Signature                                                                                  | Purpose                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `Engine`                 | `interface{ Name() string; Generate(context.Context, Request) (Result, error) }`           | The seam every backend implements                                    |
+| `Request`                | `struct{ Kind; Prompt string; Temperature float64; NumPredict int; OnChunk func(string) }` | One generation call                                                  |
+| `Result`                 | `struct{ Text string; Truncated bool }`                                                    | Its outcome                                                          |
+| `Kind`                   | `KindExtract`, `KindWrite`, `KindEdit`                                                     | Which stage the request belongs to, so a backend can pick a model    |
+| `Chain`                  | `func(cfg config.Config) []Engine`                                                         | The ordered list of engines to try                                   |
+| `Validate`               | `func(cfg config.Config) error`                                                            | Rejects an engine name that does not exist; call once before `Chain` |
+| `NewOllama`              | `func(cfg config.Config) *Ollama`                                                          | Local HTTP backend                                                   |
+| `NewSession`             | `func(name string, cfg config.Config) (*Session, bool)`                                    | Named session-provider backend; `false` if unknown                   |
+| `Providers`              | `[]Provider`                                                                               | The registry, in auto-selection preference order                     |
+| `ProviderNames`          | `func() []string`                                                                          | Every registered name, in that order                                 |
+| `LookupProvider`         | `func(name string) (Provider, bool)`                                                       | Spec for one provider                                                |
+| `FirstAvailableProvider` | `func(includeExperimental bool) (Provider, bool)`                                          | First registered provider whose CLI is on `PATH`                     |
+| `ResolveModel`           | `func(cfg config.Config, e Engine) string`                                                 | The model label an engine will use, for display                      |
 
 `Request.OnChunk`, when set, receives streamed text as it arrives — that is what
 drives the dashboard's live preview. `Request.NumPredict` caps output tokens for
@@ -141,18 +141,18 @@ one call; session providers manage their own generation and ignore it.
 Rows are in auto-selection preference order. Invocations were derived from each
 CLI's own `--help`.
 
-| # | Provider | Status | Headless invocation |
-| - | -------- | ------ | ------------------- |
-| 1 | `claude` | stable | `claude -p --output-format stream-json --include-partial-messages --verbose` (stdin) |
-| 2 | `copilot` | stable | `copilot -p --allow-all-tools` |
-| 3 | `codex` | stable | `codex exec` (stdin) |
-| 4 | `agy` | stable | `agy -p` |
-| 5 | `cursor-agent` | stable | `cursor-agent -p --output-format text --force` (stdin) |
-| 6 | `amp` | experimental | `amp -x` |
-| 7 | `crush` | experimental | `crush run` |
-| 8 | `goose` | experimental | `goose run --no-session -t` |
-| 9 | `grok` | stable | `grok --output-format plain --single` |
-| 10 | `qwen` | experimental | `qwen -p` |
+| #  | Provider       | Status       | Headless invocation                                                                  |
+| -- | -------------- | ------------ | ------------------------------------------------------------------------------------ |
+| 1  | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (stdin) |
+| 2  | `copilot`      | stable       | `copilot -p --allow-all-tools`                                                       |
+| 3  | `codex`        | stable       | `codex exec` (stdin)                                                                 |
+| 4  | `agy`          | stable       | `agy -p`                                                                             |
+| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (stdin)                               |
+| 6  | `amp`          | experimental | `amp -x`                                                                             |
+| 7  | `crush`        | experimental | `crush run`                                                                          |
+| 8  | `goose`        | experimental | `goose run --no-session -t`                                                          |
+| 9  | `grok`         | stable       | `grok --output-format plain --single`                                                |
+| 10 | `qwen`         | experimental | `qwen -p`                                                                            |
 
 **Experimental** means the invocation is correct per `--help` but the output has
 not been verified for a full article, so auto-selection skips it unless

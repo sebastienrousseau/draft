@@ -71,14 +71,14 @@ func main() {
 
 ## API
 
-| Symbol | Signature | Purpose |
-| ------ | --------- | ------- |
-| `Errors` | `func(md string) []string` | Hard rule violations that must block a save; empty means clean |
-| `Faithfulness` | `func(article string, records []claims.Record) (errs, warnings []string)` | Cross-check a draft against the verified ledger |
-| `WordCount` | `func(s string) int` | Alphanumeric word tokens |
-| `ContainsEmoji` | `func(s string) bool` | Pictographic or symbol emoji |
-| `EndsSentence` | `func(tail string) bool` | Whether trailing text closes on sentence-ending punctuation |
-| `LooksLikeArticle` | `func(s string) bool` | Whether a string resembles a Markdown article body |
+| Symbol             | Signature                                                                 | Purpose                                                        |
+| ------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `Errors`           | `func(md string) []string`                                                | Hard rule violations that must block a save; empty means clean |
+| `Faithfulness`     | `func(article string, records []claims.Record) (errs, warnings []string)` | Cross-check a draft against the verified ledger                |
+| `WordCount`        | `func(s string) int`                                                      | Alphanumeric word tokens                                       |
+| `ContainsEmoji`    | `func(s string) bool`                                                     | Pictographic or symbol emoji                                   |
+| `EndsSentence`     | `func(tail string) bool`                                                  | Whether trailing text closes on sentence-ending punctuation    |
+| `LooksLikeArticle` | `func(s string) bool`                                                     | Whether a string resembles a Markdown article body             |
 
 ## Errors versus warnings
 

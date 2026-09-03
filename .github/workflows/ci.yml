@@ -98,6 +98,48 @@ jobs:
           # Skip the remote JSON-schema fetch (flaky CDN); config is verified locally.
           verify: false
 
+  # The install contract is a promise to packagers, so it is checked the way a
+  # packager would use it: a staged tree on a clean runner, compared against
+  # the exact file list docs/packaging.md tells them to expect.
+  install:
+    name: install contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "stable"
+          cache: true
+      - name: Stage an install
+        run: make -f GNUmakefile install DESTDIR=/tmp/stage PREFIX=/usr
+      - name: Verify the staged tree
+        run: |
+          set -euo pipefail
+          cat > /tmp/expected.txt <<'MANIFEST'
+          ./usr/bin/draft
+          ./usr/share/bash-completion/completions/draft
+          ./usr/share/doc/draft/CHANGELOG.md
+          ./usr/share/doc/draft/README.md
+          ./usr/share/fish/vendor_completions.d/draft.fish
+          ./usr/share/licenses/draft/LICENSE-APACHE
+          ./usr/share/licenses/draft/LICENSE-MIT
+          ./usr/share/man/man1/draft.1
+          ./usr/share/zsh/site-functions/_draft
+          MANIFEST
+          sed -i 's/^          //' /tmp/expected.txt
+          (cd /tmp/stage && find . -type f | sort) > /tmp/found.txt
+          diff /tmp/expected.txt /tmp/found.txt
+          test -x /tmp/stage/usr/bin/draft
+      - name: The manpage must render without warnings
+        run: |
+          sudo apt-get update && sudo apt-get install -y groff
+          groff -man -Tutf8 -ww /tmp/stage/usr/share/man/man1/draft.1 >/dev/null 2>err.txt
+          if [ -s err.txt ]; then cat err.txt; exit 1; fi
+      - name: Uninstall must leave nothing behind
+        run: |
+          make -f GNUmakefile uninstall DESTDIR=/tmp/stage PREFIX=/usr
+          test -z "$(find /tmp/stage -type f)"
+
   msrv:
     name: msrv (go 1.24)
     runs-on: ubuntu-latest
@@ -114,6 +156,36 @@ jobs:
           go build ./...
           go test ./...
 
+  # Report how the public API moved since the last release. It does not fail:
+  # while the module is 0.0.x the stability policy permits breaking changes,
+  # so the job's value is making them visible and un-missable in review, not
+  # blocking them. When the module reaches 1.x, make this a hard gate.
+  api:
+    name: api surface
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "stable"
+          cache: true
+      - name: Compare against the last release
+        run: |
+          set -uo pipefail
+          go install golang.org/x/exp/cmd/gorelease@latest
+          base=$(git tag --sort=-v:refname | head -1)
+          if [ -z "$base" ]; then echo "no tags yet"; exit 0; fi
+          {
+            echo "## Public API vs \`$base\`"
+            echo
+            echo '```'
+            "$(go env GOPATH)/bin/gorelease" -base "$base" 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          "$(go env GOPATH)/bin/gorelease" -base "$base" 2>&1 | tail -40 || true
+
   vuln:
     name: govulncheck
     runs-on: ubuntu-latest
@@ -123,6 +195,11 @@ jobs:
         with:
           go-version: "stable"
           cache: true
+      # go.sum records a hash per module version; this proves the cache we are
+      # about to build from still matches them.
+      - name: Verify module hashes
+        run: go mod verify
+
       - name: Scan for known vulnerabilities
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

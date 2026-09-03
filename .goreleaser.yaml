@@ -7,6 +7,19 @@ project_name: draft
 before:
   hooks:
     - go mod tidy
+    # Generate the manpage and completions from the CLI definitions, so the
+    # packaged documentation cannot describe a different program than the
+    # binary beside it. `go run` builds the current tree, so these always
+    # match the archive they ship in.
+    # Generated into .gen/, not dist/: `before` hooks run before goreleaser
+    # clears the distribution directory, so writing there makes it refuse to
+    # start with "dist is not empty". Not build/ either — that is tracked, and
+    # holds the release signing certificates.
+    - mkdir -p .gen
+    - sh -c 'go run ./cmd/draft --man > .gen/draft.1'
+    - sh -c 'go run ./cmd/draft --completion bash > .gen/draft.bash'
+    - sh -c 'go run ./cmd/draft --completion zsh > .gen/_draft'
+    - sh -c 'go run ./cmd/draft --completion fish > .gen/draft.fish'
 
 builds:
   - id: draft
@@ -47,6 +60,68 @@ archives:
       - goos: windows
         formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # An archive that is only a binary makes every packager reconstruct the
+    # manpage, the completions and the licence texts themselves.
+    files:
+      - src: .gen/draft.1
+        dst: share/man/man1/draft.1
+      - src: .gen/draft.bash
+        dst: share/bash-completion/completions/draft
+      - src: .gen/_draft
+        dst: share/zsh/site-functions/_draft
+      - src: .gen/draft.fish
+        dst: share/fish/vendor_completions.d/draft.fish
+      - LICENSE-MIT
+      - LICENSE-APACHE
+      - README.md
+      - CHANGELOG.md
+
+# Native packages, built from the same binaries the archives carry rather than
+# from a separate build, so a .deb and a .tar.gz of one version cannot differ.
+nfpms:
+  - id: draft
+    package_name: draft
+    vendor: Sebastien Rousseau
+    homepage: https://draftlib.com
+    maintainer: Sebastien Rousseau <sebastian.rousseau@gmail.com>
+    description: |-
+      Turn research papers into grounded Markdown drafts.
+      Claims are admitted only when their supporting quote occurs verbatim in
+      the source, so the model that writes the article never sees an
+      unverified fact.
+    license: MIT OR Apache-2.0
+    formats: [deb, rpm, apk]
+    # draft reports a missing tool with an actionable message rather than
+    # failing at load, and Markdown sources need nothing at all, so Poppler is
+    # recommended rather than required.
+    recommends:
+      - poppler-utils
+    section: utils
+    contents:
+      - src: .gen/draft.1
+        dst: /usr/share/man/man1/draft.1
+        file_info: { mode: 0644 }
+      - src: .gen/draft.bash
+        dst: /usr/share/bash-completion/completions/draft
+        file_info: { mode: 0644 }
+      - src: .gen/_draft
+        dst: /usr/share/zsh/site-functions/_draft
+        file_info: { mode: 0644 }
+      - src: .gen/draft.fish
+        dst: /usr/share/fish/vendor_completions.d/draft.fish
+        file_info: { mode: 0644 }
+      - src: README.md
+        dst: /usr/share/doc/draft/README.md
+        file_info: { mode: 0644 }
+      - src: CHANGELOG.md
+        dst: /usr/share/doc/draft/CHANGELOG.md
+        file_info: { mode: 0644 }
+      - src: LICENSE-MIT
+        dst: /usr/share/licenses/draft/LICENSE-MIT
+        file_info: { mode: 0644 }
+      - src: LICENSE-APACHE
+        dst: /usr/share/licenses/draft/LICENSE-APACHE
+        file_info: { mode: 0644 }
 
 checksum:
   name_template: "checksums.txt"

@@ -40,14 +40,14 @@ That has two consequences:
 
 Ranked by value ÷ effort:
 
-| # | Change | Lever | Status |
-| - | ------ | ----- | ------ |
-| 1 | Per-`Kind` engine routing | ~13 session calls per paper → 1 | shipped 0.0.29 |
-| 2 | Ledger resume | A failed run costs seconds, not 10 minutes | shipped 0.0.29 |
-| 3 | `--dry-run` | Stop committing to a long run blind | shipped 0.0.29 |
-| 4 | Queue-sticky fallback | Removes N× repeated dead-provider retries | shipped 0.0.29 |
-| 5 | Extraction ETA | Tells you if this is 2 or 20 minutes | shipped 0.0.29 |
-| 6 | Extraction batching | 3–4× off the dominant cost | **proposed** — needs the recall experiment |
+| # | Change                    | Lever                                      | Status                                     |
+| - | ------------------------- | ------------------------------------------ | ------------------------------------------ |
+| 1 | Per-`Kind` engine routing | ~13 session calls per paper → 1            | shipped 0.0.29                             |
+| 2 | Ledger resume             | A failed run costs seconds, not 10 minutes | shipped 0.0.29                             |
+| 3 | `--dry-run`               | Stop committing to a long run blind        | shipped 0.0.29                             |
+| 4 | Queue-sticky fallback     | Removes N× repeated dead-provider retries  | shipped 0.0.29                             |
+| 5 | Extraction ETA            | Tells you if this is 2 or 20 minutes       | shipped 0.0.29                             |
+| 6 | Extraction batching       | 3–4× off the dominant cost                 | **proposed** — needs the recall experiment |
 
 ---
 
@@ -58,11 +58,11 @@ Ranked by value ÷ effort:
 `engine.Chain(cfg)` returns **one chain for every request kind**. But the
 workload is lopsided:
 
-| Kind | Calls per paper | Nature | Wants |
-| ---- | --------------- | ------ | ----- |
-| `KindExtract` | one per section (~12) | mechanical: find quotes, copy them verbatim | cheap, local, parallel |
-| `KindWrite` | 1 (+ retries/continuations) | the quality-critical call | the best writer available |
-| `KindEdit` | 1, only on `--review` | surgical find/replace | either |
+| Kind          | Calls per paper             | Nature                                      | Wants                     |
+| ------------- | --------------------------- | ------------------------------------------- | ------------------------- |
+| `KindExtract` | one per section (~12)       | mechanical: find quotes, copy them verbatim | cheap, local, parallel    |
+| `KindWrite`   | 1 (+ retries/continuations) | the quality-critical call                   | the best writer available |
+| `KindEdit`    | 1, only on `--review`       | surgical find/replace                       | either                    |
 
 Today you choose one backend for all of it. Choosing `claude` burns ~13 session
 calls per paper on work a 4B local model does fine. Choosing `ollama` gets local
@@ -147,14 +147,14 @@ including cross-kind stickiness. `NewRoutedRunner` gives each kind its own.
 
 ### Files
 
-| File | Change |
-| ---- | ------ |
-| `config/config.go` | 3 fields; read `DRAFT_{EXTRACT,WRITE,EDIT}_ENGINE`; no clamping needed (validated by `engine`) |
-| `engine/engine.go` | extract `chainForName`; add `ChainFor`; `Chain` delegates; `Validate` covers all four names |
+| File                   | Change                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `config/config.go`     | 3 fields; read `DRAFT_{EXTRACT,WRITE,EDIT}_ENGINE`; no clamping needed (validated by `engine`)                                     |
+| `engine/engine.go`     | extract `chainForName`; add `ChainFor`; `Chain` delegates; `Validate` covers all four names                                        |
 | `pipeline/pipeline.go` | `chainState`, `chains` map, `chainFor`, `generate` uses the per-kind cursor; `Run` no longer resets `engineName` from `engines[0]` |
-| `cmd/draft/main.go` | use `NewRoutedRunner`; `--extract-engine` / `--write-engine` flags |
-| `internal/tui/tui.go` | same |
-| docs | `engine/README.md`, `config/README.md`, root README config table |
+| `cmd/draft/main.go`    | use `NewRoutedRunner`; `--extract-engine` / `--write-engine` flags                                                                 |
+| `internal/tui/tui.go`  | same                                                                                                                               |
+| docs                   | `engine/README.md`, `config/README.md`, root README config table                                                                   |
 
 ### Semantics to pin with tests
 
@@ -201,7 +201,7 @@ reusing the existing `slugify`. Also add a `TestLedgersDoNotCollideAcrossJobs`.
 
 ### Design
 
-```
+```text
 draft --resume paper.pdf
 ```
 
@@ -242,12 +242,12 @@ func ParseLedger(ledger, source string) (records []Record, dropped int)
 
 ### Files
 
-| File | Change |
-| ---- | ------ |
-| `claims/claims.go` | `ParseLedger` (strip everything before the first `CLAIM:`, delegate to `Parse`) |
-| `pipeline/pipeline.go` | per-source ledger name; `resumeLedger()`; `run` skips `PhaseClaims` on a hit |
-| `config/config.go` | `Resume bool` |
-| `cmd/draft/main.go` | `--resume` flag + help entry |
+| File                   | Change                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `claims/claims.go`     | `ParseLedger` (strip everything before the first `CLAIM:`, delegate to `Parse`) |
+| `pipeline/pipeline.go` | per-source ledger name; `resumeLedger()`; `run` skips `PhaseClaims` on a hit    |
+| `config/config.go`     | `Resume bool`                                                                   |
+| `cmd/draft/main.go`    | `--resume` flag + help entry                                                    |
 
 ### Semantics to pin with tests
 
@@ -373,11 +373,11 @@ correctness but **claim quality** on a 4B model given 18,000 characters.
 
 **Proposed experiment before any code**, on a fixed corpus of ~10 papers:
 
-| Arm | Sections per call |
-| --- | ----------------- |
-| A (control) | 1 |
-| B | 2 |
-| C | 4 |
+| Arm         | Sections per call |
+| ----------- | ----------------- |
+| A (control) | 1                 |
+| B           | 2                 |
+| C           | 4                 |
 
 Measure: wall clock, claims verified, claims dropped, and — the one that
 matters — claims *found by A but missed by B/C*. Batching is worth shipping

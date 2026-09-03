@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Cheap checks only. Anything slow enough to make a commit feel sluggish
+# belongs in CI, not here — a hook people disable protects nothing.
+#
+#   pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.(pem|golden)$|testdata/'
+      - id: end-of-file-fixer
+        exclude: '\.(pem|golden)$|testdata/'
+      - id: check-merge-conflict
+      - id: check-yaml
+        # mkdocs.yml uses a !!python/object tag that mkdocs understands and
+        # PyYAML's safe loader rejects.
+        exclude: '^mkdocs\.yml$'
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        additional_dependencies: [tomli]
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt -s
+        entry: bash -c 'test -z "$(gofmt -s -l .)" || { gofmt -s -l .; exit 1; }'
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: check-links
+        name: intra-repo links
+        entry: python3 scripts/check-links.py
+        language: system
+        types: [markdown]
+        pass_filenames: false

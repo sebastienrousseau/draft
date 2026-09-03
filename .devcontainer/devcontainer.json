@@ -1,0 +1,26 @@
+{
+  "name": "draft",
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.24-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" }
+  },
+  "postCreateCommand": ".devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "DavidAnson.vscode-markdownlint",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "remoteEnv": {
+    "GOFLAGS": "-buildvcs=false"
+  }
+}

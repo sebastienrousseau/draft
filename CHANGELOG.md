@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-09-03
+
 ### Security
 
 - **Bounded the blast radius of a crafted source document.** `draft` puts a
@@ -64,6 +66,20 @@ series until `0.0.999`.
   model, a hash of the extraction instructions, the ledger digest and the
   SHA-256 of every source file.
 
+- **A Unix install contract.** `GNUmakefile` implements `make install` and
+  `make uninstall` honouring `PREFIX` and `DESTDIR`, installing to FHS
+  paths, and CI verifies the staged tree against the exact list
+  `docs/packaging.md` promises packagers.
+- **`draft --man`** generates a roff manual page from the same tables
+  `--help` renders, so the packaged documentation cannot describe a
+  different program than the binary beside it.
+- **Native packages.** Releases now carry `.deb`, `.rpm` and `.apk` built
+  from the same binaries the archives do, and the archives themselves now
+  contain the manpage, shell completions and licence texts rather than a
+  bare binary.
+- **A release dry run** (`workflow_dispatch`), so new release machinery can
+  be exercised before a tag makes its failure permanent.
+
 ### Changed
 
 - **Claim extractions are cached by content** rather than by date. The only
@@ -88,18 +104,34 @@ series until `0.0.999`.
   every read of it in a concurrent program. Use `engine.Providers()` to read and
   `engine.Register` to extend.
 
+- Bumped `actions/attest-build-provenance` v4.1.1 -> v4.2.2 (both call
+  sites in `release.yml`).
+
+- **Documentation is gated.** markdownlint, codespell, an intra-repo link
+  and heading-anchor check, and a version-consistency check all run on every
+  push. The repository had 615 markdownlint findings and no gate; it now has
+  none.
+- **Every exported name must carry a doc comment** (revive's `exported`
+  rule), and a new `api surface` job reports how the public API moved since
+  the last release.
+- Bumped `anchore/sbom-action/download-syft` v0.24.0 -> v0.24.2.
+
 ### Documentation
 
 - **`docs/AUDIT-2026-09.md`** — a full architecture, performance, security and
   product audit against 2026-2027 market context, with the roadmap these changes
   implement.
 
-## [0.0.33] - 2026-08-11
-
-### Changed
-
-- Bumped `actions/attest-build-provenance` v4.1.1 -> v4.2.2 (both call
-  sites in `release.yml`).
+- **A rendered user manual, a development guide and decision records.**
+  `DEVELOPMENT.md` maps every CI job to the one command that reproduces it
+  locally; `docs/ARCHITECTURE.md` describes the package graph, the five
+  phases and the invariants each has a test for; `docs/adr/` records five
+  decisions with their alternatives and what each costs. The manual is
+  assembled from these same files, so a chapter cannot disagree with the
+  document it came from.
+- **`docs/packaging.md` and `pkg/`** for distribution maintainers, plus
+  `supply-chain/` recording what is depended on and how it is pinned.
+- **`GOVERNANCE.md`, `SUPPORT.md`, `AGENTS.md` and `CITATION.cff`.**
 
 ## [0.0.32] - 2026-08-04
 
@@ -182,6 +214,21 @@ series until `0.0.999`.
   sections rather than an extrapolation from the first (which settles the
   engine chain and warms the model, and so overstates badly).
 
+- `DRAFT_CALL_TIMEOUT` bounds a single generation call (default 1800s, `0`
+  disables), so a wedged provider CLI cannot hang a run forever. The Ollama
+  backend uses its own HTTP client with dial and response-header timeouts
+  rather than the timeout-free `http.DefaultClient`.
+- `engine.Validate` reports an unknown engine name, which `Chain` cannot.
+- `DoneEvent` carries `Duration` and per-phase `Timings`, surfaced in `--json`
+  as `duration_ms` and `phases_ms`.
+- `WarnEvent` distinguishes a non-fatal problem from ordinary progress, and
+  `--json` records them per job as `warnings`.
+- `Config.Warnings` reports configuration that was recovered from rather than
+  applied silently; every numeric environment variable is now clamped at both
+  ends instead of only floored.
+- A README for each of the eight importable packages, with a runnable quick
+  start and an API table.
+
 ### Fixed
 
 - **Two papers drafted on the same day overwrote each other's claim ledger.**
@@ -191,31 +238,6 @@ series until `0.0.999`.
   per job, resetting the fallback cursor every time, so a queue of twenty
   papers re-tried and re-reported every dead backend twenty times. One Runner
   now serves the queue and keeps the backend it settled on.
-
-### Security
-
-- **A fabricated claim could pass the grounding gate using invalid UTF-8.**
-  Quote-to-source comparison lowercases both sides, and `strings.ToLower` maps
-  every invalid UTF-8 byte to U+FFFD — so two *different* invalid byte
-  sequences normalised to the same text and a quote could match a source it
-  does not occur in. That is a bypass of the one invariant the claim ledger
-  rests on. `claims.Verify` now rejects a quote that is not valid UTF-8 or that
-  contains a replacement character; accented and CJK quotes are unaffected.
-  Found by `FuzzParse`, and its input is kept as a corpus seed.
-- **Prompts now go over stdin for `codex` and `cursor-agent`.** A prompt passed
-  as a command-line argument is visible in a process listing for the duration
-  of the call, along with the source excerpts it quotes. Stdin delivery was
-  confirmed by running each CLI; `copilot`, `agy`, `grok` and `goose` were
-  confirmed *not* to read stdin and keep argument delivery.
-- **`OLLAMA_HOST` is validated.** A value that is not a valid `http`/`https`
-  URL is refused rather than concatenated into a request URL, and a host that
-  is not loopback is reported — a remote Ollama means prompts and verbatim
-  source text leave the machine.
-- **Extraction helpers are given absolute paths.** A source file named `-x.pdf`
-  would otherwise be parsed as a flag by `pdftotext` or `textutil`. Their
-  output is also capped, and source files are size-limited.
-
-### Fixed
 
 - **`--review` did not check faithfulness.** It gated only on the house style
   rules, so a surgical edit could introduce an ungrounded number or an
@@ -270,22 +292,28 @@ series until `0.0.999`.
 - **`pdftotext` failures surface the tool's own message** instead of
   `exit status 1`.
 
-### Added
+### Security
 
-- `DRAFT_CALL_TIMEOUT` bounds a single generation call (default 1800s, `0`
-  disables), so a wedged provider CLI cannot hang a run forever. The Ollama
-  backend uses its own HTTP client with dial and response-header timeouts
-  rather than the timeout-free `http.DefaultClient`.
-- `engine.Validate` reports an unknown engine name, which `Chain` cannot.
-- `DoneEvent` carries `Duration` and per-phase `Timings`, surfaced in `--json`
-  as `duration_ms` and `phases_ms`.
-- `WarnEvent` distinguishes a non-fatal problem from ordinary progress, and
-  `--json` records them per job as `warnings`.
-- `Config.Warnings` reports configuration that was recovered from rather than
-  applied silently; every numeric environment variable is now clamped at both
-  ends instead of only floored.
-- A README for each of the eight importable packages, with a runnable quick
-  start and an API table.
+- **A fabricated claim could pass the grounding gate using invalid UTF-8.**
+  Quote-to-source comparison lowercases both sides, and `strings.ToLower` maps
+  every invalid UTF-8 byte to U+FFFD — so two *different* invalid byte
+  sequences normalised to the same text and a quote could match a source it
+  does not occur in. That is a bypass of the one invariant the claim ledger
+  rests on. `claims.Verify` now rejects a quote that is not valid UTF-8 or that
+  contains a replacement character; accented and CJK quotes are unaffected.
+  Found by `FuzzParse`, and its input is kept as a corpus seed.
+- **Prompts now go over stdin for `codex` and `cursor-agent`.** A prompt passed
+  as a command-line argument is visible in a process listing for the duration
+  of the call, along with the source excerpts it quotes. Stdin delivery was
+  confirmed by running each CLI; `copilot`, `agy`, `grok` and `goose` were
+  confirmed *not* to read stdin and keep argument delivery.
+- **`OLLAMA_HOST` is validated.** A value that is not a valid `http`/`https`
+  URL is refused rather than concatenated into a request URL, and a host that
+  is not loopback is reported — a remote Ollama means prompts and verbatim
+  source text leave the machine.
+- **Extraction helpers are given absolute paths.** A source file named `-x.pdf`
+  would otherwise be parsed as a flag by `pdftotext` or `textutil`. Their
+  output is also capped, and source files are size-limited.
 
 ### Changed
 
@@ -408,6 +436,7 @@ series until `0.0.999`.
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     checksums.txt
   ```
+
 - **`--json`** runs headless and emits one JSON object per job (JSON Lines)
   on stdout — source, output path, engine, mode, word count, and status —
   leaving stderr for human progress, so runs can be piped into other tools.
