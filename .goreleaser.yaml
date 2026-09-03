@@ -157,6 +157,12 @@ changelog:
   disable: true
 
 release:
+  # Re-running a tag replaces the release's assets rather than failing because
+  # it already exists. That makes recovery from a mid-run failure a re-run
+  # instead of a manual delete — at the cost that an accidental re-run can
+  # overwrite artifacts people may already hold, so treat a re-run of a
+  # published tag as deliberate.
+  mode: replace
   github:
     owner: sebastienrousseau
     name: draft

@@ -169,4 +169,29 @@ Before the first use of new release machinery, run the workflow's dry-run mode
 (`workflow_dispatch` with `dry_run: true`), which exercises everything except
 publishing.
 
+### Recovering a failed release
+
+If `release.yml` fails partway, some artifacts may already be published while
+later steps — provenance attestation, the macOS installer, the verification
+job — never ran. A re-run has to start from a commit whose workflow contains
+the fix, and **the tag decides which workflow file runs**, so fixing `main` is
+not enough on its own:
+
+```console
+# 1. Land the fix on main and confirm CI is green.
+# 2. Remove the incomplete release, keeping nothing stale behind.
+gh release delete vX.Y.Z --yes            # the tag survives this
+# 3. Move the tag onto the fixed commit and re-push, which re-triggers the
+#    workflow. Verify the signature before pushing, since a re-tag re-signs.
+git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z
+git tag -a vX.Y.Z -m "..." && git tag -v vX.Y.Z
+git push origin vX.Y.Z
+```
+
+Check the download counts first (`gh release view vX.Y.Z --json assets`). This
+is only safe while nobody holds the old artifacts: rebuilt binaries are not
+guaranteed byte-identical, so anyone who already downloaded would see a
+checksum mismatch. If there are downloads, ship the fix as the next version
+instead.
+
 Verifying a release is documented in [`docs/RELEASE_SECURITY.md`](docs/RELEASE_SECURITY.md).
