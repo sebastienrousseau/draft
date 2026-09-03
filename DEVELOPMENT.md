@@ -153,6 +153,46 @@ Worth knowing before optimising anything. On a 14-section paper:
 Micro-optimising the Go code has no product effect. The wins are in call
 count, caching and provider choice. See [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md).
 
+## The documentation site
+
+The manual is published to <https://sebastienrousseau.com/draft/> by the
+`docs` workflow on every push to `main`. Its pages are assembled from this
+repository's Markdown by `scripts/build-manual.py`; nothing is authored in the
+site, so a chapter cannot disagree with the file it came from.
+
+```console
+make manual        # build into .gen/site
+make manual-serve  # live reload while editing
+```
+
+### The site is served behind a Content-Security-Policy
+
+The custom domain is fronted by Cloudflare, which adds a domain-wide CSP with
+an **allowlist of image origins**. GitHub Pages cannot set response headers, so
+this rule lives in the Cloudflare configuration and not in this repository.
+
+The practical consequence: **an external image added to the documentation will
+render on GitHub and be silently blocked on the site.** The README's shields.io
+badges hit exactly this on the day the manual first published — the markup was
+correct and the images returned `200 image/svg+xml`, but the browser refused to
+load them because `img.shields.io` was not in `img-src`. It has since been
+added, so the badges render; the constraint itself has not gone away.
+
+The failure gives you nothing to go on: no server-side error, no CI failure,
+just an empty space where the image should be. If you add an image from a new
+origin, add that origin to the CSP's `img-src` too. To check what the site
+currently allows:
+
+```console
+curl -sSI https://sebastienrousseau.com/draft/ | grep -i content-security-policy
+```
+
+And to confirm a page's external resources are actually permitted, compare the
+origins it references against that header — a blocked resource produces no
+server-side error, only an empty space and a console message.
+
+---
+
 ## Release model
 
 Versions are `0.0.x` until `0.0.999`; the CLI surface and output layout are
