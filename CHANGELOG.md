@@ -10,6 +10,14 @@ series until `0.0.999`.
 
 ### Changed
 
+- **The pipeline package is split by phase.** The 1,500-line `pipeline.go` god
+  file is now four focused files — `grounding.go`, `composing.go`, `saving.go`
+  and `enginechain.go` — each holding one phase's methods, with `pipeline.go`
+  left as the Runner type and its orchestration. Behaviour, the public API and
+  every test are unchanged; it is a navigability change, verified by the full
+  race suite and the claims mutation gate. A deeper redesign of the Runner's
+  shared engine-chain state remains a separate reviewed effort, because that
+  state feeds the grounding gate directly.
 - **Table recall is now measured, not just claimed.** A deterministic corpus
   (`claims/testdata/tables/`) renders the same table the way each reader
   produces it — Docling as an intact Markdown table, pdftotext as its

@@ -63,6 +63,11 @@ against. When they disagree, a draft fails a rule it was never told about.
 ## The pipeline, phase by phase
 
 `pipeline.Runner.run` walks five phases, reporting each on the event channel.
+The phases live in files named for them — `grounding.go` (read, section, extract,
+verify), `composing.go` (write, continue, validate), `saving.go` (the day-folder
+set and its provenance) and `enginechain.go` (the routing and fallback) — so the
+Runner's orchestration in `pipeline.go` reads as the sequence of phases rather
+than their internals.
 
 | # | Phase             | What happens                                                                       | Cost                           |
 | - | ----------------- | ---------------------------------------------------------------------------------- | ------------------------------ |
