@@ -106,6 +106,11 @@ type Config struct {
 	// disables caching entirely.
 	CacheDir string
 
+	// Version is the release of draft that is running, set by the binary
+	// rather than read from the environment. It is written into every
+	// article's provenance, so a reader can tell which draft made it.
+	Version string
+
 	// Warnings records configuration problems that were recovered from rather
 	// than fatal: an unreadable home directory, an out-of-range tunable, a
 	// non-loopback Ollama host. The CLI prints them to stderr so a silent

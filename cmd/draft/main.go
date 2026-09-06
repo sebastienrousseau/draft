@@ -155,6 +155,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 
 	cfg := config.Load(flags)
+	cfg.Version = version
 	if clearCache {
 		// Read the configured location before --no-cache can blank it, so
 		// `--clear-cache --no-cache` still clears the right directory.
@@ -202,6 +203,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	// fallback cursor every time, so a dead provider was retried — and
 	// re-reported — once per paper instead of once per run.
 	runner := pipeline.NewRoutedRunner(cfg, nil)
+	defer func() { _ = runner.Close() }()
 
 	if dryRun {
 		if runDryRun(ctx, cfg, runner, jobs, stdout, stderr) > 0 {

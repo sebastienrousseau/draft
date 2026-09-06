@@ -51,6 +51,10 @@ func TestHelperProcess(t *testing.T) {
 		os.Stdout.WriteString(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"only deltas"}}}` + "\n")
 	case "stream-json-error":
 		os.Stdout.WriteString(`{"type":"result","subtype":"error_max_turns","is_error":true,"result":""}` + "\n")
+	case "acp-agent":
+		acpFakeAgent(false)
+	case "acp-agent-badversion":
+		acpFakeAgent(true)
 	case "stream-json-refusal":
 		// Observed from claude 2.x: a refusal result, nothing on stderr,
 		// and a non-zero exit.

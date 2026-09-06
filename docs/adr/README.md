@@ -14,6 +14,7 @@ Format: [MADR](https://adr.github.io/madr/)-flavoured, deliberately short.
 | [0003](0003-session-cli-backends.md)               | Drive already-authenticated agent CLIs instead of handling API keys      | Accepted |
 | [0004](0004-no-tools-granted-to-providers.md)      | Grant provider subprocesses no tools, and run them in an empty directory | Accepted |
 | [0005](0005-content-addressed-extraction-cache.md) | Address the extraction cache by content, not by date                     | Accepted |
+| [0006](0006-agent-client-protocol-transport.md)    | Add an Agent Client Protocol transport beside the one-shot CLIs          | Accepted |
 
 ## Writing a new one
 

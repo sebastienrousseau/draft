@@ -276,17 +276,48 @@ takes the first installed provider, skipping experimental rows unless
 | #  | Provider       | Status       | Headless invocation                                                                                           |
 | -- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
 | 1  | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (live-streamed, prompt on stdin) |
-| 2  | `copilot`      | stable       | `copilot -p --allow-all-tools`                                                                                |
+| 2  | `copilot`      | stable       | `copilot -p`                                                                                                  |
 | 3  | `codex`        | stable       | `codex exec` (prompt on stdin)                                                                                |
 | 4  | `agy`          | stable       | `agy -p` (Google Antigravity)                                                                                 |
-| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (prompt on stdin)                                              |
+| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text` (prompt on stdin)                                                      |
 | 6  | `amp`          | experimental | `amp -x`                                                                                                      |
 | 7  | `crush`        | experimental | `crush run`                                                                                                   |
 | 8  | `goose`        | experimental | `goose run --no-session -t`                                                                                   |
 | 9  | `grok`         | stable       | `grok --output-format plain --single`                                                                         |
 | 10 | `qwen`         | experimental | `qwen -p`                                                                                                     |
+| 11 | `claude-acp`   | stable       | `claude-code-acp` over the Agent Client Protocol                                                              |
+| 12 | `gemini-acp`   | experimental | `gemini --experimental-acp` over the Agent Client Protocol                                                    |
+| 13 | `codex-acp`    | experimental | `codex-acp` over the Agent Client Protocol                                                                    |
 
 `go run ./examples/providers` shows which are installed on your machine.
+
+### Agent Client Protocol
+
+The `-acp` providers speak the [Agent Client Protocol](https://agentclientprotocol.com):
+JSON-RPC over the agent's stdio, one process for the whole run, and a fresh
+session for every call. A session carries conversation state, and claim
+extraction needs each section read on its own, so the process is reused and
+the session never is. The protocol reports why a turn stopped, so a declined
+prompt arrives as a typed outcome rather than an exit status.
+
+What ACP does not buy is speed. Measured against `claude-code-acp` 0.16, a warm
+second session costs about what a cold `claude -p` costs, because the adapter
+starts an agent per session underneath. Use it for the standard transport and
+the cleaner failure semantics, not for the clock.
+
+### When a model declines a prompt
+
+A model can refuse a section — incident reports that describe an intrusion
+are the usual case — and that is a verdict on the text, not on the provider.
+`draft` keeps the engine where it is, offers that one prompt to the next
+engine in the chain, and goes back to the preferred engine for the next
+prompt. A section that every engine declines is recorded as having no claims;
+an article that every engine declines fails its own job and nothing else.
+
+The engine that actually wrote an article is recorded in its frontmatter as
+`draft_engine`, with `draft_model` and `draft_version` beside it, so the
+provenance of a piece written by an alternate is in the artefact, not only in
+the run log.
 
 ---
 

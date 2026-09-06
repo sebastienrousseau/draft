@@ -8,6 +8,28 @@ series until `0.0.999`.
 
 ## [0.0.34] - 2026-09-06
 
+### Added
+
+- **An Agent Client Protocol transport.** `--engine claude-acp` drives
+  `claude-code-acp` over JSON-RPC on stdio: one agent process for the run, a
+  fresh session per call, and a typed stop reason in place of an exit status.
+  `gemini-acp` and `codex-acp` are registered as experimental. The engine is
+  closed at exit through `pipeline.Runner.Close`. Measured against the
+  adapter, a warm session costs about what a cold one-shot call costs; the
+  gain is the standard transport and the failure semantics, not wall clock.
+- **Refusal-aware routing.** When the active engine declines a prompt, that
+  one prompt is offered to the engines behind it in the chain without moving
+  the cursor; the next prompt returns to the preferred engine. A section that
+  every engine declines is recorded as empty; an article that every engine
+  declines fails its own job only.
+- **Provenance in the frontmatter.** Every generated set now carries
+  `draft_engine`, `draft_model` and `draft_version`, naming the backend that
+  actually wrote the article, which may be an alternate the preferred engine
+  handed it to. **Breaking under the stability guarantees**: three new
+  frontmatter keys are emitted. They are omitted when unknown, so a set
+  regenerated with `--frontmatter` keeps what it has and gains nothing it
+  cannot prove.
+
 ### Fixed
 
 - **A refused prompt no longer demotes the provider for the rest of the

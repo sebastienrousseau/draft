@@ -51,6 +51,11 @@ type Provider struct {
 	// StreamJSON parses the Claude Code stream-json event format instead of raw
 	// text, forwarding token deltas as they arrive for a smooth live preview.
 	StreamJSON bool
+	// ACP drives the agent over the Agent Client Protocol instead of a
+	// one-shot headless invocation: one long-lived process, a fresh session
+	// per call, and a typed stop reason instead of an exit status. Bin and
+	// Args start the agent; the prompt fields are ignored.
+	ACP bool
 }
 
 // defaultProviders is the built-in registry of supported session CLIs, in
@@ -94,6 +99,13 @@ func defaultProviders() []Provider {
 		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
 		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
 		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+		// Agent Client Protocol transports. claude-acp is verified end to end
+		// against @zed-industries/claude-code-acp 0.16; the others speak the
+		// same protocol per their documentation but their output has not
+		// been checked for a full article.
+		{Name: "claude-acp", Bin: "claude-code-acp", DefaultModel: "sonnet", ACP: true},
+		{Name: "gemini-acp", Bin: "gemini", Args: []string{"--experimental-acp"}, ACP: true, Experimental: true},
+		{Name: "codex-acp", Bin: "codex-acp", ACP: true, Experimental: true},
 	}
 }
 

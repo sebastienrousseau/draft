@@ -131,21 +131,32 @@ func chainForName(cfg config.Config, name string) []Engine {
 				continue
 			}
 			if available(p.Bin) {
-				if s, ok := NewSession(p.Name, cfg); ok {
-					chain = append(chain, s)
+				if e, ok := NewEngine(p.Name, cfg); ok {
+					chain = append(chain, e)
 				}
 			}
 		}
 		return append(chain, ollama)
 	default:
-		if s, ok := NewSession(name, cfg); ok {
-			return []Engine{s, ollama}
+		if e, ok := NewEngine(name, cfg); ok {
+			return []Engine{e, ollama}
 		}
 		// An unknown name reaching here means Validate was not called. Fall
 		// back rather than panic, but never pretend the requested engine ran:
 		// Validate is what turns a typo into a clean exit.
 		return []Engine{ollama}
 	}
+}
+
+// NewEngine builds the backend for a registered provider, choosing the
+// transport the provider declares: an ACP agent for one marked ACP, a
+// one-shot headless invocation otherwise. It returns false for an unknown
+// name.
+func NewEngine(name string, cfg config.Config) (Engine, bool) {
+	if p, ok := LookupProvider(name); ok && p.ACP {
+		return NewACP(name, cfg)
+	}
+	return NewSession(name, cfg)
 }
 
 // Validate reports whether cfg names an engine that exists. Chain has to

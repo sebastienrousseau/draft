@@ -151,7 +151,9 @@ func TestPromptStaysOutOfArgvWhereverPossible(t *testing.T) {
 	// NDJSON turn protocol. Both keep argv until that changes.
 	argvOnly := map[string]bool{"copilot": true, "agy": true, "amp": true, "crush": true, "qwen": true}
 	for _, p := range Providers() {
-		if p.PromptViaStdin || p.PromptFileFlag != "" || argvOnly[p.Name] {
+		// An ACP agent receives the prompt inside a JSON-RPC frame on its
+		// stdin; argv only ever carries the fixed start-up arguments.
+		if p.ACP || p.PromptViaStdin || p.PromptFileFlag != "" || argvOnly[p.Name] {
 			continue
 		}
 		t.Errorf("provider %q delivers the prompt in argv but is not on the exception list", p.Name)

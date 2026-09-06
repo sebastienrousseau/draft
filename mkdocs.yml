@@ -65,6 +65,7 @@ nav:
       - 0003 Session CLI backends: docs/adr/0003-session-cli-backends.md
       - 0004 No tools for providers: docs/adr/0004-no-tools-granted-to-providers.md
       - 0005 Content-addressed cache: docs/adr/0005-content-addressed-extraction-cache.md
+      - 0006 Agent Client Protocol: docs/adr/0006-agent-client-protocol-transport.md
       - Template: docs/adr/template.md
   - Distribution:
       - Packaging: docs/packaging.md

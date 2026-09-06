@@ -13,9 +13,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,6 +194,11 @@ type Runner struct {
 	events chan<- Event
 	// engineName tracks the backend that actually produced the current output.
 	engineName string
+	// wroteWith is the engine that wrote the current article when it was not
+	// the chain's active one: a refusal by the active writer routes that one
+	// article to the next engine without moving the cursor, and the article's
+	// provenance must name the backend that actually wrote it.
+	wroteWith engine.Engine
 	// ledgerPath is the verified-claim-ledger scratch file for the current run,
 	// removed on success unless the user asked to keep artifacts.
 	ledgerPath string
@@ -303,6 +310,7 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 	r.timings = nil
 	r.sourceDigests = nil
 	r.ledgerDigest = ""
+	r.wroteWith = nil
 
 	// The cursor is deliberately NOT reset here. A Runner reused across a queue
 	// keeps the backend it settled on, so a dead provider is tried once for the
@@ -642,6 +650,13 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 				defer wg.Done()
 				defer func() { <-sem }()
 				text, err := r.extractOne(ctx, sections[i].Body, pinned)
+				if errors.Is(err, engine.ErrRefused) {
+					// Workers bypass the chain, so the chain's own routing
+					// for a refusal never runs here. Offer the section to
+					// the engines behind the pinned one ourselves; the
+					// cursor stays put either way.
+					text, err = r.extractAlternates(ctx, sections[i].Body, err)
+				}
 				mu.Lock()
 				defer mu.Unlock()
 				if err != nil {
@@ -806,6 +821,27 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 		}
 	}
 	return text, nil
+}
+
+// extractAlternates asks each engine behind the extraction chain's active one
+// for a section the active engine declined. It returns the first answer, or
+// the original refusal when every alternate declines or fails.
+func (r *Runner) extractAlternates(ctx context.Context, body string, refusal error) (string, error) {
+	cs := r.chainFor(engine.KindExtract)
+	if cs == nil || cs.cur >= len(cs.engines) {
+		return "", refusal
+	}
+	req := engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature}
+	res, alt, ok := r.tryAlternates(ctx, cs, cs.cur, req)
+	if !ok {
+		return "", refusal
+	}
+	if key := r.extractKey(body, alt); key != "" {
+		if putErr := r.cache.Put(key, res.Text); putErr != nil {
+			r.warn("could not cache the extraction: " + putErr.Error())
+		}
+	}
+	return res.Text, nil
 }
 
 // extractKey addresses one section's extraction against a specific backend.
@@ -1025,9 +1061,17 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		// Demoting the chain here downgrades every remaining job in the queue
 		// because one section of one paper described something the model
 		// would not touch, and with a single pinned engine it strands the
-		// queue with nothing to fall back to. Keep the engine; let the caller
-		// decide what a declined prompt means for its stage.
+		// queue with nothing to fall back to. Keep the cursor where it is and
+		// offer this one prompt to the engines behind it: another model may
+		// well answer, and the next prompt goes back to the preferred one.
 		if errors.Is(err, engine.ErrRefused) {
+			if res, alt, ok := r.tryAlternates(ctx, cs, cs.cur, req); ok {
+				if req.Kind == engine.KindWrite {
+					r.wroteWith = alt
+					r.emit(EngineEvent(alt.Name()))
+				}
+				return res, nil
+			}
 			return engine.Result{}, err
 		}
 		lastErr = err
@@ -1046,14 +1090,74 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 	return engine.Result{}, lastErr
 }
 
+// tryAlternates offers one declined request to the engines after position
+// from in the chain, in order, without moving the cursor. It reports the
+// first answer and the engine that gave it. A further refusal moves on; any
+// other failure moves on too, because an alternate that is offline is no
+// reason to demote the preferred engine, which is still healthy.
+func (r *Runner) tryAlternates(ctx context.Context, cs *chainState, from int, req engine.Request) (engine.Result, engine.Engine, bool) {
+	declined := cs.engines[from]
+	for j := from + 1; j < len(cs.engines); j++ {
+		if ctx.Err() != nil {
+			return engine.Result{}, nil, false
+		}
+		alt := cs.engines[j]
+		r.warn(fmt.Sprintf("%s declined this prompt; trying %s for it", declined.Name(), alt.Name()))
+		res, err := alt.Generate(ctx, req)
+		if err == nil {
+			return res, alt, true
+		}
+		r.warn(fmt.Sprintf("%s: %v", alt.Name(), err))
+		declined = alt
+	}
+	return engine.Result{}, nil, false
+}
+
+// Close releases whatever the engines hold open. A one-shot provider holds
+// nothing; an ACP agent is a running process that would otherwise outlive
+// the run. Safe to call on a Runner that never ran.
+func (r *Runner) Close() error {
+	var first error
+	// Kinds routed to the same engine share it, so it must be closed once.
+	// Engines are compared as interfaces only among closers, which are
+	// pointer-shaped by nature (a process handle); comparing arbitrary
+	// engine values could panic on an uncomparable test double.
+	var closed []io.Closer
+	for _, cs := range r.chains {
+		if cs == nil {
+			continue
+		}
+		for _, e := range cs.engines {
+			c, ok := e.(io.Closer)
+			if !ok {
+				continue
+			}
+			if slices.Contains(closed, c) {
+				continue
+			}
+			closed = append(closed, c)
+			if err := c.Close(); err != nil && first == nil {
+				first = err
+			}
+		}
+	}
+	return first
+}
+
 // writerModel is the model the writing backend used, for the run manifest.
 func (r *Runner) writerModel() string {
+	if r.wroteWith != nil {
+		return engine.ResolveModel(r.cfg, r.wroteWith)
+	}
 	return engine.ResolveModel(r.cfg, r.chainFor(engine.KindWrite).active())
 }
 
 // writerName is the engine that produced the article, which is the one worth
 // reporting when extraction and writing may be different backends.
 func (r *Runner) writerName() string {
+	if r.wroteWith != nil {
+		return r.wroteWith.Name()
+	}
 	if e := r.chainFor(engine.KindWrite).active(); e != nil {
 		return e.Name()
 	}
@@ -1124,9 +1228,12 @@ func (r *Runner) save(outputDir, markdown string) (string, int, error) {
 	}
 	site := frontmatter.SiteFromEnv()
 	fmYAML := frontmatter.GenerateWithOptions(body, frontmatter.Options{
-		Date: now,
-		Slug: strings.TrimPrefix(stem, dateStr+"-"),
-		Site: &site,
+		Date:    now,
+		Slug:    strings.TrimPrefix(stem, dateStr+"-"),
+		Site:    &site,
+		Engine:  r.writerName(),
+		Model:   r.writerModel(),
+		Version: r.cfg.Version,
 	})
 	if err := os.WriteFile(fmPath, []byte(fmYAML+"\n"), 0o644); err != nil {
 		return "", 0, err
