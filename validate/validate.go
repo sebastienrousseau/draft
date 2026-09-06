@@ -40,8 +40,15 @@ const (
 
 // Errors returns the hard rule violations that must block a save. An empty
 // slice means the draft is publishable.
+// defaultStyle is built once. Errors runs on every draft and every retry, and
+// rules.DefaultStyle copies the banned-word and phrase slices; computing it per
+// call added two allocations to the hot path for a value that never changes.
+var defaultStyle = rules.DefaultStyle()
+
+// Errors reports the house-rule violations in a finished body under the default
+// house style. See ErrorsWithStyle for the per-style variant.
 func Errors(md string) []string {
-	return ErrorsWithStyle(md, rules.DefaultStyle())
+	return ErrorsWithStyle(md, defaultStyle)
 }
 
 // ErrorsWithStyle checks a body against a specific editorial style: the word
