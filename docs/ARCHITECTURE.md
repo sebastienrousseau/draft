@@ -124,6 +124,11 @@ and `docling` the fidelity option; both feed the same sectioner, so the rest
 of the pipeline never learns which one ran. See
 [ADR 0007](adr/0007-pluggable-document-reader.md).
 
+**`provenance`** — after the fact, from text alone: stable claim identifiers,
+a per-sentence attribution with byte offsets, and a C2PA manifest definition
+binding article, ledger, sources and backend. Evidence a reader can recompute,
+not a signature. See [ADR 0008](adr/0008-sentence-attribution-c2pa.md).
+
 **`pipeline.Event`** — a sum type on a channel. The TUI, the `--print` runner
 and the `--json` runner are three consumers of the same stream, which is why
 the pipeline has no idea a terminal exists. `TokenEvent` is dropped under

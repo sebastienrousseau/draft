@@ -16,6 +16,7 @@ Format: [MADR](https://adr.github.io/madr/)-flavoured, deliberately short.
 | [0005](0005-content-addressed-extraction-cache.md) | Address the extraction cache by content, not by date                     | Accepted |
 | [0006](0006-agent-client-protocol-transport.md)    | Add an Agent Client Protocol transport beside the one-shot CLIs          | Accepted |
 | [0007](0007-pluggable-document-reader.md)          | Make the document reader pluggable, with plain text the default          | Accepted |
+| [0008](0008-sentence-attribution-c2pa.md)          | Attribute sentences to claims; emit a C2PA manifest definition           | Accepted |
 
 ## Writing a new one
 

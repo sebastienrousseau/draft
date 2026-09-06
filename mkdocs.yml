@@ -67,6 +67,7 @@ nav:
       - 0005 Content-addressed cache: docs/adr/0005-content-addressed-extraction-cache.md
       - 0006 Agent Client Protocol: docs/adr/0006-agent-client-protocol-transport.md
       - 0007 Pluggable document reader: docs/adr/0007-pluggable-document-reader.md
+      - 0008 Attribution and C2PA manifest: docs/adr/0008-sentence-attribution-c2pa.md
       - Template: docs/adr/template.md
   - Distribution:
       - Packaging: docs/packaging.md

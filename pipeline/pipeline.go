@@ -11,6 +11,7 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,6 +33,7 @@ import (
 	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/prompt"
+	"github.com/sebastienrousseau/draft/provenance"
 	"github.com/sebastienrousseau/draft/rules"
 	"github.com/sebastienrousseau/draft/validate"
 )
@@ -127,6 +129,13 @@ type (
 		// rather than only read.
 		Duration time.Duration
 		Timings  []PhaseTiming
+		// AttributionPath and ManifestPath locate the provenance pair
+		// written beside the set; Sentences and Attributed summarise the
+		// attribution so a script can spot a thinly grounded article.
+		AttributionPath string
+		ManifestPath    string
+		Sentences       int
+		Attributed      int
 	}
 	// ErrEvent is the terminal failure event.
 	ErrEvent string
@@ -199,6 +208,10 @@ type Runner struct {
 	// article to the next engine without moving the cursor, and the article's
 	// provenance must name the backend that actually wrote it.
 	wroteWith engine.Engine
+	// attributionPath, manifestPath, sentences and attributed describe the
+	// provenance pair the current job wrote, for its DoneEvent.
+	attributionPath, manifestPath string
+	sentences, attributed         int
 	// ledgerPath is the verified-claim-ledger scratch file for the current run,
 	// removed on success unless the user asked to keep artifacts.
 	ledgerPath string
@@ -311,6 +324,7 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 	r.sourceDigests = nil
 	r.ledgerDigest = ""
 	r.wroteWith = nil
+	r.attributionPath, r.manifestPath, r.sentences, r.attributed = "", "", 0, 0
 
 	// The cursor is deliberately NOT reset here. A Runner reused across a queue
 	// keeps the backend it settled on, so a dead provider is tried once for the
@@ -396,7 +410,7 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, markdown, verr)
 	}
-	outputPath, words, err := r.save(outputDir, markdown)
+	outputPath, words, err := r.save(outputDir, markdown, records)
 	if err != nil {
 		r.phase(PhaseSave, "failed")
 		return err
@@ -405,16 +419,20 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	r.log("saved " + shortPath(r.cfg, outputPath))
 	r.phase(PhaseSave, "done")
 	r.emit(DoneEvent{
-		OutputPath:    outputPath,
-		Words:         words,
-		Mode:          "draft",
-		Engine:        r.writerName(),
-		Model:         r.writerModel(),
-		PromptVersion: prompt.ClaimVersion(),
-		Sources:       append([]SourceDigest(nil), r.sourceDigests...),
-		LedgerSHA256:  r.ledgerDigest,
-		Duration:      time.Since(r.started),
-		Timings:       append([]PhaseTiming(nil), r.timings...),
+		OutputPath:      outputPath,
+		Words:           words,
+		Mode:            "draft",
+		Engine:          r.writerName(),
+		Model:           r.writerModel(),
+		PromptVersion:   prompt.ClaimVersion(),
+		Sources:         append([]SourceDigest(nil), r.sourceDigests...),
+		LedgerSHA256:    r.ledgerDigest,
+		Duration:        time.Since(r.started),
+		Timings:         append([]PhaseTiming(nil), r.timings...),
+		AttributionPath: r.attributionPath,
+		ManifestPath:    r.manifestPath,
+		Sentences:       r.sentences,
+		Attributed:      r.attributed,
 	})
 	return nil
 }
@@ -1174,7 +1192,7 @@ func (r *Runner) writerName() string {
 // save writes the article as a day-folder set — source/<stem>-body.md,
 // yaml/<stem>-frontmatter.yaml and final/<stem>-final.md under outputDir —
 // and returns the final document's path.
-func (r *Runner) save(outputDir, markdown string) (string, int, error) {
+func (r *Runner) save(outputDir, markdown string, records []claims.Record) (string, int, error) {
 	_, body := frontmatter.Split(markdown)
 	body = strings.TrimSpace(body)
 
@@ -1252,8 +1270,57 @@ func (r *Runner) save(outputDir, markdown string) (string, int, error) {
 
 	r.log("saved body: " + shortPath(r.cfg, bodyPath))
 	r.log("saved frontmatter: " + shortPath(r.cfg, fmPath))
+	r.saveProvenance(outputDir, stem, title, body+"\n", records, now)
 
 	return finalPath, validate.WordCount(body), nil
+}
+
+// saveProvenance writes the attribution and the C2PA manifest definition for
+// a saved body. Neither can fail the job: the article is already on disk and
+// grounded, and a missing provenance file is a warning the reader can see,
+// not a reason to throw the article away.
+func (r *Runner) saveProvenance(outputDir, stem, title, saved string, records []claims.Record, now time.Time) {
+	dir := filepath.Join(outputDir, "provenance")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		r.warn("could not create the provenance directory: " + err.Error())
+		return
+	}
+	att := provenance.Attribute(saved, records)
+	reader := r.cfg.Reader
+	if reader == "" {
+		reader = pdf.ReaderPDFToText
+	}
+	sources := make([]provenance.Source, 0, len(r.sourceDigests))
+	for _, s := range r.sourceDigests {
+		sources = append(sources, provenance.Source{Path: s.Path, SHA256: s.SHA256})
+	}
+	man := provenance.NewManifest(provenance.ManifestInput{
+		Title: title, Body: saved, Version: r.cfg.Version,
+		Engine: r.writerName(), Model: r.writerModel(), Reader: reader,
+		PromptVersion: prompt.ClaimVersion(), LedgerSHA256: r.ledgerDigest,
+		Sources: sources, When: now, Attribution: &att,
+	})
+	write := func(name string, v any) string {
+		path := filepath.Join(dir, stem+name)
+		b, err := json.MarshalIndent(v, "", "  ")
+		if err == nil {
+			err = os.WriteFile(path, append(b, '\n'), 0o644)
+		}
+		if err != nil {
+			r.warn(fmt.Sprintf("could not save %s: %v", filepath.Base(path), err))
+			return ""
+		}
+		return path
+	}
+	r.attributionPath = write("-attribution.json", att)
+	r.manifestPath = write("-c2pa.json", man)
+	r.sentences, r.attributed = len(att.Sentences), att.Attributed
+	if r.attributionPath != "" {
+		r.log(fmt.Sprintf("saved attribution: %s (%d of %d sentences rest on a claim)", shortPath(r.cfg, r.attributionPath), att.Attributed, len(att.Sentences)))
+	}
+	if r.manifestPath != "" {
+		r.log("saved manifest: " + shortPath(r.cfg, r.manifestPath))
+	}
 }
 
 // saveFailure preserves the raw output and, if it still looks like an article,

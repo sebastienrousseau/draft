@@ -76,6 +76,25 @@ type jobRecord struct {
 	// extraction instructions, and the digests of the exact bytes that went
 	// in and of the ledger they were verified against.
 	Manifest *runManifest `json:"manifest,omitempty"`
+	// Provenance locates the attribution and C2PA manifest definition
+	// written beside the set, with the attribution's coverage.
+	Provenance *provenanceRecord `json:"provenance,omitempty"`
+}
+
+type provenanceRecord struct {
+	Attribution string `json:"attribution,omitempty"`
+	Manifest    string `json:"manifest,omitempty"`
+	Sentences   int    `json:"sentences"`
+	Attributed  int    `json:"attributed"`
+}
+
+// provenanceFor summarises the provenance pair of a completed job, or nil
+// when none was written.
+func provenanceFor(ev pipeline.DoneEvent) *provenanceRecord {
+	if ev.AttributionPath == "" && ev.ManifestPath == "" {
+		return nil
+	}
+	return &provenanceRecord{Attribution: ev.AttributionPath, Manifest: ev.ManifestPath, Sentences: ev.Sentences, Attributed: ev.Attributed}
 }
 
 // jobRecordSchema is the current version of the --json record shape. Bump it
@@ -149,6 +168,7 @@ func runHeadlessJSON(ctx context.Context, cfg config.Config, runner *pipeline.Ru
 				rec.DurationMS = ev.Duration.Milliseconds()
 				rec.PhasesMS = phaseMillis(ev.Timings)
 				rec.Manifest = manifestFor(ev)
+				rec.Provenance = provenanceFor(ev)
 			case pipeline.ErrEvent:
 				rec.Error = string(ev)
 			}

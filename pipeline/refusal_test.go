@@ -5,6 +5,7 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -332,5 +333,100 @@ func TestRunnerCloseReleasesEachEngineOnce(t *testing.T) {
 	}
 	if first.closed != 1 || second.closed != 1 {
 		t.Errorf("closed counts = %d, %d; every closer must be closed", first.closed, second.closed)
+	}
+}
+
+// Every saved set carries its provenance pair, and the DoneEvent says where.
+func TestSaveWritesTheProvenancePair(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Version = "0.0.34-test"
+	events := make(chan Event, 4096)
+	runner := NewRunner(cfg, []engine.Engine{okEngine("claude")}, events)
+	dones, errs, logs := collect(t, runner, events, Job{Sources: []string{writeSource(t)}})
+	if len(errs) != 0 || len(dones) != 1 {
+		t.Fatalf("errs=%v dones=%d", errs, len(dones))
+	}
+	d := dones[0]
+	if d.AttributionPath == "" || d.ManifestPath == "" || d.Sentences == 0 {
+		t.Fatalf("provenance not reported: %+v", d)
+	}
+	if filepath.Base(filepath.Dir(d.AttributionPath)) != "provenance" || !strings.HasSuffix(d.ManifestPath, "-c2pa.json") {
+		t.Errorf("unexpected paths %s %s", d.AttributionPath, d.ManifestPath)
+	}
+	var att map[string]any
+	b, err := os.ReadFile(d.AttributionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &att); err != nil {
+		t.Fatal(err)
+	}
+	if att["schema"].(float64) != 1 || len(att["claims"].([]any)) != 1 {
+		t.Errorf("attribution = %v", att)
+	}
+	var man map[string]any
+	b, err = os.ReadFile(d.ManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &man); err != nil {
+		t.Fatal(err)
+	}
+	if man["claim_generator_info"].([]any)[0].(map[string]any)["version"] != "0.0.34-test" {
+		t.Errorf("manifest generator = %v", man["claim_generator_info"])
+	}
+	grounding := man["assertions"].([]any)[1].(map[string]any)["data"].(map[string]any)
+	if grounding["engine"] != "claude" || grounding["reader"] != "pdftotext" || grounding["ledger_sha256"] == "" || len(grounding["sources"].([]any)) != 1 {
+		t.Errorf("grounding assertion = %v", grounding)
+	}
+	if !hasLog(logs, "saved attribution:") || !hasLog(logs, "saved manifest:") {
+		t.Errorf("provenance should be logged, got %v", logs)
+	}
+}
+
+// A provenance write that fails warns and keeps the article.
+func TestProvenanceFailureDoesNotFailTheJob(t *testing.T) {
+	cfg := testConfig(t)
+	events := make(chan Event, 4096)
+	runner := NewRunner(cfg, []engine.Engine{okEngine("claude")}, events)
+	// Occupy the provenance path with a file so the directory cannot be made.
+	day := runner.datedDir()
+	if err := os.MkdirAll(day, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(day, "provenance"), []byte("in the way"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dones, errs, logs := collect(t, runner, events, Job{Sources: []string{writeSource(t)}})
+	if len(errs) != 0 || len(dones) != 1 || dones[0].OutputPath == "" {
+		t.Fatalf("the article must still be saved: errs=%v", errs)
+	}
+	if dones[0].AttributionPath != "" || !hasLog(logs, "could not create the provenance directory") {
+		t.Errorf("expected a warning and no path, got %+v / %v", dones[0], logs)
+	}
+}
+
+// A provenance file that cannot be written is a warning, not a lost article.
+func TestProvenanceWriteFailureWarns(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	cfg := testConfig(t)
+	events := make(chan Event, 4096)
+	runner := NewRunner(cfg, []engine.Engine{okEngine("claude")}, events)
+	dir := filepath.Join(runner.datedDir(), "provenance")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	dones, errs, logs := collect(t, runner, events, Job{Sources: []string{writeSource(t)}})
+	if len(errs) != 0 || len(dones) != 1 || dones[0].OutputPath == "" {
+		t.Fatalf("the article must still be saved: errs=%v", errs)
+	}
+	if dones[0].AttributionPath != "" || dones[0].ManifestPath != "" || !hasLog(logs, "could not save") {
+		t.Errorf("expected warnings and no paths, got %+v / %v", dones[0], logs)
 	}
 }

@@ -38,6 +38,19 @@ series until `0.0.999`.
   installed and fails only when it was asked for and is missing; `--dry-run`
   names the reader in its plan. Measured on a 1.9 MB arXiv paper: 155 s
   against well under a second, with tables that plain text flattened.
+
+- **Per-sentence attribution and a C2PA manifest definition.** Every set now
+  carries a `provenance/` pair: `<stem>-attribution.json` maps each prose
+  sentence of the body, with byte offsets, to stable claim identifiers
+  (`c` + ten hex digits of the quote's SHA-256), flags figures no claim
+  contains, and reports coverage; `<stem>-c2pa.json` is a C2PA manifest
+  definition in the shape `c2patool` reads, binding the article digest, the
+  ledger digest, the prompt version, engine, model, reader, sources and claim
+  identifiers under `com.draftlib.grounding`. Attribution is deterministic
+  and model-free; signing and embedding are the publisher's step. The
+  `--json` record gains a `provenance` object. **Breaking under the
+  stability guarantees**: the day-folder layout gains a fourth directory.
+
 ### Fixed
 
 - **A refused prompt no longer demotes the provider for the rest of the
