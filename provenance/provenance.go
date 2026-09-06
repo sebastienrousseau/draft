@@ -86,7 +86,7 @@ type Attribution struct {
 // that verified the same quote name it the same way, and a reader with the
 // ledger can recompute it.
 func ClaimID(rec claims.Record) string {
-	sum := sha256.Sum256([]byte(normalise(rec.SourceQuote)))
+	sum := sha256.Sum256([]byte(claims.Normalise(rec.SourceQuote)))
 	return "c" + hex.EncodeToString(sum[:])[:10]
 }
 
@@ -193,20 +193,13 @@ const (
 )
 
 var (
-	wordPat     = regexp.MustCompile(`[\p{L}][\p{L}\p{N}'-]{2,}`)
-	smartQuotes = strings.NewReplacer("“", `"`, "”", `"`, "‘", "'", "’", "'")
+	wordPat = regexp.MustCompile(`[\p{L}][\p{L}\p{N}'-]{2,}`)
 	// leadMarker strips list bullets, blockquote bars and their combinations
 	// from the start of a line, keeping the byte count so offsets stay true.
 	// A bullet counts only when followed by whitespace, so a line that opens
 	// in bold ("**A single number...**") is prose, not a list.
 	leadMarker = regexp.MustCompile(`^(?:\s*(?:>|[-*+]\s|\d+[.)]\s))*\s*`)
 )
-
-// normalise matches claims.normalise so the identifier is computed over the
-// same text the quote was verified with.
-func normalise(s string) string {
-	return strings.ToLower(strings.Join(strings.Fields(smartQuotes.Replace(s)), " "))
-}
 
 // tokens returns the content words of s: lower-cased, stopwords removed,
 // a trailing plural s dropped so "agents" and "agent" agree.

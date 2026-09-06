@@ -8,6 +8,23 @@ series until `0.0.999`.
 
 ## [0.0.34] - 2026-09-06
 
+### Changed
+
+- **Higher grounding recall, same verbatim gate.** Claim quotes are now
+  compared in a rendering-tolerant normal form: a literal `\n` a model wrote
+  for a line break, a hyphen it dropped from a word, a ligature the PDF
+  rendered as one glyph, a non-breaking or zero-width space, and en/em dashes
+  no longer cause a genuine quote to be rejected as "not found in source". A
+  quote cut mid-clause or too short to cite is extended to its sentence
+  boundary using the source's own words, so the record stays verbatim by
+  construction. Measured over 3,217 extraction blocks from real papers, the
+  drop rate fell from 29.6% to 8.5%. A quote that changes, adds, drops or
+  reorders a word is still rejected, an invalid TYPE or STRENGTH is still
+  dropped, and a fabricated number in an adjacent sentence is never pulled
+  into a repaired quote — all three pinned by the grounding corpus, whose
+  candidate total and recall floor rose with two rescued cases and a new
+  fabrication-guard case. The `claims` mutation gate stays at 100% efficacy.
+
 ### Added
 
 - **An Agent Client Protocol transport.** `--engine claude-acp` drives
