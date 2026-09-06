@@ -41,6 +41,18 @@ const (
 // Errors returns the hard rule violations that must block a save. An empty
 // slice means the draft is publishable.
 func Errors(md string) []string {
+	return ErrorsWithStyle(md, rules.DefaultStyle())
+}
+
+// ErrorsWithStyle checks a body against a specific editorial style: the word
+// band and banned vocabulary come from the style, the structural rules do not,
+// because an H1, a lead aside, an executive summary and section headings are
+// the shape of a grounded article rather than a matter of taste.
+//
+// The default style takes the fast path — a package-level regex compiled once
+// — so the common case pays nothing for the configurability. A custom style
+// compiles its banned-word matcher on demand.
+func ErrorsWithStyle(md string, style rules.Style) []string {
 	var errs []string
 	if !strings.HasPrefix(md, rules.H1Prefix) {
 		errs = append(errs, "body-only mode must start with a Markdown H1")
@@ -58,13 +70,13 @@ func Errors(md string) []string {
 		errs = append(errs, "contains an unfilled skeleton placeholder (title, heading, or thesis)")
 	}
 	// Both bounds, not just the floor. The writing prompt asks for
-	// MinWords–MaxWords and rules declares that as the band for a finished
+	// MinWords–MaxWords and the style declares that as the band for a finished
 	// draft, but only the minimum was ever checked — so a runaway draft was
 	// told one thing and held to another.
-	if w := WordCount(md); w < rules.MinWords {
-		errs = append(errs, fmt.Sprintf("article is %d words; minimum is %d", w, rules.MinWords))
-	} else if w > rules.MaxWords {
-		errs = append(errs, fmt.Sprintf("article is %d words; maximum is %d", w, rules.MaxWords))
+	if w := WordCount(md); w < style.MinWords {
+		errs = append(errs, fmt.Sprintf("article is %d words; minimum is %d", w, style.MinWords))
+	} else if w > style.MaxWords {
+		errs = append(errs, fmt.Sprintf("article is %d words; maximum is %d", w, style.MaxWords))
 	}
 	if ContainsEmoji(md) {
 		errs = append(errs, "contains emoji")
@@ -80,9 +92,15 @@ func Errors(md string) []string {
 	// repair pass has already removed it — so paying up front made every
 	// clean draft subsidise the rare dirty one.
 	lowered := strings.ToLower(md)
-	wordHits := bannedWordRe.FindAllStringIndex(lowered, -1)
+	wordRe := bannedWordRe
+	bannedPhrases := rules.BannedPhrases
+	if !isDefaultVocabulary(style) {
+		wordRe = compileWordBoundary(style.BannedWordForms())
+		bannedPhrases = style.BannedPhrases
+	}
+	wordHits := wordRe.FindAllStringIndex(lowered, -1)
 	var phrases []string
-	for _, p := range rules.BannedPhrases {
+	for _, p := range bannedPhrases {
 		if strings.Contains(lowered, p) {
 			phrases = append(phrases, p)
 		}
@@ -489,7 +507,31 @@ func bannedWordForms() []string {
 	return forms
 }
 
+// isDefaultVocabulary reports whether a style's banned lists are the built-in
+// ones, so the default path can reuse the package-level compiled regex instead
+// of building one per call.
+func isDefaultVocabulary(style rules.Style) bool {
+	return sameStrings(style.BannedWords, rules.BannedWords) && sameStrings(style.BannedPhrases, rules.BannedPhrases)
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func compileWordBoundary(words []string) *regexp.Regexp {
+	if len(words) == 0 {
+		// A pattern that never matches, so a style that bans no words is not
+		// an "empty alternation matches everywhere" bug.
+		return regexp.MustCompile(`\b\B`)
+	}
 	quoted := make([]string, len(words))
 	for i, w := range words {
 		quoted[i] = regexp.QuoteMeta(w)

@@ -143,3 +143,30 @@ func TestClaimVersionIsStableAndPromptSpecific(t *testing.T) {
 		t.Fatal("Claim() no longer embeds its source")
 	}
 }
+
+func TestWritingWithStyleCarriesTheStyle(t *testing.T) {
+	st := rules.DefaultStyle()
+	st.MinWords, st.MaxWords = 400, 900
+	st.English = "American English"
+	st.BannedWords = []string{"foobar", "wibble"}
+	st.BannedPhrases = []string{"at the end of the day"}
+	p := WritingWithStyle("", "LEDGER", st)
+	for _, want := range []string{"Use American English.", "foobar", "wibble", "at the end of the day", "between 400 and 900 words", "LEDGER"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+	// The old banned defaults are gone when the list is replaced.
+	if strings.Contains(p, "delve") {
+		t.Error("a replaced banned list must not leak the defaults")
+	}
+	// An empty English instruction falls back to a neutral line.
+	st.English = ""
+	if !strings.Contains(WritingWithStyle("", "L", st), "publication's standard English") {
+		t.Error("empty english should yield the neutral instruction")
+	}
+	// Writing delegates with the default vocabulary and the given bounds.
+	if !strings.Contains(Writing("", "L", 500, 800), "Use British English.") {
+		t.Error("Writing should keep the British default")
+	}
+}

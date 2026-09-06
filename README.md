@@ -561,6 +561,7 @@ Flags beat environment variables. Environment variables beat defaults.
 | `DRAFT_ENGINE`              | `auto`                          | Backend selection (auto, ollama, provider)              |
 | `DRAFT_EXTRACT_ENGINE`      | —                               | Backend for claim extraction (default: `DRAFT_ENGINE`)  |
 | `DRAFT_READER`              | `pdftotext`                     | Document reader: `pdftotext` or `docling`               |
+| `DRAFT_STYLE`               | —                               | JSON house-style file (word band, vocabulary, language) |
 | `DRAFT_WRITE_ENGINE`        | —                               | Backend for writing the article                         |
 | `DRAFT_EDIT_ENGINE`         | —                               | Backend for `--review` edits                            |
 | `DRAFT_MODEL_SESSION`       | —                               | Session-provider model override                         |
@@ -1010,9 +1011,11 @@ Honesty here saves you an evening.
 - **You need figures or LaTeX maths.** The default reader extracts text;
   `--reader docling` keeps tables and headings but still cannot quote a
   figure. Feed `draft` Markdown you have prepared if you need more.
-- **Your house style is not this house style.** Structure, length bands, banned
-  vocabulary and British English live in the `rules` and `validate` packages —
-  configurable in code, not yet by flag.
+- **Your house style is not this house style.** The word band, banned
+  vocabulary and language variant are set by `--style <file.json>` (see
+  [Provenance](#provenance) is separate); the structural rules — an H1, a lead
+  aside, an executive summary, section headings — are fixed, because they are
+  the shape of a grounded article, not a matter of taste.
 - **You publish a different frontmatter schema.** The identity is swappable;
   the field set is not.
 - **DOCX on Linux or Windows without Docling.** The default path needs macOS

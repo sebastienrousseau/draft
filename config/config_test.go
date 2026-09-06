@@ -5,6 +5,8 @@ package config
 
 import (
 	"errors"
+	"github.com/sebastienrousseau/draft/rules"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -231,5 +233,42 @@ func TestReaderFromEnvironmentAndFlag(t *testing.T) {
 	}
 	if c := Load(Flags{Reader: "pdftotext"}); c.Reader != "pdftotext" {
 		t.Errorf("flag reader should win, got %q", c.Reader)
+	}
+}
+
+func TestStyleFromFileAndEnv(t *testing.T) {
+	withHome(t, t.TempDir())
+	// Default: the house style.
+	t.Setenv("DRAFT_STYLE", "")
+	if c := Load(Flags{}); c.Style.MaxWords != rules.MaxWords || c.StylePath != "" {
+		t.Errorf("default style = %+v path %q", c.Style, c.StylePath)
+	}
+	// A file via the flag wins and is recorded.
+	dir := t.TempDir()
+	good := filepath.Join(dir, "s.json")
+	if err := os.WriteFile(good, []byte(`{"max_words": 1500}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := Load(Flags{Style: good})
+	if c.Style.MaxWords != 1500 || c.StylePath != good {
+		t.Errorf("flag style = %+v path %q", c.Style, c.StylePath)
+	}
+	// DRAFT_STYLE is used when the flag is empty.
+	t.Setenv("DRAFT_STYLE", good)
+	if c := Load(Flags{}); c.Style.MaxWords != 1500 {
+		t.Errorf("env style = %+v", c.Style)
+	}
+	// An invalid file warns and falls back to the default, never fatal.
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte(`{"max_words": 1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRAFT_STYLE", "")
+	c = Load(Flags{Style: bad})
+	if c.Style.MaxWords != rules.MaxWords || c.StylePath != "" {
+		t.Errorf("an invalid style must fall back to the default, got %+v", c.Style)
+	}
+	if len(c.Warnings) == 0 {
+		t.Error("an invalid style should warn")
 	}
 }

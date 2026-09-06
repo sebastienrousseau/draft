@@ -27,6 +27,13 @@ series until `0.0.999`.
 
 ### Added
 
+- **A configurable house style.** `--style <file.json>` / `DRAFT_STYLE` sets
+  the word band, banned words and phrases (replace the built-in list or extend
+  it with `also_banned_*`), and the language variant, so a publication can use
+  draft's grounding without adopting its voice. The structural rules stay
+  fixed. An unknown field or an impossible band falls back to the default style
+  with a warning, never a failed run; `--dry-run` shows which style is in
+  force. See `examples/style/`.
 - **`draft --verify <file>` checks an article against its provenance.** It
   recomputes the body digest and compares it to the C2PA manifest written
   beside the set, hashes the sources when they are still on the machine, and

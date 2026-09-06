@@ -258,6 +258,7 @@ type Event any
 // NewRunner constructs a Runner over one ordered engine chain (see
 // engine.Chain), used for every request kind.
 func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) *Runner {
+	cfg.Style = cfg.Style.OrDefault()
 	shared := &chainState{engines: engines}
 	return &Runner{
 		cfg: cfg,
@@ -275,6 +276,7 @@ func NewRunner(cfg config.Config, engines []engine.Engine, events chan<- Event) 
 // request kind from cfg, so claim extraction can run against a local model
 // while the article itself is written by a session provider.
 func NewRoutedRunner(cfg config.Config, events chan<- Event) *Runner {
+	cfg.Style = cfg.Style.OrDefault()
 	chains := make(map[engine.Kind]*chainState, 3)
 	// Kinds configured to the same engine share one chainState, so a fallback
 	// discovered while extracting is not re-discovered when writing.
@@ -388,14 +390,16 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	// claims cannot honestly fill 3000 words, and padding is what both slows
 	// local generation and trips the faithfulness checks into a costly retry.
 	r.phase(PhaseWrite, "running")
-	minWords, maxWords := writeBudget(len(records))
+	minWords, maxWords := writeBudget(len(records), r.cfg.Style)
 	r.writeTokens = writeNumPredict(maxWords, r.cfg.PredictLength)
 	if r.engineName == "ollama" {
 		r.log(fmt.Sprintf("target %d–%d words for %d claim(s) (cap %d tokens)", minWords, maxWords, len(records), r.writeTokens))
 	}
 	templates := loadTemplates(r.cfg)
 	r.styleText = prompt.EffectiveStyle(templates)
-	writePrompt := prompt.Writing(templates, ledger, minWords, maxWords)
+	style := r.cfg.Style
+	style.MinWords, style.MaxWords = minWords, maxWords
+	writePrompt := prompt.WritingWithStyle(templates, ledger, style)
 	markdown, err := r.write(ctx, writePrompt)
 	if err != nil {
 		r.phase(PhaseWrite, "failed")
@@ -891,15 +895,15 @@ func (r *Runner) generateText(ctx context.Context, req engine.Request) (string, 
 // headers) sets a floor; each verified claim then buys a slice of prose. The
 // range is clamped to the house minimum and maximum, so a dense source still
 // yields a full-length piece while a thin one is not asked to pad.
-func writeBudget(claimCount int) (minWords, maxWords int) {
+func writeBudget(claimCount int, style rules.Style) (minWords, maxWords int) {
 	target := 350 + claimCount*110
-	if target > rules.MaxWords {
-		target = rules.MaxWords
+	if target > style.MaxWords {
+		target = style.MaxWords
 	}
 	maxWords = target
 	minWords = target * 3 / 4
-	if minWords < rules.MinWords {
-		minWords = rules.MinWords
+	if minWords < style.MinWords {
+		minWords = style.MinWords
 	}
 	if maxWords < minWords+150 {
 		maxWords = minWords + 150
@@ -1029,13 +1033,13 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 		// Repair what a deterministic edit can settle before spending another
 		// generation on it. A rewrite is the most expensive call in the run.
 		if repaired, removed := repairDuplicates(markdown); removed > 0 {
-			if len(validate.Errors(repaired)) <= len(validate.Errors(markdown)) {
+			if len(validate.ErrorsWithStyle(repaired, r.cfg.Style)) <= len(validate.ErrorsWithStyle(markdown, r.cfg.Style)) {
 				markdown = repaired
 				r.log(fmt.Sprintf("removed %d near-duplicate paragraph(s) without regenerating", removed))
 			}
 		}
 
-		styleErrs := validate.Errors(markdown)
+		styleErrs := validate.ErrorsWithStyle(markdown, r.cfg.Style)
 		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
 		errs = append(append([]string{}, styleErrs...), factErrs...)
 		if len(errs) == 0 {

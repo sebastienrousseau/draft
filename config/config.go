@@ -7,6 +7,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/sebastienrousseau/draft/rules"
 	"net"
 	"net/url"
 	"os"
@@ -83,6 +84,13 @@ type Config struct {
 	// See internal/pdf for what each trades.
 	Reader string // DRAFT_READER
 
+	// Style is the editorial policy the writer follows and the validator
+	// enforces: word band, banned vocabulary, language variant. It defaults
+	// to draft's house style and is replaced by a --style / DRAFT_STYLE file.
+	Style rules.Style
+	// StylePath is the file the style was loaded from, for display and doctor.
+	StylePath string
+
 	Model        string // session-provider model override ("" = provider default)
 	OllamaModel  string // writing model for the Ollama backend
 	ExtractModel string // claim-extraction model for the Ollama backend
@@ -148,6 +156,7 @@ func Load(flags Flags) Config {
 		WriteEngine:        env("DRAFT_WRITE_ENGINE", ""),
 		EditEngine:         env("DRAFT_EDIT_ENGINE", ""),
 		Reader:             env("DRAFT_READER", DefaultReader),
+		Style:              rules.DefaultStyle(),
 		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
 		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
 		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
@@ -177,6 +186,13 @@ func Load(flags Flags) Config {
 	}
 	if flags.Reader != "" {
 		c.Reader = flags.Reader
+	}
+	if path := firstNonEmpty(flags.Style, os.Getenv("DRAFT_STYLE")); path != "" {
+		if st, err := rules.LoadStyle(expandHome(path, home)); err != nil {
+			warn("style file: %v; using the default house style", err)
+		} else {
+			c.Style, c.StylePath = st, path
+		}
 	}
 	if flags.Model != "" {
 		c.Model = flags.Model
@@ -287,6 +303,7 @@ type Flags struct {
 	ExtractEngine string
 	WriteEngine   string
 	Reader        string
+	Style         string
 	Model         string
 	ContextLength int
 	PredictLength int
@@ -386,4 +403,12 @@ func envInt(warn func(string, ...any), name string, fallback, minValue, maxValue
 		return fallback
 	}
 	return v
+}
+
+// firstNonEmpty returns the first non-empty of its arguments.
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
 }

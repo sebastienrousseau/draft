@@ -88,6 +88,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
 	fs.StringVar(&flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
 	fs.StringVar(&flags.Reader, "reader", "", "document reader: pdftotext (default) or docling")
+	fs.StringVar(&flags.Style, "style", "", "JSON house-style file: word band, banned vocabulary, language")
 	fs.StringVar(&flags.Model, "model", "", "session-provider model override (e.g. opus)")
 	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
 	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
@@ -333,6 +334,7 @@ var flagHelp = [][2]string{
 	{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
 	{"--write-engine <m>", "backend for writing (default: --engine)"},
 	{"--reader <name>", "document reader: pdftotext (default, fast) or docling (tables, structure)"},
+	{"--style <file>", "JSON house-style file: word band, banned vocabulary, language variant"},
 	{"--model <name>", "session-provider model override (e.g. opus)"},
 	{"--experimental", "let auto mode use experimental providers"},
 	{"--strict-numbers", "fail on a number found in no verified claim"},
