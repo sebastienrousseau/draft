@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"sync"
+	"sync/atomic"
 )
 
 func ollamaFor(t *testing.T, handler http.HandlerFunc) *Ollama {
@@ -163,5 +165,27 @@ func TestOllamaTimeoutRequestAndStreamReadErrors(t *testing.T) {
 	res, err := o.Generate(context.Background(), Request{})
 	if !errors.Is(err, errBrokenPipe) || res.Text != "partial" {
 		t.Fatalf("stream read failure = (%q, %v)", res.Text, err)
+	}
+}
+
+func TestOllamaSelfStartsOnceAcrossConcurrentCalls(t *testing.T) {
+	var calls int32
+	orig := ensureRunning
+	ensureRunning = func(string) error { atomic.AddInt32(&calls, 1); return errors.New("no server") }
+	defer func() { ensureRunning = orig }()
+
+	// Point at a dead address so Generate fails fast after the ensure attempt.
+	o := &Ollama{host: "http://127.0.0.1:0", client: newOllamaClient(), extract: "m", write: "m", edit: "m"}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = o.Generate(context.Background(), Request{Kind: KindExtract, Prompt: "x"})
+		}()
+	}
+	wg.Wait()
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("ensureRunning called %d times across concurrent calls, want exactly 1", got)
 	}
 }

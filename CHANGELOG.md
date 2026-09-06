@@ -85,6 +85,11 @@ series until `0.0.999`.
 
 ### Fixed
 
+- **Ollama now self-starts outside the TUI.** A headless or `--print`/`--json`
+  run that fell back to the local model while offline failed with "connection
+  refused", because only the interactive UI started `ollama serve`. The engine
+  now starts the server on first use, once per run even under the concurrent
+  extraction workers, on every code path.
 - **A refused prompt no longer demotes the provider for the rest of the
   queue.** When the model declines a section (the API answers with
   `stop_reason: "refusal"` and the claude CLI exits 1 with an empty stderr),
