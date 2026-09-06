@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-09-06
+
 ### Fixed
 
 - **A refused prompt no longer demotes the provider for the rest of the
@@ -890,6 +892,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.34]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.34
 [0.0.33]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.33
 [0.0.32]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.32
 [0.0.31]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.31
