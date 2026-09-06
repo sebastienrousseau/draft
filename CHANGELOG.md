@@ -6,6 +6,24 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-09-07
+
+### Fixed
+
+- **pkg.go.dev renders package documentation again.** The module is dual
+  licensed Apache-2.0 OR MIT, but the root `LICENSE-APACHE` held a non-canonical
+  variant of the Apache text (left-shifted indentation, and its "APPENDIX: How
+  to apply" section replaced with a filled-in copyright notice) that
+  `google/licensecheck` could not match above its confidence threshold. pkg.go.dev
+  therefore classified the module as "UNKNOWN, MIT" and suppressed all package
+  documentation. `LICENSE-APACHE` now carries the canonical Apache-2.0 text; the
+  licence itself is unchanged — still Apache-2.0 OR MIT, at your option.
+
+### Documentation
+
+- `docs/AUDIT-2026-09.md` records that per-sentence attribution and the C2PA
+  manifest shipped in 0.0.34 and are verifiable with `draft --verify`.
+
 ## [0.0.34] - 2026-09-06
 
 ### Changed
@@ -1012,6 +1030,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.35]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.35
 [0.0.34]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.34
 [0.0.33]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.33
 [0.0.32]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.32
