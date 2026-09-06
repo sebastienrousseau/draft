@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -408,6 +409,9 @@ func TestProvenanceFailureDoesNotFailTheJob(t *testing.T) {
 
 // A provenance file that cannot be written is a warning, not a lost article.
 func TestProvenanceWriteFailureWarns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block writes on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("root ignores directory permissions")
 	}
