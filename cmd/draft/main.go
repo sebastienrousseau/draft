@@ -79,7 +79,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	var showVersion, headless bool
 	var jsonOut, dryRun bool
 	var clearCache, doctor, manPage bool
-	var reviewPath, frontmatterPath, completionShell string
+	var reviewPath, frontmatterPath, completionShell, verifyPath string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -107,6 +107,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
 	fs.BoolVar(&headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
+	fs.StringVar(&verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
 	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
 	fs.BoolVar(&doctor, "doctor", false, "check that this machine can run draft, and exit")
@@ -135,6 +136,9 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	if verifyPath != "" {
+		return runVerify(verifyPath, stdout, stderr)
+	}
 	if frontmatterPath != "" {
 		if reviewPath != "" {
 			fmt.Fprintln(stderr, "draft: --frontmatter cannot be combined with --review")
@@ -343,6 +347,7 @@ var flagHelp = [][2]string{
 	{"--resume", "reuse a verified claim ledger from an earlier attempt"},
 	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
+	{"--verify <file>", "check an article against its provenance, and exit"},
 	{"--combine <file>", "alias for --frontmatter"},
 	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 	{"--print", "run without the TUI; print draft paths to stdout"},

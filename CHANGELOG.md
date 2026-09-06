@@ -27,6 +27,14 @@ series until `0.0.999`.
 
 ### Added
 
+- **`draft --verify <file>` checks an article against its provenance.** It
+  recomputes the body digest and compares it to the C2PA manifest written
+  beside the set, hashes the sources when they are still on the machine, and
+  checks the ledger digest when a kept ledger is present. Point it at the body,
+  the final document or the manifest; it finds the rest by the day-folder
+  layout, prints a per-item report, and exits non-zero if the article, the
+  ledger or a source no longer matches. This turns the manifest definition
+  from Move 3 into something a reader can act on without a signing step.
 - **An Agent Client Protocol transport.** `--engine claude-acp` drives
   `claude-code-acp` over JSON-RPC on stdio: one agent process for the run, a
   fresh session per call, and a typed stop reason in place of an exit status.

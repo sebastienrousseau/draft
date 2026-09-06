@@ -4,6 +4,8 @@
 package provenance
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -205,4 +207,72 @@ func TestManifestBindsEverything(t *testing.T) {
 	if bare.Assertions[1].Data.(Grounding).Sentences != 0 || bare.Ingredients != nil {
 		t.Errorf("bare manifest = %+v", bare)
 	}
+}
+
+func TestCheckArticleRoundTripsAndDetectsTampering(t *testing.T) {
+	att := Attribute(body, ledger)
+	man := NewManifest(ManifestInput{
+		Title: "T", Body: body, Version: "0.0.34", Engine: "claude", Model: "sonnet",
+		LedgerSHA256: sha256Hex([]byte("the-ledger")), Attribution: &att,
+		Sources: []Source{{Path: "/papers/x.pdf", SHA256: "deadbeef"}},
+	})
+	mb, _ := json.Marshal(man)
+
+	// The exact body, ledger and source verify.
+	ok := CheckArticle(body, mb, []byte("the-ledger"), func(string) (string, bool) { return "deadbeef", true })
+	if !ok.OK() || !ok.DigestMatches || !ok.LedgerChecked || !ok.LedgerMatches {
+		t.Fatalf("a faithful article should verify: %+v", ok)
+	}
+	if len(ok.Sources) != 1 || !ok.Sources[0].Found || !ok.Sources[0].Matches {
+		t.Errorf("source check = %+v", ok.Sources)
+	}
+	if ok.Grounding.Engine != "claude" || len(ok.Grounding.Claims) != 3 {
+		t.Errorf("grounding not read back: %+v", ok.Grounding)
+	}
+
+	// An edited body fails.
+	if r := CheckArticle(body+" tampered", mb, nil, nil); r.OK() || r.DigestMatches {
+		t.Error("an edited body must not verify")
+	}
+	// A changed ledger fails only the ledger check.
+	if r := CheckArticle(body, mb, []byte("different"), nil); r.OK() || !r.LedgerChecked || r.LedgerMatches {
+		t.Errorf("a changed ledger must fail: %+v", r)
+	}
+	// A changed source fails.
+	if r := CheckArticle(body, mb, nil, func(string) (string, bool) { return "cafe", true }); r.OK() {
+		t.Error("a changed source must not verify")
+	}
+	// A source that cannot be found is not a failure.
+	if r := CheckArticle(body, mb, nil, func(string) (string, bool) { return "", false }); !r.OK() {
+		t.Errorf("an absent source must not fail verification: %+v", r)
+	}
+	// No source resolver at all: sources are simply unchecked.
+	if r := CheckArticle(body, mb, nil, nil); !r.OK() || r.Sources[0].Found {
+		t.Errorf("without a resolver a source is unchecked, not failed: %+v", r)
+	}
+}
+
+func TestCheckArticleRejectsAForeignManifest(t *testing.T) {
+	if r := CheckArticle("x", []byte("{not json"), nil, nil); r.OK() || len(r.Problems) == 0 {
+		t.Error("garbage must be reported as a problem")
+	}
+	// Valid JSON, but not a draft manifest.
+	if r := CheckArticle("x", []byte(`{"assertions":[]}`), nil, nil); r.OK() || len(r.Problems) == 0 {
+		t.Error("a manifest without the grounding assertion must be a problem")
+	}
+	// A manifest whose grounding data is the wrong shape.
+	bad := `{"assertions":[{"label":"` + GroundingLabel + `","data":"not an object"}]}`
+	if r := CheckArticle("x", []byte(bad), nil, nil); r.OK() || len(r.Problems) == 0 {
+		t.Error("a malformed grounding assertion must be a problem")
+	}
+	// A manifest that records no article digest cannot confirm anything.
+	empty := `{"assertions":[{"label":"` + GroundingLabel + `","data":{"schema":1}}]}`
+	if r := CheckArticle("x", []byte(empty), nil, nil); r.OK() || r.DigestMatches {
+		t.Error("a manifest with no article digest must not verify")
+	}
+}
+
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

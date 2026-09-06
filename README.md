@@ -354,6 +354,7 @@ draft [flags] <source> [more-sources...]
 | `--write-engine <m>`   | Backend for writing the article (default: `--engine`)     |
 | `--review <draft>`     | Enhance an existing draft with surgical edits             |
 | `--frontmatter <f>`    | Regenerate frontmatter + final document from an article   |
+| `--verify <f>`         | Check an article against its provenance, and exit         |
 | `--combine <f>`        | Alias for `--frontmatter`                                 |
 | `--keep-artifacts`     | Keep the claim ledger beside a successful draft           |
 | `--print`              | Run without the TUI; print draft paths to stdout          |
@@ -437,6 +438,19 @@ and reader, the claim identifiers, and the attribution counts.
 step: `c2patool` with `-m` on this file produces the signed manifest, as a
 sidecar for a Markdown asset. Until then the file is a definition, and this
 paragraph is the only place it is described as anything else.
+
+**Checking a draft.** `draft --verify <file>` recomputes the article's digest
+and compares it to the manifest written beside it, so you can tell whether a
+draft is exactly what the ledger was verified against or has been edited
+since. Point it at any file of a set — the body, the final document, or the
+manifest — and it finds the rest by the day-folder layout. When the sources
+are still on the machine it hashes them too; when they are not, it says so and
+still checks the article. It exits non-zero if the article, the ledger or a
+source no longer matches.
+
+```sh
+draft --verify 2026-07-29/final/2026-07-29-<slug>-final.md
+```
 
 ---
 
