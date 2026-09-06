@@ -21,7 +21,7 @@ func TestParseStreamJSONReportsLengthStop(t *testing.T) {
 		`{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"max_tokens"}}}`,
 	}, "\n")
 
-	text, truncated, err := parseStreamJSON(strings.NewReader(stream), nil)
+	text, truncated, _, err := parseStreamJSON(strings.NewReader(stream), nil)
 	if err != nil {
 		t.Fatalf("parseStreamJSON: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestParseStreamJSONCleanStopIsNotTruncated(t *testing.T) {
 		`{"type":"result","result":"Done."}`,
 	}, "\n")
 
-	text, truncated, err := parseStreamJSON(strings.NewReader(stream), nil)
+	text, truncated, _, err := parseStreamJSON(strings.NewReader(stream), nil)
 	if err != nil {
 		t.Fatalf("parseStreamJSON: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestParseStreamJSONTruncationSurvivesResult(t *testing.T) {
 		`{"type":"result","result":"partial text"}`,
 	}, "\n")
 
-	text, truncated, err := parseStreamJSON(strings.NewReader(stream), nil)
+	text, truncated, _, err := parseStreamJSON(strings.NewReader(stream), nil)
 	if err != nil || !truncated || text != "partial text" {
 		t.Errorf("got (%q, %v, %v)", text, truncated, err)
 	}
@@ -69,7 +69,7 @@ func TestParseStreamJSONTruncationSurvivesResult(t *testing.T) {
 func TestParseStreamJSONForwardsChunks(t *testing.T) {
 	stream := `{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"tick"}}}`
 	var got []string
-	if _, _, err := parseStreamJSON(strings.NewReader(stream), func(s string) { got = append(got, s) }); err != nil {
+	if _, _, _, err := parseStreamJSON(strings.NewReader(stream), func(s string) { got = append(got, s) }); err != nil {
 		t.Fatalf("parseStreamJSON: %v", err)
 	}
 	if len(got) != 1 || got[0] != "tick" {
@@ -78,13 +78,41 @@ func TestParseStreamJSONForwardsChunks(t *testing.T) {
 }
 
 func TestParseStreamJSONDefaultErrorAndReadFailure(t *testing.T) {
-	_, _, err := parseStreamJSON(strings.NewReader(`{"type":"result","is_error":true}`), nil)
+	_, _, _, err := parseStreamJSON(strings.NewReader(`{"type":"result","is_error":true}`), nil)
 	if err == nil || err.Error() != "provider reported an error" {
 		t.Fatalf("empty provider error = %v", err)
 	}
-	text, _, err := parseStreamJSON(&errReader{data: `{"type":"stream_event"}`}, nil)
+	text, _, _, err := parseStreamJSON(&errReader{data: `{"type":"stream_event"}`}, nil)
 	if !errors.Is(err, errBrokenPipe) || text != "" {
 		t.Fatalf("read failure = (%q, %v)", text, err)
+	}
+}
+
+// A refusal arrives as a stop reason, on the message_delta event or on the
+// final result, with no text and is_error false. It must come back as the
+// ErrRefused sentinel so the pipeline can tell a declined prompt from a dead
+// provider; a generic error here is what demoted whole queues.
+func TestParseStreamJSONRefusalIsTheSentinel(t *testing.T) {
+	cases := map[string]string{
+		"on the result": strings.Join([]string{
+			`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}`,
+			`{"type":"result","subtype":"success","is_error":false,"result":"","stop_reason":"refusal"}`,
+		}, "\n"),
+		"on message_delta": strings.Join([]string{
+			`{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"refusal"}}}`,
+			`{"type":"result","subtype":"success","is_error":false,"result":""}`,
+		}, "\n"),
+	}
+	for name, stream := range cases {
+		t.Run(name, func(t *testing.T) {
+			text, _, _, err := parseStreamJSON(strings.NewReader(stream), nil)
+			if !errors.Is(err, ErrRefused) {
+				t.Fatalf("err = %v, want ErrRefused", err)
+			}
+			if text != "" {
+				t.Errorf("text = %q, want none for a declined prompt", text)
+			}
+		})
 	}
 }
 
@@ -133,5 +161,40 @@ func TestStreamAllForwardsChunks(t *testing.T) {
 	}
 	if got.String() != "abc" {
 		t.Errorf("onChunk received %q", got.String())
+	}
+}
+
+// The result event carries the run's cost and token counts; parseStreamJSON
+// surfaces them so the pipeline can total what a job spent.
+func TestParseStreamJSONReportsUsage(t *testing.T) {
+	stream := strings.Join([]string{
+		`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}}}`,
+		`{"type":"result","subtype":"success","is_error":false,"result":"hi","total_cost_usd":0.0123,"usage":{"input_tokens":1200,"output_tokens":340}}`,
+	}, "\n")
+	_, _, usage, err := parseStreamJSON(strings.NewReader(stream), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !usage.Reported || usage.InputTokens != 1200 || usage.OutputTokens != 340 || usage.CostUSD != 0.0123 {
+		t.Errorf("usage = %+v", usage)
+	}
+	// A result with no usage leaves it unreported.
+	_, _, usage, _ = parseStreamJSON(strings.NewReader(`{"type":"result","result":"x"}`), nil)
+	if usage.Reported {
+		t.Errorf("usage should be unreported, got %+v", usage)
+	}
+}
+
+func TestUsageAdd(t *testing.T) {
+	var u Usage
+	u.Add(Usage{InputTokens: 10, OutputTokens: 5, CostUSD: 0.1, Reported: true})
+	u.Add(Usage{InputTokens: 3, OutputTokens: 2, CostUSD: 0.02, Reported: true})
+	if u.InputTokens != 13 || u.OutputTokens != 7 || u.CostUSD < 0.1199 || u.CostUSD > 0.1201 || !u.Reported {
+		t.Errorf("accumulated = %+v", u)
+	}
+	// Adding a silent call keeps Reported true and adds zero.
+	u.Add(Usage{})
+	if u.InputTokens != 13 || !u.Reported {
+		t.Errorf("silent add changed the total: %+v", u)
 	}
 }

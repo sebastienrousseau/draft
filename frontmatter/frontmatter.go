@@ -265,6 +265,14 @@ type Options struct {
 	Existing map[string]string
 	// Site is the publisher identity; nil means DefaultSite.
 	Site *Site
+	// Engine, Model and Version record what wrote the article: the backend
+	// that produced the body, the model it used, and the draft release that
+	// ran. They are emitted only when set, so a set regenerated from its
+	// files keeps whatever provenance it already carries and gains none it
+	// cannot prove.
+	Engine  string
+	Model   string
+	Version string
 }
 
 // Generate constructs a YAML frontmatter string conforming to the standard schema.
@@ -296,6 +304,18 @@ func GenerateWithOptions(markdown string, opts Options) string {
 			return key + ": " + v + "\n"
 		}
 		return key + ": " + quoteYAML(generated) + "\n"
+	}
+	// optional is field for a key that exists only when there is a value:
+	// an existing one is kept, a generated one is written, and neither
+	// yields an empty line that would look like a fact.
+	optional := func(key, generated string) string {
+		if _, ok := opts.Existing[key]; ok {
+			return field(key, generated)
+		}
+		if strings.TrimSpace(generated) == "" {
+			return ""
+		}
+		return field(key, generated)
 	}
 
 	dateStr := date.Format("2006-01-02")
@@ -374,6 +394,9 @@ func GenerateWithOptions(markdown string, opts Options) string {
 		b.WriteString("docs: https://validator.w3.org/feed/docs/rss2.html\n")
 	}
 	b.WriteString(field("generator", "Static Site Generator (SSG) (version 0.0.26)"))
+	b.WriteString(optional("draft_engine", opts.Engine))
+	b.WriteString(optional("draft_model", opts.Model))
+	b.WriteString(optional("draft_version", opts.Version))
 	b.WriteString(field("item_description", meta.Description))
 	b.WriteString(field("item_guid", rssURL))
 	b.WriteString(field("item_link", rssURL))

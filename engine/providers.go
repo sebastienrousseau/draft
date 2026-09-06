@@ -51,6 +51,16 @@ type Provider struct {
 	// StreamJSON parses the Claude Code stream-json event format instead of raw
 	// text, forwarding token deltas as they arrive for a smooth live preview.
 	StreamJSON bool
+	// ACP drives the agent over the Agent Client Protocol instead of a
+	// one-shot headless invocation: one long-lived process, a fresh session
+	// per call, and a typed stop reason instead of an exit status. Bin and
+	// Args start the agent; the prompt fields are ignored.
+	ACP bool
+	// StreamJSONInput delivers the prompt as a single NDJSON user event on
+	// stdin (the "agy" turn protocol) and parses the NDJSON result event back.
+	// Like PromptViaStdin it keeps the prompt out of argv, but the provider's
+	// stream drives the turn rather than reading a raw prompt.
+	StreamJSONInput bool
 }
 
 // defaultProviders is the built-in registry of supported session CLIs, in
@@ -85,15 +95,30 @@ type Provider struct {
 func defaultProviders() []Provider {
 	return []Provider{
 		{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
-		{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
+		// copilot is driven over the Agent Client Protocol, not `copilot -p`:
+		// the -p path takes the prompt as a positional argument, which puts the
+		// verbatim source text into the process listing. ACP delivers it in a
+		// JSON-RPC frame on stdin, and reports a typed stop reason.
+		{Name: "copilot", Bin: "copilot", Args: []string{"--acp"}, ACP: true},
 		{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
-		{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
+		// agy is driven over its stream-json turn protocol, not `agy -p`: the -p
+		// path takes the prompt as a positional argument, exposing the source
+		// text in the process listing. The prompt goes on stdin as one NDJSON
+		// user event, and the NDJSON result event is parsed back.
+		{Name: "agy", Bin: "agy", Args: []string{"--input-format", "stream-json", "--output-format", "stream-json"}, ModelFlag: "--model", StreamJSONInput: true},
 		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
 		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
 		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
 		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
 		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
 		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+		// Agent Client Protocol transports. claude-acp is verified end to end
+		// against @zed-industries/claude-code-acp 0.16; the others speak the
+		// same protocol per their documentation but their output has not
+		// been checked for a full article.
+		{Name: "claude-acp", Bin: "claude-code-acp", DefaultModel: "sonnet", ACP: true},
+		{Name: "gemini-acp", Bin: "gemini", Args: []string{"--experimental-acp"}, ACP: true, Experimental: true},
+		{Name: "codex-acp", Bin: "codex-acp", ACP: true, Experimental: true},
 	}
 }
 

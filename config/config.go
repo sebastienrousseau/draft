@@ -7,6 +7,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/sebastienrousseau/draft/rules"
 	"net"
 	"net/url"
 	"os"
@@ -35,6 +36,9 @@ const (
 // more closely than qwen3:4b, which tended to overshoot the word budget and leak
 // its own planning text into the article.
 const (
+	// DefaultReader is the fast plain-text reader; see internal/pdf.Readers.
+	DefaultReader = "pdftotext"
+
 	DefaultOllamaModel        = "gemma3:4b"
 	DefaultExtractModel       = "gemma3:4b"
 	DefaultEditModel          = "gemma3:4b"
@@ -76,6 +80,17 @@ type Config struct {
 	WriteEngine   string // DRAFT_WRITE_ENGINE
 	EditEngine    string // DRAFT_EDIT_ENGINE
 
+	// Reader names the document reader: "pdftotext" (default) or "docling".
+	// See internal/pdf for what each trades.
+	Reader string // DRAFT_READER
+
+	// Style is the editorial policy the writer follows and the validator
+	// enforces: word band, banned vocabulary, language variant. It defaults
+	// to draft's house style and is replaced by a --style / DRAFT_STYLE file.
+	Style rules.Style
+	// StylePath is the file the style was loaded from, for display and doctor.
+	StylePath string
+
 	Model        string // session-provider model override ("" = provider default)
 	OllamaModel  string // writing model for the Ollama backend
 	ExtractModel string // claim-extraction model for the Ollama backend
@@ -106,6 +121,11 @@ type Config struct {
 	// disables caching entirely.
 	CacheDir string
 
+	// Version is the release of draft that is running, set by the binary
+	// rather than read from the environment. It is written into every
+	// article's provenance, so a reader can tell which draft made it.
+	Version string
+
 	// Warnings records configuration problems that were recovered from rather
 	// than fatal: an unreadable home directory, an out-of-range tunable, a
 	// non-loopback Ollama host. The CLI prints them to stderr so a silent
@@ -135,6 +155,8 @@ func Load(flags Flags) Config {
 		ExtractEngine:      env("DRAFT_EXTRACT_ENGINE", ""),
 		WriteEngine:        env("DRAFT_WRITE_ENGINE", ""),
 		EditEngine:         env("DRAFT_EDIT_ENGINE", ""),
+		Reader:             env("DRAFT_READER", DefaultReader),
+		Style:              rules.DefaultStyle(),
 		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
 		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
 		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
@@ -161,6 +183,16 @@ func Load(flags Flags) Config {
 	}
 	if flags.WriteEngine != "" {
 		c.WriteEngine = flags.WriteEngine
+	}
+	if flags.Reader != "" {
+		c.Reader = flags.Reader
+	}
+	if path := firstNonEmpty(flags.Style, os.Getenv("DRAFT_STYLE")); path != "" {
+		if st, err := rules.LoadStyle(expandHome(path, home)); err != nil {
+			warn("style file: %v; using the default house style", err)
+		} else {
+			c.Style, c.StylePath = st, path
+		}
 	}
 	if flags.Model != "" {
 		c.Model = flags.Model
@@ -270,6 +302,8 @@ type Flags struct {
 	Engine        string
 	ExtractEngine string
 	WriteEngine   string
+	Reader        string
+	Style         string
 	Model         string
 	ContextLength int
 	PredictLength int
@@ -369,4 +403,12 @@ func envInt(warn func(string, ...any), name string, fallback, minValue, maxValue
 		return fallback
 	}
 	return v
+}
+
+// firstNonEmpty returns the first non-empty of its arguments.
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
 }

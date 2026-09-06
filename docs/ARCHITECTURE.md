@@ -63,6 +63,11 @@ against. When they disagree, a draft fails a rule it was never told about.
 ## The pipeline, phase by phase
 
 `pipeline.Runner.run` walks five phases, reporting each on the event channel.
+The phases live in files named for them — `grounding.go` (read, section, extract,
+verify), `composing.go` (write, continue, validate), `saving.go` (the day-folder
+set and its provenance) and `enginechain.go` (the routing and fallback) — so the
+Runner's orchestration in `pipeline.go` reads as the sequence of phases rather
+than their internals.
 
 | # | Phase             | What happens                                                                       | Cost                           |
 | - | ----------------- | ---------------------------------------------------------------------------------- | ------------------------------ |
@@ -111,7 +116,23 @@ Almost every extension goes through one of these.
 implements them and nothing else changes: the pipeline, the prompts and the
 validation are identical whichever backend runs. `engine.Chain` orders backends
 and fails over between them; the cursor is sticky so a dead provider is not
-retried per paper, and half-open so a blip does not demote a whole queue.
+retried per paper, and half-open so a blip does not demote a whole queue. A
+refusal (`engine.ErrRefused`, the model declining a prompt) is a verdict on
+the text, not the backend, and never moves the cursor: the declined prompt is
+offered to the engines behind the cursor, and a section nobody will answer is
+recorded as having no claims. Providers are either one-shot CLI invocations
+(`engine.Session`) or Agent Client Protocol agents (`engine.ACP`, one process
+per run, one session per call); see [ADR 0006](adr/0006-agent-client-protocol-transport.md).
+
+**`pdf.ExtractWith`** — the document reader seam. `pdftotext` is the default
+and `docling` the fidelity option; both feed the same sectioner, so the rest
+of the pipeline never learns which one ran. See
+[ADR 0007](adr/0007-pluggable-document-reader.md).
+
+**`provenance`** — after the fact, from text alone: stable claim identifiers,
+a per-sentence attribution with byte offsets, and a C2PA manifest definition
+binding article, ledger, sources and backend. Evidence a reader can recompute,
+not a signature. See [ADR 0008](adr/0008-sentence-attribution-c2pa.md).
 
 **`pipeline.Event`** — a sum type on a channel. The TUI, the `--print` runner
 and the `--json` runner are three consumers of the same stream, which is why

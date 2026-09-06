@@ -202,8 +202,8 @@ func TestTrimToLastSentence(t *testing.T) {
 func TestWriteBudgetScalesWithClaims(t *testing.T) {
 	// A thin ledger yields a short target near the floor; a dense one is capped
 	// at the house maximum. min stays below max and never under the house floor.
-	_, fewMax := writeBudget(2)
-	_, manyMax := writeBudget(200)
+	_, fewMax := writeBudget(2, rules.DefaultStyle())
+	_, manyMax := writeBudget(200, rules.DefaultStyle())
 	if fewMax >= manyMax {
 		t.Errorf("more claims should allow a longer article: few=%d many=%d", fewMax, manyMax)
 	}
@@ -211,7 +211,7 @@ func TestWriteBudgetScalesWithClaims(t *testing.T) {
 		t.Errorf("a dense ledger should reach the house maximum, got %d", manyMax)
 	}
 	for _, c := range []int{0, 1, 6, 20, 60, 500} {
-		lo, hi := writeBudget(c)
+		lo, hi := writeBudget(c, rules.DefaultStyle())
 		if lo < rules.MinWords {
 			t.Errorf("claims=%d: min %d below house floor %d", c, lo, rules.MinWords)
 		}

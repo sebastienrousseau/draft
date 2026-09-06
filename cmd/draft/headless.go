@@ -37,7 +37,7 @@ func runHeadless(ctx context.Context, cfg config.Config, runner *pipeline.Runner
 			case pipeline.EngineEvent:
 				fmt.Fprintln(stderr, "  engine:", string(ev))
 			case pipeline.DoneEvent:
-				fmt.Fprintf(stderr, "  ✓ %d words via %s in %s\n", ev.Words, ev.Engine, ev.Duration.Round(time.Millisecond))
+				fmt.Fprintf(stderr, "  ✓ %d words via %s in %s%s\n", ev.Words, ev.Engine, ev.Duration.Round(time.Millisecond), usageSuffix(ev.Usage))
 				fmt.Fprintln(stdout, ev.OutputPath)
 			case pipeline.ErrEvent:
 				fmt.Fprintln(stderr, "  ×", string(ev))
@@ -46,6 +46,19 @@ func runHeadless(ctx context.Context, cfg config.Config, runner *pipeline.Runner
 		}
 	}
 	return failures
+}
+
+// usageSuffix renders a compact " · N tokens, $X" tail for a progress line
+// when the backends reported usage, and nothing when they did not.
+func usageSuffix(u pipeline.Usage) string {
+	if !u.Reported {
+		return ""
+	}
+	total := u.InputTokens + u.OutputTokens
+	if u.CostUSD > 0 {
+		return fmt.Sprintf(" · %d tokens, $%.4f", total, u.CostUSD)
+	}
+	return fmt.Sprintf(" · %d tokens", total)
 }
 
 // jobRecord is one line of --json output: a stable, machine-readable summary
@@ -76,6 +89,44 @@ type jobRecord struct {
 	// extraction instructions, and the digests of the exact bytes that went
 	// in and of the ledger they were verified against.
 	Manifest *runManifest `json:"manifest,omitempty"`
+	// Provenance locates the attribution and C2PA manifest definition
+	// written beside the set, with the attribution's coverage.
+	Provenance *provenanceRecord `json:"provenance,omitempty"`
+	// Usage is what the job's model calls cost, when the backends report it.
+	// Omitted entirely when nothing was reported, so a consumer never reads a
+	// silent 0 as "free".
+	Usage *usageRecord `json:"usage,omitempty"`
+}
+
+type usageRecord struct {
+	InputTokens  int     `json:"input_tokens,omitempty"`
+	OutputTokens int     `json:"output_tokens,omitempty"`
+	CostUSD      float64 `json:"cost_usd,omitempty"`
+}
+
+// usageFor summarises a job's reported usage, or nil when no backend reported
+// any — a local-only run, or a provider that returns no counts.
+func usageFor(ev pipeline.DoneEvent) *usageRecord {
+	if !ev.Usage.Reported {
+		return nil
+	}
+	return &usageRecord{InputTokens: ev.Usage.InputTokens, OutputTokens: ev.Usage.OutputTokens, CostUSD: ev.Usage.CostUSD}
+}
+
+type provenanceRecord struct {
+	Attribution string `json:"attribution,omitempty"`
+	Manifest    string `json:"manifest,omitempty"`
+	Sentences   int    `json:"sentences"`
+	Attributed  int    `json:"attributed"`
+}
+
+// provenanceFor summarises the provenance pair of a completed job, or nil
+// when none was written.
+func provenanceFor(ev pipeline.DoneEvent) *provenanceRecord {
+	if ev.AttributionPath == "" && ev.ManifestPath == "" {
+		return nil
+	}
+	return &provenanceRecord{Attribution: ev.AttributionPath, Manifest: ev.ManifestPath, Sentences: ev.Sentences, Attributed: ev.Attributed}
 }
 
 // jobRecordSchema is the current version of the --json record shape. Bump it
@@ -149,6 +200,8 @@ func runHeadlessJSON(ctx context.Context, cfg config.Config, runner *pipeline.Ru
 				rec.DurationMS = ev.Duration.Milliseconds()
 				rec.PhasesMS = phaseMillis(ev.Timings)
 				rec.Manifest = manifestFor(ev)
+				rec.Provenance = provenanceFor(ev)
+				rec.Usage = usageFor(ev)
 			case pipeline.ErrEvent:
 				rec.Error = string(ev)
 			}

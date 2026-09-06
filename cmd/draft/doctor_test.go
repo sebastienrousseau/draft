@@ -215,3 +215,28 @@ func TestRunDoctorFlag(t *testing.T) {
 		t.Errorf("--doctor produced no report:\n%s%s", out.String(), errb.String())
 	}
 }
+
+// Docling is optional: its absence is a note, unless the user asked for it.
+func TestDoctorReportsDocling(t *testing.T) {
+	var out strings.Builder
+	if code := runDoctor(doctorCfg(t), healthyProbes(), &out); code != 0 || !strings.Contains(out.String(), "docling") {
+		t.Errorf("code %d, report:\n%s", code, out.String())
+	}
+	missing := healthyProbes()
+	missing.lookPath = func(name string) (string, error) {
+		if name == "docling" {
+			return "", errors.New("not found")
+		}
+		return "/usr/bin/" + name, nil
+	}
+	out.Reset()
+	if code := runDoctor(doctorCfg(t), missing, &out); code != 0 || !strings.Contains(out.String(), "--reader docling unavailable") {
+		t.Errorf("an absent optional reader must not fail the doctor; code %d:\n%s", code, out.String())
+	}
+	cfg := doctorCfg(t)
+	cfg.Reader = "docling"
+	out.Reset()
+	if code := runDoctor(cfg, missing, &out); code != 1 || !strings.Contains(out.String(), "drop --reader docling") {
+		t.Errorf("a requested but missing reader must fail; code %d:\n%s", code, out.String())
+	}
+}

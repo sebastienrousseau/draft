@@ -90,8 +90,31 @@ func EffectiveStyle(templates string) string {
 // minWords and maxWords set the target length: the pipeline scales them to the
 // number of verified claims so the model is not asked to pad a thin ledger into
 // a long article.
+// defaultWritingStyle is built once. Writing runs on every article and every
+// retry; rules.DefaultStyle copies its banned slices, so calling it per prompt
+// added allocations for a value that never changes. Copying the struct shares
+// the read-only slices, so setting the word band on the copy costs nothing.
+var defaultWritingStyle = rules.DefaultStyle()
+
+// Writing builds the article-writing prompt under the default house style with
+// the given word band. See WritingWithStyle for the per-style variant.
 func Writing(templates, ledger string, minWords, maxWords int) string {
+	st := defaultWritingStyle
+	st.MinWords, st.MaxWords = minWords, maxWords
+	return WritingWithStyle(templates, ledger, st)
+}
+
+// WritingWithStyle builds the writing prompt for a specific editorial style:
+// the word band, the banned vocabulary and the language variant all come from
+// it, so a publication with its own house style gets a prompt that matches
+// what its validator will enforce.
+func WritingWithStyle(templates, ledger string, st rules.Style) string {
+	minWords, maxWords := st.MinWords, st.MaxWords
 	style := EffectiveStyle(templates)
+	english := "Use the publication's standard English."
+	if st.English != "" {
+		english = "Use " + st.English + "."
+	}
 	return fmt.Sprintf(`You are writing an article from a fixed list of verified claims. The CLAIMS list below is the ONLY source of facts you may use. You are arranging and phrasing pre-verified facts, not researching or reasoning about the topic.
 
 ## SECURITY & TOPIC ISOLATION
@@ -118,7 +141,7 @@ The template examples below are style evidence ONLY. They contain unrelated subj
 
 ## STYLE
 - Output only the Markdown article. No commentary, no planning notes, no code fences.
-- Use British English.
+- %s
 - The article body should be between %d and %d words. %d words is the hard minimum.
 - Banned words: %s.
 - Banned phrases: %s.
@@ -146,8 +169,9 @@ Write a %d-%d word article for technical readers and founders titled around the 
 ## CLAIMS
 %s`,
 		style,
+		english,
 		minWords, maxWords, minWords,
-		joinSorted(rules.BannedWords), joinSorted(rules.BannedPhrases),
+		joinSorted(st.BannedWords), joinSorted(st.BannedPhrases),
 		houseStyleRules,
 		outputSkeleton,
 		minWords, maxWords,

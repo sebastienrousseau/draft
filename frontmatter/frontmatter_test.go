@@ -672,3 +672,30 @@ func TestProcessFile(t *testing.T) {
 		t.Errorf("final file should contain both frontmatter and body")
 	}
 }
+
+// Provenance fields name what wrote the article. They appear only when the
+// writer is known, so a set regenerated from its files neither invents a
+// backend nor loses the one it recorded.
+func TestProvenanceFieldsAreOptionalAndSticky(t *testing.T) {
+	body := "# A Title\n\nSome body text about a result.\n"
+	plain := GenerateWithOptions(body, Options{Date: time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)})
+	for _, key := range []string{"draft_engine", "draft_model", "draft_version"} {
+		if strings.Contains(plain, key+":") {
+			t.Errorf("%s emitted with no value:\n%s", key, plain)
+		}
+	}
+	withEngine := GenerateWithOptions(body, Options{Engine: "claude", Model: "sonnet", Version: "0.0.34"})
+	for _, want := range []string{`draft_engine: "claude"`, `draft_model: "sonnet"`, `draft_version: "0.0.34"`} {
+		if !strings.Contains(withEngine, want) {
+			t.Errorf("missing %s in:\n%s", want, withEngine)
+		}
+	}
+	// An existing value wins even when the regeneration knows nothing.
+	kept := GenerateWithOptions(body, Options{Existing: map[string]string{"draft_engine": `"copilot"`}})
+	if !strings.Contains(kept, `draft_engine: "copilot"`) {
+		t.Errorf("existing provenance was not kept:\n%s", kept)
+	}
+	if strings.Contains(kept, "draft_model:") {
+		t.Errorf("a field with no existing and no generated value must be absent:\n%s", kept)
+	}
+}

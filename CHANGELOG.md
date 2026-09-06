@@ -6,6 +6,142 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-09-06
+
+### Changed
+
+- **The pipeline package is split by phase.** The 1,500-line `pipeline.go` god
+  file is now four focused files — `grounding.go`, `composing.go`, `saving.go`
+  and `enginechain.go` — each holding one phase's methods, with `pipeline.go`
+  left as the Runner type and its orchestration. Behaviour, the public API and
+  every test are unchanged; it is a navigability change, verified by the full
+  race suite and the claims mutation gate. A deeper redesign of the Runner's
+  shared engine-chain state remains a separate reviewed effort, because that
+  state feeds the grounding gate directly.
+- **Table recall is now measured, not just claimed.** A deterministic corpus
+  (`claims/testdata/tables/`) renders the same table the way each reader
+  produces it — Docling as an intact Markdown table, pdftotext as its
+  column-flattened flow — and checks how many claims that quote a cell with its
+  row label still verify. Every such claim grounds against the structured
+  rendering and none against the flattened one, quantifying what
+  `--reader docling` is worth on tabular sources (the audit's open A3). It runs
+  in CI without a reader installed.
+- **Higher grounding recall, same verbatim gate.** Claim quotes are now
+  compared in a rendering-tolerant normal form: a literal `\n` a model wrote
+  for a line break, a hyphen it dropped from a word, a ligature the PDF
+  rendered as one glyph, a non-breaking or zero-width space, and en/em dashes
+  no longer cause a genuine quote to be rejected as "not found in source". A
+  quote cut mid-clause or too short to cite is extended to its sentence
+  boundary using the source's own words, so the record stays verbatim by
+  construction. Measured over 3,217 extraction blocks from real papers, the
+  drop rate fell from 29.6% to 8.5%. A quote that changes, adds, drops or
+  reorders a word is still rejected, an invalid TYPE or STRENGTH is still
+  dropped, and a fabricated number in an adjacent sentence is never pulled
+  into a repaired quote — all three pinned by the grounding corpus, whose
+  candidate total and recall floor rose with two rescued cases and a new
+  fabrication-guard case. The `claims` mutation gate stays at 100% efficacy.
+
+### Added
+
+- **A configurable house style.** `--style <file.json>` / `DRAFT_STYLE` sets
+  the word band, banned words and phrases (replace the built-in list or extend
+  it with `also_banned_*`), and the language variant, so a publication can use
+  draft's grounding without adopting its voice. The structural rules stay
+  fixed. An unknown field or an impossible band falls back to the default style
+  with a warning, never a failed run; `--dry-run` shows which style is in
+  force. See `examples/style/`.
+- **Token and cost accounting in `--json` and the progress line.** Every
+  model call's usage is summed per job and reported: the `--json` record gains
+  a `usage` object with `input_tokens`, `output_tokens` and `cost_usd`, and the
+  headless progress line ends with `· N tokens, $X`. It is drawn from what each
+  backend reports — Claude's per-run cost, agy's token totals, Ollama's token
+  counts (no price) — and is omitted entirely when nothing was reported, so a
+  silent zero is never shown as "free".
+- **`draft --verify <file>` checks an article against its provenance.** It
+  recomputes the body digest and compares it to the C2PA manifest written
+  beside the set, hashes the sources when they are still on the machine, and
+  checks the ledger digest when a kept ledger is present. Point it at the body,
+  the final document or the manifest; it finds the rest by the day-folder
+  layout, prints a per-item report, and exits non-zero if the article, the
+  ledger or a source no longer matches. This turns the manifest definition
+  from Move 3 into something a reader can act on without a signing step.
+- **An Agent Client Protocol transport.** `--engine claude-acp` drives
+  `claude-code-acp` over JSON-RPC on stdio: one agent process for the run, a
+  fresh session per call, and a typed stop reason in place of an exit status.
+  `gemini-acp` and `codex-acp` are registered as experimental. The engine is
+  closed at exit through `pipeline.Runner.Close`. Measured against the
+  adapter, a warm session costs about what a cold one-shot call costs; the
+  gain is the standard transport and the failure semantics, not wall clock.
+- **Refusal-aware routing.** When the active engine declines a prompt, that
+  one prompt is offered to the engines behind it in the chain without moving
+  the cursor; the next prompt returns to the preferred engine. A section that
+  every engine declines is recorded as empty; an article that every engine
+  declines fails its own job only.
+- **Provenance in the frontmatter.** Every generated set now carries
+  `draft_engine`, `draft_model` and `draft_version`, naming the backend that
+  actually wrote the article, which may be an alternate the preferred engine
+  handed it to. **Breaking under the stability guarantees**: three new
+  frontmatter keys are emitted. They are omitted when unknown, so a set
+  regenerated with `--frontmatter` keeps what it has and gains nothing it
+  cannot prove.
+
+- **A pluggable document reader.** `--reader docling` (or `DRAFT_READER`)
+  routes PDF and DOCX through the Docling CLI instead of `pdftotext`: tables
+  and headings survive as Markdown, DOCX reads on Linux and Windows, and the
+  cost is seconds to minutes per document plus a Python installation.
+  `pdftotext` stays the default. `--doctor` reports whether Docling is
+  installed and fails only when it was asked for and is missing; `--dry-run`
+  names the reader in its plan. Measured on a 1.9 MB arXiv paper: 155 s
+  against well under a second, with tables that plain text flattened.
+
+- **Per-sentence attribution and a C2PA manifest definition.** Every set now
+  carries a `provenance/` pair: `<stem>-attribution.json` maps each prose
+  sentence of the body, with byte offsets, to stable claim identifiers
+  (`c` + ten hex digits of the quote's SHA-256), flags figures no claim
+  contains, and reports coverage; `<stem>-c2pa.json` is a C2PA manifest
+  definition in the shape `c2patool` reads, binding the article digest, the
+  ledger digest, the prompt version, engine, model, reader, sources and claim
+  identifiers under `com.draftlib.grounding`. Attribution is deterministic
+  and model-free; signing and embedding are the publisher's step. The
+  `--json` record gains a `provenance` object. **Breaking under the
+  stability guarantees**: the day-folder layout gains a fourth directory.
+
+### Fixed
+
+- **The prompt no longer reaches the process listing for copilot or agy.**
+  `copilot` is now driven over the Agent Client Protocol (`copilot --acp`) and
+  `agy` over its stream-json stdin turn protocol, so the verbatim source text
+  travels in a JSON-RPC frame or an NDJSON event on stdin rather than as a
+  positional argument any local user could read with `ps`. Both were verified
+  end to end writing a full article. This closes the last of the audit's
+  prompt-in-argv findings for every provider draft selects in auto mode; amp,
+  crush and qwen remain positional-only and are used only when forced.
+- **A refusal from a provider without a typed stop reason is detected and
+  routed, not surfaced as a crash.** copilot, codex, cursor, grok, agy and the
+  local model decline by writing prose instead of the CLAIM/NONE the
+  extraction prompt asks for. draft now recognises a short, schema-free
+  response carrying refusal language as a decline, converts it to the same
+  `engine.ErrRefused` a Claude refusal produces, and offers the section to the
+  next engine before recording it as having no claims. A genuine extraction, a
+  legitimate NONE, and a claim whose text merely contains refusal words are
+  never misclassified, pinned by tests.
+- **Ollama now self-starts outside the TUI.** A headless or `--print`/`--json`
+  run that fell back to the local model while offline failed with "connection
+  refused", because only the interactive UI started `ollama serve`. The engine
+  now starts the server on first use, once per run even under the concurrent
+  extraction workers, on every code path.
+- **A refused prompt no longer demotes the provider for the rest of the
+  queue.** When the model declines a section (the API answers with
+  `stop_reason: "refusal"` and the claude CLI exits 1 with an empty stderr),
+  `draft` read it as a dead backend: in auto mode every later paper in the
+  queue was silently written by the next provider, and with `--engine claude`
+  the queue stranded on "no generation engine available". The session engine
+  now reads the stop reason from the stream and returns `engine.ErrRefused`;
+  the fallback chain leaves the cursor where it is, and claim extraction
+  records the declined section as having no claims and carries on. Seen on
+  two incident reports whose sections describe agents gaining remote code
+  execution.
+
 ## [0.0.33] - 2026-09-03
 
 ### Security
@@ -876,6 +1012,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.34]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.34
 [0.0.33]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.33
 [0.0.32]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.32
 [0.0.31]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.31

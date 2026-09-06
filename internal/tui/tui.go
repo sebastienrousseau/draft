@@ -393,6 +393,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cfg.Engine = chosen
 			m.cfg.ExtractEngine = chosen
 			m.cfg.WriteEngine = chosen
+			if m.runner != nil {
+				// The previous runner may hold an agent process open.
+				_ = m.runner.Close()
+			}
 			m.runner = pipeline.NewRoutedRunner(m.cfg, nil)
 			m.engineName = chosen
 			m.selectingEngine = false

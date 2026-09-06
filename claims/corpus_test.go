@@ -119,8 +119,8 @@ func TestGroundingCorpus(t *testing.T) {
 	// — a case file deleted, or a malformed block silently swallowed — so the
 	// invariant is on the candidate total instead.
 	const (
-		minVerifiedAcrossCorpus = 9
-		totalCandidateClaims    = 17
+		minVerifiedAcrossCorpus = 11
+		totalCandidateClaims    = 18
 	)
 	if totalVerified < minVerifiedAcrossCorpus {
 		t.Errorf("corpus recall fell: %d claims verified across the corpus, floor is %d",

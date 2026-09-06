@@ -1,0 +1,12 @@
+## Results
+
+Table 3 reports returns by strategy and ticker.
+
+Category Model AAPL CR% GOOGL CR% AMZN CR%
+Market Rule-based Rule-based ML
+B&H MACD KDJ&RSI AlphaMix
+-5.23 -1.49 2.05 12.4
+7.78 6.20 0.4 9.1
+17.1 0.0 -0.77 21.3
+
+The AlphaMix model led on every ticker.

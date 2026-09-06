@@ -43,17 +43,21 @@
     },
     {
       "name": "06-dangling-fragment",
-      "why": "A span cut mid-clause is not evidence of anything; the claim it supports cannot be checked against a sentence that never ends.",
-      "verified": 0,
-      "dropped": 1,
-      "survives": []
+      "why": "A span cut mid-clause is completed from the source's own next words, so the claim can be checked against a whole sentence. repair extends only through source text, never model text, so the quote stays verbatim.",
+      "verified": 1,
+      "dropped": 0,
+      "survives": [
+        "evaluated the system on three corpora"
+      ]
     },
     {
       "name": "07-quote-too-short",
-      "why": "A span short enough to occur by chance proves nothing, so it is refused before it can ground a claim.",
-      "verified": 0,
-      "dropped": 1,
-      "survives": []
+      "why": "A span too short to cite is extended to its sentence boundary from the source, which is both long enough and verbatim. A span the source does not contain is still refused.",
+      "verified": 1,
+      "dropped": 0,
+      "survives": [
+        "Accuracy rose"
+      ]
     },
     {
       "name": "08-invalid-type",
@@ -97,6 +101,13 @@
       "survives": [
         "1024 shards"
       ]
+    },
+    {
+      "name": "13-repair-cannot-cross-a-sentence",
+      "why": "repair extends a cut quote only to its own sentence end, so a fabricated number that lives in the NEXT sentence is never pulled into the quote. This is the fabrication guard for the extension.",
+      "verified": 0,
+      "dropped": 1,
+      "survives": []
     }
   ]
 }

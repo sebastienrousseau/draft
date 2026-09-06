@@ -1,0 +1,7 @@
+{
+  "english": "American English",
+  "min_words": 600,
+  "max_words": 1500,
+  "also_banned_words": ["actually", "basically", "simply"],
+  "also_banned_phrases": ["at the end of the day", "the fact that"]
+}

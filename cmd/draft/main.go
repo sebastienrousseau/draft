@@ -29,6 +29,7 @@ import (
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/internal/extractcache"
+	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/internal/tui"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
@@ -78,7 +79,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	var showVersion, headless bool
 	var jsonOut, dryRun bool
 	var clearCache, doctor, manPage bool
-	var reviewPath, frontmatterPath, completionShell string
+	var reviewPath, frontmatterPath, completionShell, verifyPath string
 
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -86,6 +87,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&flags.Engine, "engine", "", "backend: auto (default), ollama, or a provider name")
 	fs.StringVar(&flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
 	fs.StringVar(&flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
+	fs.StringVar(&flags.Reader, "reader", "", "document reader: pdftotext (default) or docling")
+	fs.StringVar(&flags.Style, "style", "", "JSON house-style file: word band, banned vocabulary, language")
 	fs.StringVar(&flags.Model, "model", "", "session-provider model override (e.g. opus)")
 	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
 	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
@@ -105,6 +108,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
 	fs.BoolVar(&headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
+	fs.StringVar(&verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
 	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
 	fs.BoolVar(&doctor, "doctor", false, "check that this machine can run draft, and exit")
@@ -133,6 +137,9 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	if verifyPath != "" {
+		return runVerify(verifyPath, stdout, stderr)
+	}
 	if frontmatterPath != "" {
 		if reviewPath != "" {
 			fmt.Fprintln(stderr, "draft: --frontmatter cannot be combined with --review")
@@ -155,6 +162,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 
 	cfg := config.Load(flags)
+	cfg.Version = version
 	if clearCache {
 		// Read the configured location before --no-cache can blank it, so
 		// `--clear-cache --no-cache` still clears the right directory.
@@ -174,6 +182,10 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	// A misspelled provider name would otherwise degrade to Ollama without a
 	// word, producing a local-model draft the user believes came from Claude.
 	if err := engine.Validate(cfg); err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
+		return 2
+	}
+	if err := pdf.ValidateReader(cfg.Reader); err != nil {
 		fmt.Fprintln(stderr, "draft:", err)
 		return 2
 	}
@@ -202,6 +214,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	// fallback cursor every time, so a dead provider was retried — and
 	// re-reported — once per paper instead of once per run.
 	runner := pipeline.NewRoutedRunner(cfg, nil)
+	defer func() { _ = runner.Close() }()
 
 	if dryRun {
 		if runDryRun(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
@@ -320,6 +333,8 @@ var flagHelp = [][2]string{
 	{"--engine <mode>", "auto (default), ollama, or a provider name"},
 	{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
 	{"--write-engine <m>", "backend for writing (default: --engine)"},
+	{"--reader <name>", "document reader: pdftotext (default, fast) or docling (tables, structure)"},
+	{"--style <file>", "JSON house-style file: word band, banned vocabulary, language variant"},
 	{"--model <name>", "session-provider model override (e.g. opus)"},
 	{"--experimental", "let auto mode use experimental providers"},
 	{"--strict-numbers", "fail on a number found in no verified claim"},
@@ -334,6 +349,7 @@ var flagHelp = [][2]string{
 	{"--resume", "reuse a verified claim ledger from an earlier attempt"},
 	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
+	{"--verify <file>", "check an article against its provenance, and exit"},
 	{"--combine <file>", "alias for --frontmatter"},
 	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 	{"--print", "run without the TUI; print draft paths to stdout"},
@@ -383,7 +399,9 @@ func usage(w io.Writer) {
   unverified) and used by auto only with --experimental. Force any by name.
 
   If a session call fails because the machine is offline, draft fails over to a
-  local Ollama model and stays there for the rest of the run.
+  local Ollama model and stays there for the rest of the run. A prompt the model
+  declines is not a provider failure: the section is recorded as having no
+  claims and the provider is kept.
 
 `, strings.Join(engine.ProviderNames(), ", "))
 
@@ -409,7 +427,8 @@ func usage(w io.Writer) {
 		dim("Scratch files are removed unless --keep-artifacts."))
 
 	fmt.Fprintf(w, "%s\n  %s\n\n", head("REQUIREMENTS"),
-		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline)."))
+		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline).\n  "+
+			"Optional: docling (--reader docling) reads PDF and DOCX with tables and headings intact, on every platform, slower."))
 
 	fmt.Fprintf(w, "%s\n  %s\n", head("KEYS"),
 		dim("q / esc quit · enter queue another source · j/k · arrows · pgup/pgdn scroll"))

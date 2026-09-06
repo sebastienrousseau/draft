@@ -15,6 +15,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -47,12 +48,44 @@ type Request struct {
 	OnChunk func(string)
 }
 
+// ErrRefused reports that the model declined to answer a prompt. It is a
+// verdict on the text, not on the backend: the provider is up, logged in and
+// answering, and it will answer the next prompt. Callers must not treat it as
+// an outage. The pipeline keeps the engine and, for claim extraction, records
+// the section as having no claims.
+var ErrRefused = errors.New("the model declined to answer this prompt")
+
+// Usage is what a generation call cost, as far as the backend reports it. A
+// local model reports tokens and no price; a session provider may report both
+// or neither. Zero means "not reported", never "free" — the pipeline sums what
+// it is given and says so, rather than implying a total it cannot stand behind.
+type Usage struct {
+	InputTokens  int
+	OutputTokens int
+	// CostUSD is the provider's own charge for the call in US dollars, when it
+	// reports one. Local models leave it zero.
+	CostUSD float64
+	// Reported records whether the backend gave any usage at all, so a run
+	// that summed only silent calls can say "not reported" instead of "0".
+	Reported bool
+}
+
+// Add accumulates another call's usage into this one.
+func (u *Usage) Add(other Usage) {
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.CostUSD += other.CostUSD
+	u.Reported = u.Reported || other.Reported
+}
+
 // Result is the outcome of a generation call.
 type Result struct {
 	Text string
 	// Truncated is true when the backend stopped because it hit a length limit
 	// rather than finishing, signalling the pipeline to continue generation.
 	Truncated bool
+	// Usage is what the call cost, when the backend reports it.
+	Usage Usage
 }
 
 // Engine is a text-generation backend.
@@ -123,21 +156,32 @@ func chainForName(cfg config.Config, name string) []Engine {
 				continue
 			}
 			if available(p.Bin) {
-				if s, ok := NewSession(p.Name, cfg); ok {
-					chain = append(chain, s)
+				if e, ok := NewEngine(p.Name, cfg); ok {
+					chain = append(chain, e)
 				}
 			}
 		}
 		return append(chain, ollama)
 	default:
-		if s, ok := NewSession(name, cfg); ok {
-			return []Engine{s, ollama}
+		if e, ok := NewEngine(name, cfg); ok {
+			return []Engine{e, ollama}
 		}
 		// An unknown name reaching here means Validate was not called. Fall
 		// back rather than panic, but never pretend the requested engine ran:
 		// Validate is what turns a typo into a clean exit.
 		return []Engine{ollama}
 	}
+}
+
+// NewEngine builds the backend for a registered provider, choosing the
+// transport the provider declares: an ACP agent for one marked ACP, a
+// one-shot headless invocation otherwise. It returns false for an unknown
+// name.
+func NewEngine(name string, cfg config.Config) (Engine, bool) {
+	if p, ok := LookupProvider(name); ok && p.ACP {
+		return NewACP(name, cfg)
+	}
+	return NewSession(name, cfg)
 }
 
 // Validate reports whether cfg names an engine that exists. Chain has to

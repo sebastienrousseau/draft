@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"sync"
 )
 
 // Bounds on how much of a response body is read for purposes other than the
@@ -27,14 +28,15 @@ const (
 
 // Ollama generates text through a local Ollama server's /api/generate endpoint.
 type Ollama struct {
-	host    string
-	extract string
-	write   string
-	edit    string
-	numCtx  int
-	numPred int
-	timeout time.Duration
-	client  *http.Client
+	host       string
+	ensureOnce sync.Once
+	extract    string
+	write      string
+	edit       string
+	numCtx     int
+	numPred    int
+	timeout    time.Duration
+	client     *http.Client
 }
 
 // newOllamaClient builds the HTTP client used for generation. It deliberately
@@ -71,6 +73,10 @@ func NewOllama(cfg config.Config) *Ollama {
 	}
 }
 
+// ensureRunning starts the local server if needed. It is a variable so a test
+// can substitute it without launching a process.
+var ensureRunning = EnsureOllamaRunning
+
 // Name implements Engine.
 func (o *Ollama) Name() string { return "ollama" }
 
@@ -83,6 +89,14 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 		ctx, cancel = context.WithTimeout(ctx, o.timeout)
 		defer cancel()
 	}
+
+	// Start the local server on first use if it is not already up. The TUI did
+	// this before a run; the headless and fallback paths did not, so a queue
+	// that fell back to Ollama offline failed with "connection refused" even
+	// though `ollama serve` would have answered. Done once per engine, and a
+	// start failure is not fatal here: the request below reports the real
+	// unreachable error with the host in it.
+	o.ensureOnce.Do(func() { _ = ensureRunning(o.host) })
 
 	numPred := o.numPred
 	if req.NumPredict > 0 && req.NumPredict < numPred {
@@ -131,14 +145,17 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 
 	var out strings.Builder
 	var truncated bool
+	var usage Usage
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		var item struct {
-			Response   string `json:"response"`
-			Done       bool   `json:"done"`
-			DoneReason string `json:"done_reason"`
-			Error      string `json:"error"`
+			Response     string `json:"response"`
+			Done         bool   `json:"done"`
+			DoneReason   string `json:"done_reason"`
+			Error        string `json:"error"`
+			PromptTokens int    `json:"prompt_eval_count"`
+			EvalTokens   int    `json:"eval_count"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
 			return Result{Text: out.String()}, err
@@ -154,13 +171,15 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 		}
 		if item.Done {
 			truncated = item.DoneReason == "length"
+			// The local model reports token counts but never a price.
+			usage = Usage{InputTokens: item.PromptTokens, OutputTokens: item.EvalTokens, Reported: item.PromptTokens > 0 || item.EvalTokens > 0}
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return Result{Text: out.String()}, err
 	}
-	return Result{Text: out.String(), Truncated: truncated}, nil
+	return Result{Text: out.String(), Truncated: truncated, Usage: usage}, nil
 }
 
 func (o *Ollama) modelFor(kind Kind) string {

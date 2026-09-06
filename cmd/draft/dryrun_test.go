@@ -105,3 +105,13 @@ func TestRunDryRunViaFlag(t *testing.T) {
 		t.Errorf("stdout = %q", out.String())
 	}
 }
+
+// The plan names the reader, so a run with the wrong one is caught before a
+// minute of Docling rather than after.
+func TestDryRunNamesTheReader(t *testing.T) {
+	var out strings.Builder
+	printPlan(&out, config.Config{}, pipeline.DryRunReport{Reader: "docling", Engines: map[engine.Kind]string{}})
+	if !strings.Contains(out.String(), "Reader           docling") {
+		t.Errorf("plan lacks the reader row:\n%s", out.String())
+	}
+}

@@ -40,6 +40,7 @@
 - [Providers](#providers)
 - [Usage](#usage)
 - [Article sets](#article-sets)
+- [Provenance](#provenance)
 - [Performance](#performance)
 - [Configuration](#configuration)
 - [Architecture](#architecture)
@@ -245,6 +246,11 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   by a 10 MB binary. See [Performance](#performance).
 - **A dashboard worth watching.** The article streams in token by token,
   beside a pipeline view, a per-run log, and a focus timer.
+- **Two readers, one switch.** `pdftotext` by default: a 62-page paper in
+  ~110 ms, text only. `--reader docling` when the tables matter: a layout
+  model that keeps tables and headings, reads DOCX on every platform, and
+  takes seconds to minutes per document. Same pipeline either way, and the
+  extraction cache tells their sections apart.
 - **Split local and cloud per stage.** Extraction is a dozen cheap, mechanical
   calls; writing is one that decides the article's quality. Point them at
   different backends and a local model does the bulk for free while the best
@@ -254,8 +260,10 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   writing, turning a ten-minute retry into seconds.
 - **Look before you leap.** `--dry-run` reports the sections, the routing and
   the model-call count in about a tenth of a second.
-- **Scriptable.** `--print` emits paths; `--json` emits one JSON object per
-  job, with per-phase timings; `--completion` writes shell completions.
+- **Scriptable, and priced.** `--print` emits paths; `--json` emits one JSON
+  object per job with per-phase timings and, when the backend reports it, a
+  `usage` object of token counts and dollar cost; `--completion` writes shell
+  completions.
 
 ---
 
@@ -276,17 +284,48 @@ takes the first installed provider, skipping experimental rows unless
 | #  | Provider       | Status       | Headless invocation                                                                                           |
 | -- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
 | 1  | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (live-streamed, prompt on stdin) |
-| 2  | `copilot`      | stable       | `copilot -p --allow-all-tools`                                                                                |
+| 2  | `copilot`      | stable       | `copilot --acp` over the Agent Client Protocol (prompt on stdin)                                              |
 | 3  | `codex`        | stable       | `codex exec` (prompt on stdin)                                                                                |
-| 4  | `agy`          | stable       | `agy -p` (Google Antigravity)                                                                                 |
-| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (prompt on stdin)                                              |
+| 4  | `agy`          | stable       | `agy --input-format stream-json` turn protocol (prompt on stdin)                                              |
+| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text` (prompt on stdin)                                                      |
 | 6  | `amp`          | experimental | `amp -x`                                                                                                      |
 | 7  | `crush`        | experimental | `crush run`                                                                                                   |
 | 8  | `goose`        | experimental | `goose run --no-session -t`                                                                                   |
 | 9  | `grok`         | stable       | `grok --output-format plain --single`                                                                         |
 | 10 | `qwen`         | experimental | `qwen -p`                                                                                                     |
+| 11 | `claude-acp`   | stable       | `claude-code-acp` over the Agent Client Protocol                                                              |
+| 12 | `gemini-acp`   | experimental | `gemini --experimental-acp` over the Agent Client Protocol                                                    |
+| 13 | `codex-acp`    | experimental | `codex-acp` over the Agent Client Protocol                                                                    |
 
 `go run ./examples/providers` shows which are installed on your machine.
+
+### Agent Client Protocol
+
+The `-acp` providers speak the [Agent Client Protocol](https://agentclientprotocol.com):
+JSON-RPC over the agent's stdio, one process for the whole run, and a fresh
+session for every call. A session carries conversation state, and claim
+extraction needs each section read on its own, so the process is reused and
+the session never is. The protocol reports why a turn stopped, so a declined
+prompt arrives as a typed outcome rather than an exit status.
+
+What ACP does not buy is speed. Measured against `claude-code-acp` 0.16, a warm
+second session costs about what a cold `claude -p` costs, because the adapter
+starts an agent per session underneath. Use it for the standard transport and
+the cleaner failure semantics, not for the clock.
+
+### When a model declines a prompt
+
+A model can refuse a section — incident reports that describe an intrusion
+are the usual case — and that is a verdict on the text, not on the provider.
+`draft` keeps the engine where it is, offers that one prompt to the next
+engine in the chain, and goes back to the preferred engine for the next
+prompt. A section that every engine declines is recorded as having no claims;
+an article that every engine declines fails its own job and nothing else.
+
+The engine that actually wrote an article is recorded in its frontmatter as
+`draft_engine`, with `draft_model` and `draft_version` beside it, so the
+provenance of a piece written by an alternate is in the artefact, not only in
+the run log.
 
 ---
 
@@ -317,6 +356,7 @@ draft [flags] <source> [more-sources...]
 | `--write-engine <m>`   | Backend for writing the article (default: `--engine`)     |
 | `--review <draft>`     | Enhance an existing draft with surgical edits             |
 | `--frontmatter <f>`    | Regenerate frontmatter + final document from an article   |
+| `--verify <f>`         | Check an article against its provenance, and exit         |
 | `--combine <f>`        | Alias for `--frontmatter`                                 |
 | `--keep-artifacts`     | Keep the claim ledger beside a successful draft           |
 | `--print`              | Run without the TUI; print draft paths to stdout          |
@@ -332,14 +372,22 @@ absent from `draft --help`, and may be removed in a future release.
 
 ## Article sets
 
-**One article. Three files. Always in sync.**
+**One article. Three files. Always in sync.** Plus two a reader can check.
 
 ```text
 2026-07-29/
-├── source/2026-07-29-<slug>-body.md         # the article — edit this
-├── yaml/2026-07-29-<slug>-frontmatter.yaml  # adjacent frontmatter
-└── final/2026-07-29-<slug>-final.md         # combined, ready to publish
+├── source/2026-07-29-<slug>-body.md              # the article — edit this
+├── yaml/2026-07-29-<slug>-frontmatter.yaml       # adjacent frontmatter
+├── final/2026-07-29-<slug>-final.md              # combined, ready to publish
+└── provenance/
+    ├── 2026-07-29-<slug>-attribution.json        # which claim backs each sentence
+    └── 2026-07-29-<slug>-c2pa.json               # C2PA manifest definition
 ```
+
+The provenance pair is written once, from the run that produced the article,
+and is not regenerated by `--frontmatter`: it describes the article the
+ledger was verified against, and editing the body is exactly what would
+invalidate it. See [Provenance](#provenance).
 
 Edit the body, then regenerate the other two in place:
 
@@ -360,6 +408,51 @@ any time:
 `--review` respects the same boundaries. The model sees the article body and
 never the YAML; frontmatter is re-attached on save; reviewing one file of a set
 resyncs its siblings.
+
+---
+
+## Provenance
+
+The ledger proves the article as a whole is grounded. Two more files make
+that checkable sentence by sentence and bind the article to its evidence.
+
+**Attribution.** Every verified claim gets a stable identifier, `c` plus ten
+hex digits of the SHA-256 of its normalised quote, so two ledgers that
+verified the same quote name it the same way. The attribution file then maps
+every prose sentence of the body, with byte offsets, to the claims it rests
+on: a shared figure plus a content word, or enough content words that the
+overlap is not chance. Framing and transitions come out unattributed, which
+is expected. A sentence carrying a figure that no claim contains is flagged
+on that sentence, the same signal `--strict-numbers` fails a whole draft on.
+
+It is computed after the fact from the text alone, deterministic and
+model-free, and it says so in its own field names. It is evidence of
+provenance, not proof.
+
+**C2PA manifest definition.** A JSON manifest in the shape `c2patool` reads:
+the generator and version, a `c2pa.created` action naming draft as the
+software agent with the IPTC trained-algorithmic-media source type, the
+sources as ingredients, and under `com.draftlib.grounding` the article's
+digest, the ledger's digest, the extraction prompt version, the engine, model
+and reader, the claim identifiers, and the attribution counts.
+
+`draft` holds no signing key and embeds nothing. Signing is the publisher's
+step: `c2patool` with `-m` on this file produces the signed manifest, as a
+sidecar for a Markdown asset. Until then the file is a definition, and this
+paragraph is the only place it is described as anything else.
+
+**Checking a draft.** `draft --verify <file>` recomputes the article's digest
+and compares it to the manifest written beside it, so you can tell whether a
+draft is exactly what the ledger was verified against or has been edited
+since. Point it at any file of a set — the body, the final document, or the
+manifest — and it finds the rest by the day-folder layout. When the sources
+are still on the machine it hashes them too; when they are not, it says so and
+still checks the article. It exits non-zero if the article, the ledger or a
+source no longer matches.
+
+```sh
+draft --verify 2026-07-29/final/2026-07-29-<slug>-final.md
+```
 
 ---
 
@@ -469,6 +562,8 @@ Flags beat environment variables. Environment variables beat defaults.
 | --------------------------- | ------------------------------- | ------------------------------------------------------- |
 | `DRAFT_ENGINE`              | `auto`                          | Backend selection (auto, ollama, provider)              |
 | `DRAFT_EXTRACT_ENGINE`      | —                               | Backend for claim extraction (default: `DRAFT_ENGINE`)  |
+| `DRAFT_READER`              | `pdftotext`                     | Document reader: `pdftotext` or `docling`               |
+| `DRAFT_STYLE`               | —                               | JSON house-style file (word band, vocabulary, language) |
 | `DRAFT_WRITE_ENGINE`        | —                               | Backend for writing the article                         |
 | `DRAFT_EDIT_ENGINE`         | —                               | Backend for `--review` edits                            |
 | `DRAFT_MODEL_SESSION`       | —                               | Session-provider model override                         |
@@ -915,14 +1010,18 @@ Honesty here saves you an evening.
 - **You have no agent CLI and no Ollama.** There is no direct API mode.
 - **Your sources are scans.** A PDF with no text layer is reported as such,
   with a suggestion to run OCR first. `draft` does not OCR.
-- **You need tables, figures or LaTeX maths.** Text is extracted; structure is
-  not. Use a document-understanding toolkit and feed `draft` its Markdown.
-- **Your house style is not this house style.** Structure, length bands, banned
-  vocabulary and British English live in the `rules` and `validate` packages —
-  configurable in code, not yet by flag.
+- **You need figures or LaTeX maths.** The default reader extracts text;
+  `--reader docling` keeps tables and headings but still cannot quote a
+  figure. Feed `draft` Markdown you have prepared if you need more.
+- **Your house style is not this house style.** The word band, banned
+  vocabulary and language variant are set by `--style <file.json>` (see
+  [Provenance](#provenance) is separate); the structural rules — an H1, a lead
+  aside, an executive summary, section headings — are fixed, because they are
+  the shape of a grounded article, not a matter of taste.
 - **You publish a different frontmatter schema.** The identity is swappable;
   the field set is not.
-- **DOCX on Linux or Windows.** That path needs macOS `textutil`.
+- **DOCX on Linux or Windows without Docling.** The default path needs macOS
+  `textutil`; `--reader docling` reads DOCX everywhere.
 
 ---
 

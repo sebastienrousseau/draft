@@ -61,7 +61,8 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 				"article output, and auto mode skips them unless --experimental is given. "+
 				"Any provider can be forced by name. If a session call fails because the "+
 				"machine is offline, draft fails over to Ollama and stays there for the "+
-				"rest of the run.")+"\n.PP\n"+
+				"rest of the run. A prompt the model declines is not a provider failure: "+
+				"the section is recorded as having no claims and the provider is kept.")+"\n.PP\n"+
 			roff("No provider is invoked with a flag that grants it tools: draft only ever "+
 				"asks for text, and its prompts carry verbatim text from third-party "+
 				"documents."))
