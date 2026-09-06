@@ -124,3 +124,22 @@ func TestEveryDocumentedFlagIsRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageSuffixAndRecord(t *testing.T) {
+	if s := usageSuffix(pipeline.Usage{}); s != "" {
+		t.Errorf("unreported usage should render nothing, got %q", s)
+	}
+	if s := usageSuffix(pipeline.Usage{InputTokens: 100, OutputTokens: 50, Reported: true}); s != " · 150 tokens" {
+		t.Errorf("token-only suffix = %q", s)
+	}
+	if s := usageSuffix(pipeline.Usage{InputTokens: 100, OutputTokens: 50, CostUSD: 0.25, Reported: true}); s != " · 150 tokens, $0.2500" {
+		t.Errorf("cost suffix = %q", s)
+	}
+	if usageFor(pipeline.DoneEvent{}) != nil {
+		t.Error("no usage should yield a nil record")
+	}
+	got := usageFor(pipeline.DoneEvent{Usage: pipeline.Usage{InputTokens: 10, CostUSD: 0.1, Reported: true}})
+	if got == nil || got.InputTokens != 10 || got.CostUSD != 0.1 {
+		t.Errorf("usage record = %+v", got)
+	}
+}

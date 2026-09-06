@@ -540,3 +540,39 @@ func TestContentRefusalParallelPathExhaustsAlternates(t *testing.T) {
 		t.Errorf("content refusals must not demote, cur=%d", cur)
 	}
 }
+
+// Usage from every model call in a job is summed and reported on the Done
+// event, and a fake engine that reports usage is accumulated across the
+// extract and write calls.
+func TestJobUsageIsAccumulated(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.ExtractConcurrency = 1
+	eng := &usageEngine{name: "claude"}
+	events := make(chan Event, 4096)
+	runner := NewRunner(cfg, []engine.Engine{eng}, events)
+	dones, errs, _ := collect(t, runner, events, Job{Sources: []string{writeSource(t)}})
+	if len(errs) != 0 || len(dones) != 1 {
+		t.Fatalf("errs=%v dones=%d", errs, len(dones))
+	}
+	u := dones[0].Usage
+	// One extract call + one write call, each reporting 100/50 tokens and $0.01.
+	if !u.Reported || u.InputTokens != 200 || u.OutputTokens != 100 || u.CostUSD < 0.0199 || u.CostUSD > 0.0201 {
+		t.Errorf("accumulated job usage = %+v", u)
+	}
+}
+
+// usageEngine reports fixed usage on every call.
+type usageEngine struct{ name string }
+
+func (u *usageEngine) Name() string { return u.name }
+func (u *usageEngine) Generate(_ context.Context, req engine.Request) (engine.Result, error) {
+	usage := engine.Usage{InputTokens: 100, OutputTokens: 50, CostUSD: 0.01, Reported: true}
+	switch req.Kind {
+	case engine.KindExtract:
+		return engine.Result{Text: extractionResponse, Usage: usage}, nil
+	case engine.KindEdit:
+		return engine.Result{Text: "[]"}, nil
+	default:
+		return engine.Result{Text: validArticle("."), Usage: usage}, nil
+	}
+}

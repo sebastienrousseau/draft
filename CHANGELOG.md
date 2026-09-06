@@ -42,6 +42,13 @@ series until `0.0.999`.
   fixed. An unknown field or an impossible band falls back to the default style
   with a warning, never a failed run; `--dry-run` shows which style is in
   force. See `examples/style/`.
+- **Token and cost accounting in `--json` and the progress line.** Every
+  model call's usage is summed per job and reported: the `--json` record gains
+  a `usage` object with `input_tokens`, `output_tokens` and `cost_usd`, and the
+  headless progress line ends with `· N tokens, $X`. It is drawn from what each
+  backend reports — Claude's per-run cost, agy's token totals, Ollama's token
+  counts (no price) — and is omitted entirely when nothing was reported, so a
+  silent zero is never shown as "free".
 - **`draft --verify <file>` checks an article against its provenance.** It
   recomputes the body digest and compares it to the C2PA manifest written
   beside the set, hashes the sources when they are still on the machine, and

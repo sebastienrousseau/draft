@@ -260,8 +260,10 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   writing, turning a ten-minute retry into seconds.
 - **Look before you leap.** `--dry-run` reports the sections, the routing and
   the model-call count in about a tenth of a second.
-- **Scriptable.** `--print` emits paths; `--json` emits one JSON object per
-  job, with per-phase timings; `--completion` writes shell completions.
+- **Scriptable, and priced.** `--print` emits paths; `--json` emits one JSON
+  object per job with per-phase timings and, when the backend reports it, a
+  `usage` object of token counts and dollar cost; `--completion` writes shell
+  completions.
 
 ---
 

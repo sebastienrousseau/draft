@@ -136,10 +136,17 @@ type (
 		ManifestPath    string
 		Sentences       int
 		Attributed      int
+		// Usage is what the job's model calls cost, as far as the backends
+		// report it. Its Reported flag is false when no backend gave any.
+		Usage engine.Usage
 	}
 	// ErrEvent is the terminal failure event.
 	ErrEvent string
 )
+
+// Usage re-exports engine.Usage so a consumer of the event stream need not
+// import the engine package for the one type.
+type Usage = engine.Usage
 
 var slugRepeat = regexp.MustCompile(`-{2,}`)
 
@@ -212,6 +219,11 @@ type Runner struct {
 	// provenance pair the current job wrote, for its DoneEvent.
 	attributionPath, manifestPath string
 	sentences, attributed         int
+	// usage accumulates what every model call in the current job cost, as far
+	// as the backends report it. Guarded because parallel extraction workers
+	// add to it concurrently.
+	usageMu sync.Mutex
+	usage   engine.Usage
 	// ledgerPath is the verified-claim-ledger scratch file for the current run,
 	// removed on success unless the user asked to keep artifacts.
 	ledgerPath string
@@ -327,6 +339,7 @@ func (r *Runner) Run(ctx context.Context, job Job) {
 	r.ledgerDigest = ""
 	r.wroteWith = nil
 	r.attributionPath, r.manifestPath, r.sentences, r.attributed = "", "", 0, 0
+	r.usage = engine.Usage{}
 
 	// The cursor is deliberately NOT reset here. A Runner reused across a queue
 	// keeps the backend it settled on, so a dead provider is tried once for the
@@ -437,8 +450,16 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		ManifestPath:    r.manifestPath,
 		Sentences:       r.sentences,
 		Attributed:      r.attributed,
+		Usage:           r.currentUsage(),
 	})
 	return nil
+}
+
+// currentUsage returns a copy of the job's accumulated usage.
+func (r *Runner) currentUsage() engine.Usage {
+	r.usageMu.Lock()
+	defer r.usageMu.Unlock()
+	return r.usage
 }
 
 // DryRunReport is what a run would do, without doing it.
@@ -830,6 +851,9 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 		var res engine.Result
 		res, err = direct.Generate(ctx, req)
 		text = res.Text
+		if err == nil {
+			r.addUsage(res.Usage)
+		}
 	} else {
 		text, err = r.generateText(ctx, req)
 	}
@@ -1111,6 +1135,13 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 	return markdown, fmt.Errorf("article failed the rules after %d retr(y/ies):\n- %s", r.cfg.WriteRetries, strings.Join(errs, "\n- "))
 }
 
+// addUsage accumulates one call's usage into the current job's total.
+func (r *Runner) addUsage(u engine.Usage) {
+	r.usageMu.Lock()
+	r.usage.Add(u)
+	r.usageMu.Unlock()
+}
+
 // generate runs a request against the active engine, advancing along the chain
 // on error (a provider that is offline, not logged in, or failing) until one
 // succeeds or the chain is exhausted. The advance is sticky: once an engine
@@ -1144,6 +1175,7 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 				r.engineName = e.Name()
 				r.emit(EngineEvent(e.Name()))
 			}
+			r.addUsage(res.Usage)
 			return res, nil
 		}
 		// Cancellation and timeout are the caller's decision, not a sick
@@ -1202,6 +1234,7 @@ func (r *Runner) tryAlternates(ctx context.Context, cs *chainState, from int, re
 			err = fmt.Errorf("%s: %w", alt.Name(), engine.ErrRefused)
 		}
 		if err == nil {
+			r.addUsage(res.Usage)
 			return res, alt, true
 		}
 		r.warn(fmt.Sprintf("%s: %v", alt.Name(), err))

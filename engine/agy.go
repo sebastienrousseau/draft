@@ -33,12 +33,13 @@ func agyUserEvent(prompt string) string {
 // result.status is SUCCESS or ERROR and whose result.response is the answer.
 // Assistant text chunks, when present, are forwarded to onChunk for a live
 // preview; the authoritative answer is the result event's response.
-func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
+func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, Usage, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	var response, acc string
 	var haveResult, isError bool
 	var errMsg string
+	var usage Usage
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		var ev struct {
@@ -53,6 +54,11 @@ func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
 				Status   string `json:"status"`
 				Response string `json:"response"`
 				Error    string `json:"error"`
+				Usage    struct {
+					InputTokens  int `json:"input_tokens"`
+					OutputTokens int `json:"output_tokens"`
+					TotalTokens  int `json:"total_tokens"`
+				} `json:"usage"`
 			} `json:"result"`
 		}
 		if err := json.Unmarshal(line, &ev); err != nil {
@@ -75,19 +81,26 @@ func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, error) {
 			response = ev.Result.Response
 			isError = strings.EqualFold(ev.Result.Status, "ERROR")
 			errMsg = ev.Result.Error
+			in, out := ev.Result.Usage.InputTokens, ev.Result.Usage.OutputTokens
+			if in == 0 && out == 0 && ev.Result.Usage.TotalTokens > 0 {
+				in = ev.Result.Usage.TotalTokens // agy reports only a total
+			}
+			if in > 0 || out > 0 {
+				usage = Usage{InputTokens: in, OutputTokens: out, Reported: true}
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return acc, err
+		return acc, usage, err
 	}
 	if isError {
 		if strings.TrimSpace(errMsg) == "" {
 			errMsg = "agy reported an error"
 		}
-		return "", fmt.Errorf("%s", firstLine(errMsg))
+		return "", usage, fmt.Errorf("%s", firstLine(errMsg))
 	}
 	if haveResult && strings.TrimSpace(response) != "" {
-		return strings.TrimSpace(response), nil
+		return strings.TrimSpace(response), usage, nil
 	}
-	return strings.TrimSpace(acc), nil
+	return strings.TrimSpace(acc), usage, nil
 }

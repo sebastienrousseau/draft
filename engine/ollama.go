@@ -145,14 +145,17 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 
 	var out strings.Builder
 	var truncated bool
+	var usage Usage
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		var item struct {
-			Response   string `json:"response"`
-			Done       bool   `json:"done"`
-			DoneReason string `json:"done_reason"`
-			Error      string `json:"error"`
+			Response     string `json:"response"`
+			Done         bool   `json:"done"`
+			DoneReason   string `json:"done_reason"`
+			Error        string `json:"error"`
+			PromptTokens int    `json:"prompt_eval_count"`
+			EvalTokens   int    `json:"eval_count"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
 			return Result{Text: out.String()}, err
@@ -168,13 +171,15 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 		}
 		if item.Done {
 			truncated = item.DoneReason == "length"
+			// The local model reports token counts but never a price.
+			usage = Usage{InputTokens: item.PromptTokens, OutputTokens: item.EvalTokens, Reported: item.PromptTokens > 0 || item.EvalTokens > 0}
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return Result{Text: out.String()}, err
 	}
-	return Result{Text: out.String(), Truncated: truncated}, nil
+	return Result{Text: out.String(), Truncated: truncated, Usage: usage}, nil
 }
 
 func (o *Ollama) modelFor(kind Kind) string {

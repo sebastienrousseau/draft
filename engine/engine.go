@@ -55,12 +55,37 @@ type Request struct {
 // the section as having no claims.
 var ErrRefused = errors.New("the model declined to answer this prompt")
 
+// Usage is what a generation call cost, as far as the backend reports it. A
+// local model reports tokens and no price; a session provider may report both
+// or neither. Zero means "not reported", never "free" — the pipeline sums what
+// it is given and says so, rather than implying a total it cannot stand behind.
+type Usage struct {
+	InputTokens  int
+	OutputTokens int
+	// CostUSD is the provider's own charge for the call in US dollars, when it
+	// reports one. Local models leave it zero.
+	CostUSD float64
+	// Reported records whether the backend gave any usage at all, so a run
+	// that summed only silent calls can say "not reported" instead of "0".
+	Reported bool
+}
+
+// Add accumulates another call's usage into this one.
+func (u *Usage) Add(other Usage) {
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.CostUSD += other.CostUSD
+	u.Reported = u.Reported || other.Reported
+}
+
 // Result is the outcome of a generation call.
 type Result struct {
 	Text string
 	// Truncated is true when the backend stopped because it hit a length limit
 	// rather than finishing, signalling the pipeline to continue generation.
 	Truncated bool
+	// Usage is what the call cost, when the backend reports it.
+	Usage Usage
 }
 
 // Engine is a text-generation backend.

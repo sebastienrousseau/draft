@@ -398,7 +398,7 @@ func TestParseAgyStreamJSONStreamsAndErrors(t *testing.T) {
 		`{"event":"result","result":{"status":"SUCCESS","response":"final answer"}}`,
 	}, "\n")
 	var streamed strings.Builder
-	out, err := parseAgyStreamJSON(strings.NewReader(stream), func(s string) { streamed.WriteString(s) })
+	out, _, err := parseAgyStreamJSON(strings.NewReader(stream), func(s string) { streamed.WriteString(s) })
 	if err != nil || out != "final answer" {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
@@ -406,13 +406,28 @@ func TestParseAgyStreamJSONStreamsAndErrors(t *testing.T) {
 		t.Errorf("chunks = %q", streamed.String())
 	}
 	// No result event: fall back to the accumulated text.
-	out, _ = parseAgyStreamJSON(strings.NewReader(`{"event":"assistant","content":{"text":"only chunks"}}`), nil)
+	out, _, _ = parseAgyStreamJSON(strings.NewReader(`{"event":"assistant","content":{"text":"only chunks"}}`), nil)
 	if out != "only chunks" {
 		t.Errorf("fallback = %q", out)
 	}
 	// An error result with no message uses the default.
-	_, err = parseAgyStreamJSON(strings.NewReader(`{"event":"result","result":{"status":"ERROR"}}`), nil)
+	_, _, err = parseAgyStreamJSON(strings.NewReader(`{"event":"result","result":{"status":"ERROR"}}`), nil)
 	if err == nil || !strings.Contains(err.Error(), "agy reported an error") {
 		t.Errorf("default error = %v", err)
+	}
+}
+
+func TestParseAgyStreamJSONReportsUsage(t *testing.T) {
+	// agy reports a total only.
+	stream := `{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"total_tokens":4200}}}`
+	_, usage, err := parseAgyStreamJSON(strings.NewReader(stream), nil)
+	if err != nil || !usage.Reported || usage.InputTokens != 4200 {
+		t.Errorf("agy total usage = %+v err=%v", usage, err)
+	}
+	// Explicit in/out win over a total.
+	stream = `{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"input_tokens":100,"output_tokens":30,"total_tokens":130}}}`
+	_, usage, _ = parseAgyStreamJSON(strings.NewReader(stream), nil)
+	if usage.InputTokens != 100 || usage.OutputTokens != 30 {
+		t.Errorf("agy in/out usage = %+v", usage)
 	}
 }

@@ -153,12 +153,13 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 
 	var out string
 	var truncated bool
+	var usage Usage
 	var streamErr error
 	switch {
 	case s.provider.StreamJSONInput:
-		out, streamErr = parseAgyStreamJSON(stdout, req.OnChunk)
+		out, usage, streamErr = parseAgyStreamJSON(stdout, req.OnChunk)
 	case s.provider.StreamJSON:
-		out, truncated, streamErr = parseStreamJSON(stdout, req.OnChunk)
+		out, truncated, usage, streamErr = parseStreamJSON(stdout, req.OnChunk)
 	default:
 		out, streamErr = streamAll(stdout, req.OnChunk)
 	}
@@ -181,7 +182,7 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	if streamErr != nil {
 		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(streamErr.Error()))
 	}
-	return Result{Text: strings.TrimSpace(out), Truncated: truncated}, nil
+	return Result{Text: strings.TrimSpace(out), Truncated: truncated, Usage: usage}, nil
 }
 
 // parseStreamJSON reads the Claude Code stream-json event stream, forwarding
@@ -199,7 +200,7 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 // result, is returned as ErrRefused. The model produced no answer because it
 // declined the prompt; that is not a provider error and is never reported as
 // one.
-func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated bool, err error) {
+func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated bool, usage Usage, err error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var acc strings.Builder
@@ -216,10 +217,15 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated 
 					StopReason string `json:"stop_reason"`
 				} `json:"delta"`
 			} `json:"event"`
-			Subtype    string `json:"subtype"`
-			IsError    bool   `json:"is_error"`
-			Result     string `json:"result"`
-			StopReason string `json:"stop_reason"`
+			Subtype    string  `json:"subtype"`
+			IsError    bool    `json:"is_error"`
+			Result     string  `json:"result"`
+			StopReason string  `json:"stop_reason"`
+			TotalCost  float64 `json:"total_cost_usd"`
+			Usage      struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+			} `json:"usage"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
 			continue // ignore non-JSON or partial lines
@@ -246,6 +252,9 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated 
 			result = ev.Result
 			haveResult = true
 			isError = ev.IsError
+			if ev.TotalCost > 0 || ev.Usage.InputTokens > 0 || ev.Usage.OutputTokens > 0 {
+				usage = Usage{InputTokens: ev.Usage.InputTokens, OutputTokens: ev.Usage.OutputTokens, CostUSD: ev.TotalCost, Reported: true}
+			}
 			if isRefusal(ev.StopReason) {
 				refused = true
 			}
@@ -255,21 +264,21 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated 
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return acc.String(), truncated, err
+		return acc.String(), truncated, usage, err
 	}
 	if refused {
-		return "", truncated, ErrRefused
+		return "", truncated, usage, ErrRefused
 	}
 	if isError {
 		if result == "" {
 			result = "provider reported an error"
 		}
-		return "", truncated, fmt.Errorf("%s", result)
+		return "", truncated, usage, fmt.Errorf("%s", result)
 	}
 	if haveResult && strings.TrimSpace(result) != "" {
-		return result, truncated, nil
+		return result, truncated, usage, nil
 	}
-	return acc.String(), truncated, nil
+	return acc.String(), truncated, usage, nil
 }
 
 // isLengthStop reports whether a stop reason means the model ran out of room
