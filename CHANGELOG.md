@@ -10,6 +10,14 @@ series until `0.0.999`.
 
 ### Changed
 
+- **Table recall is now measured, not just claimed.** A deterministic corpus
+  (`claims/testdata/tables/`) renders the same table the way each reader
+  produces it — Docling as an intact Markdown table, pdftotext as its
+  column-flattened flow — and checks how many claims that quote a cell with its
+  row label still verify. Every such claim grounds against the structured
+  rendering and none against the flattened one, quantifying what
+  `--reader docling` is worth on tabular sources (the audit's open A3). It runs
+  in CI without a reader installed.
 - **Higher grounding recall, same verbatim gate.** Claim quotes are now
   compared in a rendering-tolerant normal form: a literal `\n` a model wrote
   for a line break, a hyphen it dropped from a word, a ligature the PDF

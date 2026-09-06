@@ -22,6 +22,9 @@ path = [
   # Example house-style file. JSON admits no comment syntax, so it is
   # annotated here rather than in-file.
   "examples/style/*.json",
+  # Reader-recall fixtures: the flattened form is plain text with no comment
+  # syntax, annotated here alongside the corpus fixtures.
+  "claims/testdata/tables/*.txt",
   # Go fuzz corpus entries. Their format is fixed by the toolchain
   # ("go test fuzz v1" plus typed literals) and admits no comment syntax, so
   # they are annotated here rather than in-file.
