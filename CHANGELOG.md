@@ -30,6 +30,14 @@ series until `0.0.999`.
   regenerated with `--frontmatter` keeps what it has and gains nothing it
   cannot prove.
 
+- **A pluggable document reader.** `--reader docling` (or `DRAFT_READER`)
+  routes PDF and DOCX through the Docling CLI instead of `pdftotext`: tables
+  and headings survive as Markdown, DOCX reads on Linux and Windows, and the
+  cost is seconds to minutes per document plus a Python installation.
+  `pdftotext` stays the default. `--doctor` reports whether Docling is
+  installed and fails only when it was asked for and is missing; `--dry-run`
+  names the reader in its plan. Measured on a 1.9 MB arXiv paper: 155 s
+  against well under a second, with tables that plain text flattened.
 ### Fixed
 
 - **A refused prompt no longer demotes the provider for the rest of the

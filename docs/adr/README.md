@@ -15,6 +15,7 @@ Format: [MADR](https://adr.github.io/madr/)-flavoured, deliberately short.
 | [0004](0004-no-tools-granted-to-providers.md)      | Grant provider subprocesses no tools, and run them in an empty directory | Accepted |
 | [0005](0005-content-addressed-extraction-cache.md) | Address the extraction cache by content, not by date                     | Accepted |
 | [0006](0006-agent-client-protocol-transport.md)    | Add an Agent Client Protocol transport beside the one-shot CLIs          | Accepted |
+| [0007](0007-pluggable-document-reader.md)          | Make the document reader pluggable, with plain text the default          | Accepted |
 
 ## Writing a new one
 

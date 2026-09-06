@@ -423,6 +423,8 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 type DryRunReport struct {
 	Sources      []string
 	SectionCount int
+	// Reader is the document reader the sections came from.
+	Reader string
 	// Engines maps each request kind to the backend that would serve it.
 	Engines map[engine.Kind]string
 	// EstCalls is the number of model calls a clean run would make: one per
@@ -440,7 +442,12 @@ type DryRunReport struct {
 // just a guess. Committing to a ten-minute run should not be the only way to
 // find out that a PDF is a scan.
 func (r *Runner) DryRun(ctx context.Context, job Job) (DryRunReport, error) {
+	reader := r.cfg.Reader
+	if reader == "" {
+		reader = pdf.ReaderPDFToText
+	}
 	rep := DryRunReport{
+		Reader:    reader,
 		Sources:   job.Sources,
 		OutputDir: r.datedDir(),
 		Engines: map[engine.Kind]string{
@@ -563,7 +570,7 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 		if sum, err := fileSHA256(src); err == nil {
 			r.sourceDigests = append(r.sourceDigests, SourceDigest{Path: src, SHA256: sum})
 		}
-		text, err := pdf.Extract(ctx, src)
+		text, err := pdf.ExtractWith(ctx, src, r.cfg.Reader)
 		if err != nil {
 			// Cancellation is not a skippable per-file problem.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

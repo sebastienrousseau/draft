@@ -219,3 +219,17 @@ func TestStrictNumbersOptIn(t *testing.T) {
 		}
 	}
 }
+
+func TestReaderFromEnvironmentAndFlag(t *testing.T) {
+	t.Setenv("DRAFT_READER", "")
+	if c := Load(Flags{}); c.Reader != DefaultReader {
+		t.Errorf("default reader = %q, want %q", c.Reader, DefaultReader)
+	}
+	t.Setenv("DRAFT_READER", "docling")
+	if c := Load(Flags{}); c.Reader != "docling" {
+		t.Errorf("env reader = %q", c.Reader)
+	}
+	if c := Load(Flags{Reader: "pdftotext"}); c.Reader != "pdftotext" {
+		t.Errorf("flag reader should win, got %q", c.Reader)
+	}
+}

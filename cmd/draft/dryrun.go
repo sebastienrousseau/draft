@@ -45,6 +45,7 @@ func printPlan(w io.Writer, cfg config.Config, rep pipeline.DryRunReport) {
 
 	fmt.Fprintln(w, "Plan")
 	row("Sources", fmt.Sprintf("%d  (%s)", len(names), strings.Join(names, ", ")))
+	row("Reader", rep.Reader)
 	row("Sections", fmt.Sprint(rep.SectionCount))
 	row("Engines", fmt.Sprintf("extract: %s · write: %s · edit: %s",
 		rep.Engines[engine.KindExtract], rep.Engines[engine.KindWrite], rep.Engines[engine.KindEdit]))

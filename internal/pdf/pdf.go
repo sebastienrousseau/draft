@@ -4,10 +4,11 @@
 // Package pdf turns a research source file into normalised plain text and
 // splits that text into bounded sections suitable for claim extraction.
 //
-// PDF text is obtained by shelling out to `pdftotext -layout` (Poppler); DOCX
-// via macOS `textutil`. Both are documented runtime dependencies rather than
-// cgo bindings, which keeps the binary portable and the extraction quality on
-// par with the surrounding tooling.
+// PDF text is obtained by shelling out to `pdftotext` (Poppler); DOCX via
+// macOS `textutil`. Both are documented runtime dependencies rather than cgo
+// bindings, which keeps the binary portable and the extraction quality on par
+// with the surrounding tooling. Docling is the optional fidelity reader for
+// both, chosen per run with ExtractWith.
 package pdf
 
 import (
@@ -43,9 +44,52 @@ var (
 // would cost several times its size in peak memory once normalisation runs.
 const MaxSourceBytes = 256 << 20
 
+// Readers a source can be turned into text with. The default is the fast
+// one; the other trades three orders of magnitude of wall clock for tables,
+// headings and reading order that plain text extraction loses.
+const (
+	// ReaderPDFToText is Poppler's pdftotext: ~110 ms for a 62-page paper,
+	// text only. Tables flatten, formulas scramble, figures vanish.
+	ReaderPDFToText = "pdftotext"
+	// ReaderDocling is the Docling CLI: a layout model that emits Markdown
+	// with tables and headings intact. Seconds to minutes per document, a
+	// Python installation, and on first use a model download. It also reads
+	// DOCX on every platform, where the default path needs macOS.
+	ReaderDocling = "docling"
+)
+
+// Readers lists the reader names ValidateReader accepts, default first.
+func Readers() []string { return []string{ReaderPDFToText, ReaderDocling} }
+
+// ValidateReader reports a reader name that does not exist. An empty name
+// means the default. It is checked once at start-up, so a typo is a clean
+// exit rather than a fall-back the user never asked for.
+func ValidateReader(name string) error {
+	switch strings.TrimSpace(name) {
+	case "", ReaderPDFToText, ReaderDocling:
+		return nil
+	}
+	return fmt.Errorf("--reader / DRAFT_READER: unknown reader %q (want one of: %s)", name, strings.Join(Readers(), ", "))
+}
+
+// doclingTimeout bounds one Docling conversion. The first run on a machine
+// downloads its models, and a long paper on a CPU takes minutes; a hang is
+// what the ceiling is for, not a slow but healthy conversion.
+const doclingTimeout = 15 * time.Minute
+
 // Extract returns the normalised plain text of a .pdf, .docx, .md, or .txt
-// file. Unknown suffixes yield an error so the caller can skip them cleanly.
+// file using the default reader. Unknown suffixes yield an error so the
+// caller can skip them cleanly.
 func Extract(ctx context.Context, path string) (string, error) {
+	return ExtractWith(ctx, path, ReaderPDFToText)
+}
+
+// ExtractWith is Extract through a named reader. Markdown and text sources
+// are read directly whatever the reader; PDF and DOCX go through it.
+func ExtractWith(ctx context.Context, path, reader string) (string, error) {
+	if err := ValidateReader(reader); err != nil {
+		return "", err
+	}
 	// Resolve to an absolute path before any of it reaches a subprocess.
 	// pdftotext and textutil both parse leading-dash arguments as flags, so a
 	// file called "-v.pdf" would otherwise be argument injection rather than
@@ -56,7 +100,11 @@ func Extract(ctx context.Context, path string) (string, error) {
 	}
 	path = abs
 
-	switch strings.ToLower(filepath.Ext(path)) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if strings.TrimSpace(reader) == ReaderDocling && (ext == ".pdf" || ext == ".docx") {
+		return extractDocling(ctx, path)
+	}
+	switch ext {
 	case ".md", ".txt":
 		b, err := readCapped(path)
 		if err != nil {
@@ -93,6 +141,50 @@ func Extract(ctx context.Context, path string) (string, error) {
 		return "", fmt.Errorf("unsupported source type %q", filepath.Ext(path))
 	}
 }
+
+// extractDocling converts a document to Markdown with the Docling CLI and
+// returns it as normalised text. Docling writes <stem>.md into an output
+// directory of its own choosing within the one given; the directory is
+// private to this call and removed afterwards.
+func extractDocling(ctx context.Context, path string) (string, error) {
+	if _, err := exec.LookPath("docling"); err != nil {
+		return "", errors.New("docling not found on PATH; install it (for example: uv tool install docling) or use --reader pdftotext")
+	}
+	dir, err := os.MkdirTemp("", "draft-docling-")
+	if err != nil {
+		return "", fmt.Errorf("docling: could not create an output directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	// Images are what the layout model cannot turn into text; a placeholder
+	// keeps them out of the sections rather than inlining megabytes of
+	// base64 that no claim could ever quote.
+	_, err = runTool(ctx, doclingTimeout, "docling", "--to", "md", "--output", dir, "--image-export-mode", "placeholder", path)
+	if err != nil {
+		return "", fmt.Errorf("docling: %w", err)
+	}
+	out := filepath.Join(dir, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))+".md")
+	b, err := readCappedLimit(out, MaxSourceBytes)
+	if err != nil {
+		// Docling derives the output name from the input; if it chose
+		// differently, take whatever Markdown it produced.
+		matches, _ := filepath.Glob(filepath.Join(dir, "*.md"))
+		if len(matches) == 0 {
+			return "", fmt.Errorf("docling produced no Markdown for %s", filepath.Base(path))
+		}
+		if b, err = readCappedLimit(matches[0], MaxSourceBytes); err != nil {
+			return "", fmt.Errorf("docling: %w", err)
+		}
+	}
+	text := NormaliseSpace(doclingPlaceholder.ReplaceAllString(string(b), ""))
+	if strings.TrimSpace(text) == "" {
+		return "", ErrNoTextLayer
+	}
+	return text, nil
+}
+
+// doclingPlaceholder matches the marker Docling leaves where an image was.
+var doclingPlaceholder = regexp.MustCompile(`(?m)^\s*<!-- image -->\s*$`)
 
 // ErrNoTextLayer reports a PDF that carries no extractable text — typically a
 // scan or an export of page images. Nothing downstream can ground a claim in

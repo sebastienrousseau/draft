@@ -246,6 +246,11 @@ a `pipeline.PhaseEvent` as it starts and finishes.
 - **A dashboard worth watching.** The article streams in token by token,
   beside a pipeline view, a per-run log, and a focus timer.
 - **Split local and cloud per stage.** Extraction is a dozen cheap, mechanical
+- **Two readers, one switch.** `pdftotext` by default: a 62-page paper in
+  ~110 ms, text only. `--reader docling` when the tables matter: a layout
+  model that keeps tables and headings, reads DOCX on every platform, and
+  takes seconds to minutes per document. Same pipeline either way, and the
+  extraction cache tells their sections apart.
   calls; writing is one that decides the article's quality. Point them at
   different backends and a local model does the bulk for free while the best
   writer you have does the part that matters.
@@ -541,6 +546,7 @@ when the latter is unset.
 Generated frontmatter carries an author, URLs, social handles and an analytics
 ID. Override any part of it. Unset variables keep their defaults, and curated
 frontmatter fields still win over generated ones.
+| `DRAFT_READER`              | `pdftotext`                     | Document reader: `pdftotext` or `docling`               |
 
 | Variable                    | Overrides                                       |
 | --------------------------- | ----------------------------------------------- |
@@ -946,14 +952,16 @@ Honesty here saves you an evening.
 - **You have no agent CLI and no Ollama.** There is no direct API mode.
 - **Your sources are scans.** A PDF with no text layer is reported as such,
   with a suggestion to run OCR first. `draft` does not OCR.
-- **You need tables, figures or LaTeX maths.** Text is extracted; structure is
-  not. Use a document-understanding toolkit and feed `draft` its Markdown.
+- **You need figures or LaTeX maths.** The default reader extracts text;
+  `--reader docling` keeps tables and headings but still cannot quote a
+  figure. Feed `draft` Markdown you have prepared if you need more.
 - **Your house style is not this house style.** Structure, length bands, banned
   vocabulary and British English live in the `rules` and `validate` packages —
   configurable in code, not yet by flag.
 - **You publish a different frontmatter schema.** The identity is swappable;
   the field set is not.
-- **DOCX on Linux or Windows.** That path needs macOS `textutil`.
+- **DOCX on Linux or Windows without Docling.** The default path needs macOS
+  `textutil`; `--reader docling` reads DOCX everywhere.
 
 ---
 

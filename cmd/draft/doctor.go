@@ -70,6 +70,7 @@ func runDoctor(cfg config.Config, p probes, w io.Writer) int {
 
 	fmt.Fprintf(w, "%s\n", head("SOURCE TOOLING"))
 	pdfOK := false
+	readerOK := true
 	if path, err := p.lookPath("pdftotext"); err == nil {
 		pdfOK = true
 		row(ok, "pdftotext", path)
@@ -84,6 +85,15 @@ func runDoctor(cfg config.Config, p probes, w io.Writer) int {
 		}
 	} else {
 		row(note, "textutil", "macOS only — DOCX sources unavailable on "+p.goos)
+	}
+
+	if path, err := p.lookPath("docling"); err == nil {
+		row(ok, "docling", path+" (--reader docling: tables and structure, slower)")
+	} else if cfg.Reader == "docling" {
+		row(bad, "docling", "--reader docling was requested but docling is not on PATH")
+		readerOK = false
+	} else {
+		row(note, "docling", "not on PATH — --reader docling unavailable (optional)")
 	}
 
 	fmt.Fprintf(w, "\n%s\n", head("BACKENDS"))
@@ -157,6 +167,9 @@ func runDoctor(cfg config.Config, p probes, w io.Writer) int {
 		return 1
 	case !pdfOK:
 		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" Install Poppler for pdftotext, or supply Markdown or text sources.")
+		return 1
+	case !readerOK:
+		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" Install Docling (uv tool install docling) or drop --reader docling.")
 		return 1
 	case installed == 0 && !ollamaOK:
 		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" Install an agent CLI ("+strings.Join(engine.ProviderNames(), ", ")+") or Ollama.")

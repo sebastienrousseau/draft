@@ -29,6 +29,7 @@ import (
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/internal/extractcache"
+	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/internal/tui"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
@@ -86,6 +87,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&flags.Engine, "engine", "", "backend: auto (default), ollama, or a provider name")
 	fs.StringVar(&flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
 	fs.StringVar(&flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
+	fs.StringVar(&flags.Reader, "reader", "", "document reader: pdftotext (default) or docling")
 	fs.StringVar(&flags.Model, "model", "", "session-provider model override (e.g. opus)")
 	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
 	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
@@ -175,6 +177,10 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	// A misspelled provider name would otherwise degrade to Ollama without a
 	// word, producing a local-model draft the user believes came from Claude.
 	if err := engine.Validate(cfg); err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
+		return 2
+	}
+	if err := pdf.ValidateReader(cfg.Reader); err != nil {
 		fmt.Fprintln(stderr, "draft:", err)
 		return 2
 	}
@@ -322,6 +328,7 @@ var flagHelp = [][2]string{
 	{"--engine <mode>", "auto (default), ollama, or a provider name"},
 	{"--extract-engine <m>", "backend for claim extraction (default: --engine)"},
 	{"--write-engine <m>", "backend for writing (default: --engine)"},
+	{"--reader <name>", "document reader: pdftotext (default, fast) or docling (tables, structure)"},
 	{"--model <name>", "session-provider model override (e.g. opus)"},
 	{"--experimental", "let auto mode use experimental providers"},
 	{"--strict-numbers", "fail on a number found in no verified claim"},
@@ -413,7 +420,8 @@ func usage(w io.Writer) {
 		dim("Scratch files are removed unless --keep-artifacts."))
 
 	fmt.Fprintf(w, "%s\n  %s\n\n", head("REQUIREMENTS"),
-		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline)."))
+		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline).\n  "+
+			"Optional: docling (--reader docling) reads PDF and DOCX with tables and headings intact, on every platform, slower."))
 
 	fmt.Fprintf(w, "%s\n  %s\n", head("KEYS"),
 		dim("q / esc quit · enter queue another source · j/k · arrows · pgup/pgdn scroll"))

@@ -35,6 +35,9 @@ const (
 // more closely than qwen3:4b, which tended to overshoot the word budget and leak
 // its own planning text into the article.
 const (
+	// DefaultReader is the fast plain-text reader; see internal/pdf.Readers.
+	DefaultReader = "pdftotext"
+
 	DefaultOllamaModel        = "gemma3:4b"
 	DefaultExtractModel       = "gemma3:4b"
 	DefaultEditModel          = "gemma3:4b"
@@ -75,6 +78,10 @@ type Config struct {
 	ExtractEngine string // DRAFT_EXTRACT_ENGINE
 	WriteEngine   string // DRAFT_WRITE_ENGINE
 	EditEngine    string // DRAFT_EDIT_ENGINE
+
+	// Reader names the document reader: "pdftotext" (default) or "docling".
+	// See internal/pdf for what each trades.
+	Reader string // DRAFT_READER
 
 	Model        string // session-provider model override ("" = provider default)
 	OllamaModel  string // writing model for the Ollama backend
@@ -140,6 +147,7 @@ func Load(flags Flags) Config {
 		ExtractEngine:      env("DRAFT_EXTRACT_ENGINE", ""),
 		WriteEngine:        env("DRAFT_WRITE_ENGINE", ""),
 		EditEngine:         env("DRAFT_EDIT_ENGINE", ""),
+		Reader:             env("DRAFT_READER", DefaultReader),
 		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
 		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
 		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
@@ -166,6 +174,9 @@ func Load(flags Flags) Config {
 	}
 	if flags.WriteEngine != "" {
 		c.WriteEngine = flags.WriteEngine
+	}
+	if flags.Reader != "" {
+		c.Reader = flags.Reader
 	}
 	if flags.Model != "" {
 		c.Model = flags.Model
@@ -275,6 +286,7 @@ type Flags struct {
 	Engine        string
 	ExtractEngine string
 	WriteEngine   string
+	Reader        string
 	Model         string
 	ContextLength int
 	PredictLength int

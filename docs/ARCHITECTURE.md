@@ -119,6 +119,11 @@ recorded as having no claims. Providers are either one-shot CLI invocations
 (`engine.Session`) or Agent Client Protocol agents (`engine.ACP`, one process
 per run, one session per call); see [ADR 0006](adr/0006-agent-client-protocol-transport.md).
 
+**`pdf.ExtractWith`** — the document reader seam. `pdftotext` is the default
+and `docling` the fidelity option; both feed the same sectioner, so the rest
+of the pipeline never learns which one ran. See
+[ADR 0007](adr/0007-pluggable-document-reader.md).
+
 **`pipeline.Event`** — a sum type on a channel. The TUI, the `--print` runner
 and the `--json` runner are three consumers of the same stream, which is why
 the pipeline has no idea a terminal exists. `TokenEvent` is dropped under

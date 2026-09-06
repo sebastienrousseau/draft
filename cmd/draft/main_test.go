@@ -602,3 +602,14 @@ func TestJSONCarriesASchemaAndRunManifest(t *testing.T) {
 		t.Errorf("manifest digest %q does not match the source file", src.SHA256)
 	}
 }
+
+// A misspelled reader is a clean exit, not a silent fall-back to plain text.
+func TestUnknownReaderIsRejected(t *testing.T) {
+	var out, errb strings.Builder
+	if code := run([]string{"--reader", "marker", "--engine", "ollama", "x.pdf"}, &out, &errb); code != 2 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), `unknown reader "marker"`) {
+		t.Errorf("stderr should name the reader: %s", errb.String())
+	}
+}
