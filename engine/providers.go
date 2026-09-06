@@ -56,6 +56,11 @@ type Provider struct {
 	// per call, and a typed stop reason instead of an exit status. Bin and
 	// Args start the agent; the prompt fields are ignored.
 	ACP bool
+	// StreamJSONInput delivers the prompt as a single NDJSON user event on
+	// stdin (the "agy" turn protocol) and parses the NDJSON result event back.
+	// Like PromptViaStdin it keeps the prompt out of argv, but the provider's
+	// stream drives the turn rather than reading a raw prompt.
+	StreamJSONInput bool
 }
 
 // defaultProviders is the built-in registry of supported session CLIs, in
@@ -90,9 +95,17 @@ type Provider struct {
 func defaultProviders() []Provider {
 	return []Provider{
 		{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
-		{Name: "copilot", Bin: "copilot", Args: []string{"-p"}},
+		// copilot is driven over the Agent Client Protocol, not `copilot -p`:
+		// the -p path takes the prompt as a positional argument, which puts the
+		// verbatim source text into the process listing. ACP delivers it in a
+		// JSON-RPC frame on stdin, and reports a typed stop reason.
+		{Name: "copilot", Bin: "copilot", Args: []string{"--acp"}, ACP: true},
 		{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
-		{Name: "agy", Bin: "agy", Args: []string{"-p"}, ModelFlag: "--model"},
+		// agy is driven over its stream-json turn protocol, not `agy -p`: the -p
+		// path takes the prompt as a positional argument, exposing the source
+		// text in the process listing. The prompt goes on stdin as one NDJSON
+		// user event, and the NDJSON result event is parsed back.
+		{Name: "agy", Bin: "agy", Args: []string{"--input-format", "stream-json", "--output-format", "stream-json"}, ModelFlag: "--model", StreamJSONInput: true},
 		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
 		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
 		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},

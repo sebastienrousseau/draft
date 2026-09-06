@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -51,6 +52,26 @@ func TestHelperProcess(t *testing.T) {
 		os.Stdout.WriteString(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"only deltas"}}}` + "\n")
 	case "stream-json-error":
 		os.Stdout.WriteString(`{"type":"result","subtype":"error_max_turns","is_error":true,"result":""}` + "\n")
+	case "agy-stream":
+		// Echo back the prompt text from the NDJSON user event as an agy-shaped
+		// result, so the round trip (envelope in, result out) is exercised.
+		in := new(strings.Builder)
+		_, _ = io.Copy(in, os.Stdin)
+		var evt struct {
+			Message struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		text := ""
+		if err := json.Unmarshal([]byte(strings.TrimSpace(in.String())), &evt); err == nil && len(evt.Message.Content) > 0 {
+			text = evt.Message.Content[0].Text
+		}
+		os.Stdout.WriteString(`{"event":"init","conversation_id":"x"}` + "\n")
+		os.Stdout.WriteString(`{"event":"result","result":{"status":"SUCCESS","response":` + jsonString("GOT:"+text) + `}}` + "\n")
+	case "agy-error":
+		os.Stdout.WriteString(`{"event":"result","result":{"status":"ERROR","response":"","error":"agy could not do it\nsecond line"}}` + "\n")
 	case "acp-agent":
 		acpFakeAgent(false)
 	case "acp-agent-badversion":
@@ -197,9 +218,8 @@ func TestSessionRefusalOutranksTheExitStatus(t *testing.T) {
 
 func TestSessionPromptViaArg(t *testing.T) {
 	withExec("echo-args", func() {
-		// copilot was confirmed to ignore a prompt on stdin, so it takes a
-		// positional argument.
-		s, _ := NewSession("copilot", config.Config{})
+		// amp reads the prompt only as a positional argument (-x, then prompt).
+		s, _ := NewSession("amp", config.Config{})
 		res, err := s.Generate(context.Background(), Request{Prompt: "arg prompt"})
 		if err != nil {
 			t.Fatal(err)
@@ -207,7 +227,7 @@ func TestSessionPromptViaArg(t *testing.T) {
 		if !strings.Contains(res.Text, "arg prompt") {
 			t.Errorf("prompt should be the final arg, got %q", res.Text)
 		}
-		if !strings.Contains(res.Text, "-p") {
+		if !strings.Contains(res.Text, "-x") {
 			t.Errorf("provider args should be present, got %q", res.Text)
 		}
 	})
@@ -313,4 +333,86 @@ func TestSessionStreamJSONNoResult(t *testing.T) {
 			t.Errorf("no-result stream should return accumulated deltas, got %q %v", res.Text, err)
 		}
 	})
+}
+
+func jsonString(v string) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+// agy delivers the prompt as an NDJSON user event on stdin, keeping it out of
+// argv, and its answer is the result event's response.
+func TestSessionAgyStreamJSON(t *testing.T) {
+	withExec("agy-stream", func() {
+		s, ok := NewSession("agy", config.Config{})
+		if !ok {
+			t.Fatal("agy provider should exist")
+		}
+		res, err := s.Generate(context.Background(), Request{Kind: KindExtract, Prompt: "extract this"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Text != "GOT:extract this" {
+			t.Errorf("round trip = %q", res.Text)
+		}
+	})
+	withExec("agy-error", func() {
+		s, _ := NewSession("agy", config.Config{})
+		_, err := s.Generate(context.Background(), Request{Prompt: "x"})
+		if err == nil || !strings.Contains(err.Error(), "could not do it") {
+			t.Errorf("an agy ERROR result should surface, got %v", err)
+		}
+	})
+}
+
+func TestAgyUserEventShape(t *testing.T) {
+	env := agyUserEvent("hello \"world\"")
+	var got struct {
+		Event   string `json:"event"`
+		Message struct {
+			Role    string `json:"role"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(env), &got); err != nil {
+		t.Fatalf("envelope is not valid JSON: %v", err)
+	}
+	if got.Event != "user" || got.Message.Role != "user" || len(got.Message.Content) != 1 ||
+		got.Message.Content[0].Type != "text" || got.Message.Content[0].Text != `hello "world"` {
+		t.Errorf("envelope = %s", env)
+	}
+	if !strings.HasSuffix(env, "\n") {
+		t.Error("the envelope must be newline-terminated for NDJSON")
+	}
+}
+
+func TestParseAgyStreamJSONStreamsAndErrors(t *testing.T) {
+	stream := strings.Join([]string{
+		`{"event":"init"}`,
+		`not json, a banner`,
+		`{"event":"assistant","content":{"text":"par"}}`,
+		`{"event":"assistant","content":{"text":"tial"}}`,
+		`{"event":"result","result":{"status":"SUCCESS","response":"final answer"}}`,
+	}, "\n")
+	var streamed strings.Builder
+	out, err := parseAgyStreamJSON(strings.NewReader(stream), func(s string) { streamed.WriteString(s) })
+	if err != nil || out != "final answer" {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	if streamed.String() != "partial" {
+		t.Errorf("chunks = %q", streamed.String())
+	}
+	// No result event: fall back to the accumulated text.
+	out, _ = parseAgyStreamJSON(strings.NewReader(`{"event":"assistant","content":{"text":"only chunks"}}`), nil)
+	if out != "only chunks" {
+		t.Errorf("fallback = %q", out)
+	}
+	// An error result with no message uses the default.
+	_, err = parseAgyStreamJSON(strings.NewReader(`{"event":"result","result":{"status":"ERROR"}}`), nil)
+	if err == nil || !strings.Contains(err.Error(), "agy reported an error") {
+		t.Errorf("default error = %v", err)
+	}
 }

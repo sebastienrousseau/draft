@@ -147,13 +147,15 @@ func TestSessionFailsWhenTheSandboxCannotBeCreated(t *testing.T) {
 // Every provider must therefore deliver it on stdin or through a private file;
 // the exceptions are the CLIs whose own --help offers neither.
 func TestPromptStaysOutOfArgvWhereverPossible(t *testing.T) {
-	// copilot ignores stdin and offers no prompt-file flag; agy offers only an
-	// NDJSON turn protocol. Both keep argv until that changes.
-	argvOnly := map[string]bool{"copilot": true, "agy": true, "amp": true, "crush": true, "qwen": true}
+	// These CLIs read the prompt only as a positional argument, and offer
+	// no stdin, prompt-file, ACP or stream-json path to avoid it. copilot uses
+	// ACP and agy uses its stream-json stdin turn protocol, so both are off the
+	// list; amp, crush and qwen remain until one of those appears.
+	argvOnly := map[string]bool{"amp": true, "crush": true, "qwen": true}
 	for _, p := range Providers() {
 		// An ACP agent receives the prompt inside a JSON-RPC frame on its
 		// stdin; argv only ever carries the fixed start-up arguments.
-		if p.ACP || p.PromptViaStdin || p.PromptFileFlag != "" || argvOnly[p.Name] {
+		if p.ACP || p.StreamJSONInput || p.PromptViaStdin || p.PromptFileFlag != "" || argvOnly[p.Name] {
 			continue
 		}
 		t.Errorf("provider %q delivers the prompt in argv but is not on the exception list", p.Name)

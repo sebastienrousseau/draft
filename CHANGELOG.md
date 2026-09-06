@@ -85,6 +85,23 @@ series until `0.0.999`.
 
 ### Fixed
 
+- **The prompt no longer reaches the process listing for copilot or agy.**
+  `copilot` is now driven over the Agent Client Protocol (`copilot --acp`) and
+  `agy` over its stream-json stdin turn protocol, so the verbatim source text
+  travels in a JSON-RPC frame or an NDJSON event on stdin rather than as a
+  positional argument any local user could read with `ps`. Both were verified
+  end to end writing a full article. This closes the last of the audit's
+  prompt-in-argv findings for every provider draft selects in auto mode; amp,
+  crush and qwen remain positional-only and are used only when forced.
+- **A refusal from a provider without a typed stop reason is detected and
+  routed, not surfaced as a crash.** copilot, codex, cursor, grok, agy and the
+  local model decline by writing prose instead of the CLAIM/NONE the
+  extraction prompt asks for. draft now recognises a short, schema-free
+  response carrying refusal language as a decline, converts it to the same
+  `engine.ErrRefused` a Claude refusal produces, and offers the section to the
+  next engine before recording it as having no claims. A genuine extraction, a
+  legitimate NONE, and a claim whose text merely contains refusal words are
+  never misclassified, pinned by tests.
 - **Ollama now self-starts outside the TUI.** A headless or `--print`/`--json`
   run that fell back to the local model while offline failed with "connection
   refused", because only the interactive UI started `ollama serve`. The engine

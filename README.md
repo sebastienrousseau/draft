@@ -282,9 +282,9 @@ takes the first installed provider, skipping experimental rows unless
 | #  | Provider       | Status       | Headless invocation                                                                                           |
 | -- | -------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
 | 1  | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (live-streamed, prompt on stdin) |
-| 2  | `copilot`      | stable       | `copilot -p`                                                                                                  |
+| 2  | `copilot`      | stable       | `copilot --acp` over the Agent Client Protocol (prompt on stdin)                                              |
 | 3  | `codex`        | stable       | `codex exec` (prompt on stdin)                                                                                |
-| 4  | `agy`          | stable       | `agy -p` (Google Antigravity)                                                                                 |
+| 4  | `agy`          | stable       | `agy --input-format stream-json` turn protocol (prompt on stdin)                                              |
 | 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text` (prompt on stdin)                                                      |
 | 6  | `amp`          | experimental | `amp -x`                                                                                                      |
 | 7  | `crush`        | experimental | `crush run`                                                                                                   |

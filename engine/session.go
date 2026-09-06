@@ -129,12 +129,15 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		cmd.Env = os.Environ()
 	}
 	cmd.Env = sessionEnv(cmd.Env)
-	if s.provider.PromptViaStdin {
+	switch {
+	case s.provider.StreamJSONInput:
+		cmd.Stdin = strings.NewReader(agyUserEvent(req.Prompt))
+	case s.provider.PromptViaStdin:
 		cmd.Stdin = strings.NewReader(req.Prompt)
 		if s.provider.StdinPlaceholder != "" {
 			cmd.Args = append(cmd.Args, s.provider.StdinPlaceholder)
 		}
-	} else if promptFile == "" {
+	case promptFile == "":
 		cmd.Args = append(cmd.Args, req.Prompt)
 	}
 
@@ -151,9 +154,12 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	var out string
 	var truncated bool
 	var streamErr error
-	if s.provider.StreamJSON {
+	switch {
+	case s.provider.StreamJSONInput:
+		out, streamErr = parseAgyStreamJSON(stdout, req.OnChunk)
+	case s.provider.StreamJSON:
 		out, truncated, streamErr = parseStreamJSON(stdout, req.OnChunk)
-	} else {
+	default:
 		out, streamErr = streamAll(stdout, req.OnChunk)
 	}
 

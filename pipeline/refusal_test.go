@@ -434,3 +434,109 @@ func TestProvenanceWriteFailureWarns(t *testing.T) {
 		t.Errorf("expected warnings and no paths, got %+v / %v", dones[0], logs)
 	}
 }
+
+// A text provider with no typed stop reason declines by writing prose. The
+// detector must turn that into a routed, recorded refusal — and never
+// misfire on a real extraction or a legitimate NONE.
+func TestLooksLikeExtractionRefusal(t *testing.T) {
+	refusals := []string{
+		"I can't help with extracting claims from this document.",
+		"I'm sorry, but I am unable to assist with this request.",
+		"I will not comply with this.",
+		"I must decline to process this content.",
+		"I do not feel comfortable summarising this material.",
+	}
+	for _, r := range refusals {
+		if !looksLikeExtractionRefusal(r) {
+			t.Errorf("should be a refusal: %q", r)
+		}
+	}
+	notRefusals := []string{
+		"",
+		"NONE",
+		"none",
+		"CLAIM: The system reached 0.82\nSOURCE_QUOTE: \"reached 0.82\"\nTYPE: metric\nSTRENGTH: demonstrated\n---",
+		// A claim whose text happens to contain refusal-shaped words is still a claim.
+		"CLAIM: The author says they cannot verify the result\nSOURCE_QUOTE: \"we cannot verify\"\nTYPE: mechanism\nSTRENGTH: hedged\n---",
+		// A long non-schema blob is a malformed extraction, not a refusal.
+		strings.Repeat("The document discusses various topics without claims. ", 12),
+	}
+	for _, n := range notRefusals {
+		if looksLikeExtractionRefusal(n) {
+			t.Errorf("must NOT be a refusal: %q", snippetForTest(n))
+		}
+	}
+}
+
+func snippetForTest(s string) string {
+	if len(s) > 50 {
+		return s[:50] + "..."
+	}
+	return s
+}
+
+// End to end: an engine that answers extraction with a refusal prose is
+// routed to the alternate, and if none answers, the section is recorded empty
+// — the same path a typed refusal takes.
+func TestContentRefusalIsRoutedLikeATypedOne(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.ExtractConcurrency = 1
+	primary := &funcRefuser{name: "grok", marker: laterSectionMarker}
+	alternate := okEngine("ollama")
+	events := make(chan Event, 4096)
+	runner := NewRunner(cfg, []engine.Engine{primary, alternate}, events)
+	dones, errs, logs := collect(t, runner, events, Job{Sources: []string{writeMultiSectionSource(t)}})
+	if len(errs) != 0 || len(dones) != 1 {
+		t.Fatalf("errs=%v dones=%d", errs, len(dones))
+	}
+	if !hasLog(logs, "grok declined this prompt; trying ollama for it") {
+		t.Errorf("a content refusal should route to the alternate, got %v", logs)
+	}
+	if cur := runner.chainFor(engine.KindExtract).cur; cur != 0 {
+		t.Errorf("a content refusal must not demote the chain, cur=%d", cur)
+	}
+}
+
+// funcRefuser answers extraction with refusal prose (no typed error) for any
+// prompt quoting marker, and normally otherwise.
+type funcRefuser struct {
+	name   string
+	marker string
+}
+
+func (f *funcRefuser) Name() string { return f.name }
+func (f *funcRefuser) Generate(_ context.Context, req engine.Request) (engine.Result, error) {
+	switch req.Kind {
+	case engine.KindExtract:
+		if strings.Contains(req.Prompt, f.marker) {
+			return engine.Result{Text: "I'm sorry, I can't help with that request."}, nil
+		}
+		return engine.Result{Text: extractionResponse}, nil
+	case engine.KindEdit:
+		return engine.Result{Text: "[]"}, nil
+	default:
+		return engine.Result{Text: validArticle(".")}, nil
+	}
+}
+
+// In the parallel path a worker calls its pinned engine directly; a content
+// refusal there must route to the alternates, and when every alternate also
+// content-refuses the section is recorded empty without demoting the chain.
+func TestContentRefusalParallelPathExhaustsAlternates(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.ExtractConcurrency = 4
+	primary := &funcRefuser{name: "grok", marker: laterSectionMarker}
+	alternate := &funcRefuser{name: "codex", marker: laterSectionMarker}
+	events := make(chan Event, 4096)
+	runner := NewRunner(cfg, []engine.Engine{primary, alternate}, events)
+	dones, errs, logs := collect(t, runner, events, Job{Sources: []string{writeMultiSectionSource(t)}})
+	if len(errs) != 0 || len(dones) != 1 {
+		t.Fatalf("errs=%v dones=%d", errs, len(dones))
+	}
+	if !hasLog(logs, "recorded as having no claims") {
+		t.Errorf("a section every engine content-refuses should be recorded empty, got %v", logs)
+	}
+	if cur := runner.chainFor(engine.KindExtract).cur; cur != 0 {
+		t.Errorf("content refusals must not demote, cur=%d", cur)
+	}
+}

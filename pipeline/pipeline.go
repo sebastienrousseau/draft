@@ -836,6 +836,14 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 	if err != nil {
 		return "", err
 	}
+	// A parallel worker calls its pinned engine directly, bypassing generate()
+	// and tryAlternates where content refusals are otherwise caught. So a
+	// worker detects the pinned engine's content refusal here and returns
+	// ErrRefused; the caller then routes it to the alternates like any other.
+	// The chain path (direct == nil) is handled inside generate().
+	if direct != nil && contentRefusal(req, engine.Result{Text: text}) {
+		return "", fmt.Errorf("%s: %w", serving.Name(), engine.ErrRefused)
+	}
 
 	// Address the entry to the backend that actually served it: the chain may
 	// have failed over between the lookup above and this point, and storing
@@ -850,6 +858,57 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 		}
 	}
 	return text, nil
+}
+
+// contentRefusal reports whether a successful engine result is really the
+// model declining an extraction request in prose. It is scoped to extraction,
+// where the CLAIM/NONE schema makes a decline unambiguous; a writing response
+// is long free prose and is never judged this way.
+func contentRefusal(req engine.Request, res engine.Result) bool {
+	return req.Kind == engine.KindExtract && looksLikeExtractionRefusal(res.Text)
+}
+
+// looksLikeExtractionRefusal reports whether an extraction response is the
+// model declining the task rather than answering it. The extraction prompt
+// asks for CLAIM: records or exactly NONE, so a response with neither, short
+// enough to be a refusal and carrying refusal language, is treated as one.
+//
+// It is deliberately conservative. An empty response is a different failure,
+// not a refusal. A response containing a CLAIM: line produced records. NONE is
+// the legitimate "no claims here". A long blob without CLAIM: is a malformed
+// extraction the ledger step already drops to nothing, not a refusal. Only a
+// short, schema-free response with an explicit refusal phrase qualifies, so a
+// genuine extraction is never mistaken for a decline.
+func looksLikeExtractionRefusal(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" || len(t) > 400 {
+		return false
+	}
+	upper := strings.ToUpper(t)
+	if strings.Contains(upper, "CLAIM:") || upper == "NONE" {
+		return false
+	}
+	low := strings.ToLower(t)
+	for _, marker := range refusalMarkers {
+		if strings.Contains(low, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// refusalMarkers are phrases a model uses when it declines. They are matched
+// as substrings of a lower-cased response, so contractions and both persons
+// ("I can't", "I am unable") are covered.
+var refusalMarkers = []string{
+	"i can't", "i cannot", "i can not", "i won't", "i will not",
+	"i'm unable", "i am unable", "i'm not able", "i am not able",
+	"i'm sorry", "i am sorry", "i apologize", "i apologise",
+	"can't help", "cannot help", "can't assist", "cannot assist",
+	"unable to help", "unable to assist", "unable to provide", "unable to complete",
+	"i must decline", "i'd rather not", "i would rather not",
+	"i don't feel comfortable", "i do not feel comfortable",
+	"cannot comply", "can't comply", "will not comply", "against my guidelines",
 }
 
 // extractAlternates asks each engine behind the extraction chain's active one
@@ -1074,6 +1133,12 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		}
 		e := cs.engines[cs.cur]
 		res, err := e.Generate(ctx, req)
+		if err == nil && contentRefusal(req, res) {
+			// A provider with no typed stop reason declined in prose. Treat it
+			// exactly as a typed refusal so the routing below offers the prompt
+			// to the engines behind this one without demoting the chain.
+			err = fmt.Errorf("%s: %w", e.Name(), engine.ErrRefused)
+		}
 		if err == nil {
 			if r.engineName != e.Name() {
 				r.engineName = e.Name()
@@ -1133,6 +1198,9 @@ func (r *Runner) tryAlternates(ctx context.Context, cs *chainState, from int, re
 		alt := cs.engines[j]
 		r.warn(fmt.Sprintf("%s declined this prompt; trying %s for it", declined.Name(), alt.Name()))
 		res, err := alt.Generate(ctx, req)
+		if err == nil && contentRefusal(req, res) {
+			err = fmt.Errorf("%s: %w", alt.Name(), engine.ErrRefused)
+		}
 		if err == nil {
 			return res, alt, true
 		}
