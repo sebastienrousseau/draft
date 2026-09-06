@@ -52,12 +52,21 @@ func Parse(text, source string) (records []Record, dropped int) {
 			Type:        fieldValue(block, "TYPE"),
 			Strength:    fieldValue(block, "STRENGTH"),
 		}
-		rec = repair(rec, source)
-		if ok, _ := Verify(rec, source); !ok {
-			dropped++
+		// The common case is a record that already verifies, so it pays for one
+		// Verify and nothing else. Repair — which allocates — runs only when the
+		// record would otherwise be dropped, and its result is re-verified so a
+		// rescued quote is held to exactly the same gate.
+		if ok, _ := Verify(rec, source); ok {
+			records = append(records, rec)
 			continue
 		}
-		records = append(records, rec)
+		if repaired := repair(rec, source); repaired.SourceQuote != rec.SourceQuote {
+			if ok, _ := Verify(repaired, source); ok {
+				records = append(records, repaired)
+				continue
+			}
+		}
+		dropped++
 	}
 	return records, dropped
 }
@@ -258,11 +267,35 @@ func Normalise(s string) string {
 
 // canonical is Normalise without the case fold, so a caller can slice the
 // source's own text at a position found in the folded form.
+//
+// Each rewrite is guarded by a cheap scan, because the overwhelming majority
+// of quotes and source spans are plain ASCII with none of the characters these
+// rules touch. Running a Replacer or a regex unconditionally allocates a new
+// string every time even when nothing matches; skipping them keeps the common
+// path to a single Fields/Join.
 func canonical(s string) string {
-	s = escapes.Replace(s)
-	s = hyphenBreak.ReplaceAllString(s, "")
-	s = glyphs.Replace(s)
+	if strings.IndexByte(s, '\\') >= 0 {
+		s = escapes.Replace(s)
+	}
+	if strings.IndexByte(s, '\n') >= 0 && strings.IndexByte(s, '-') >= 0 {
+		s = hyphenBreak.ReplaceAllString(s, "")
+	}
+	if needsGlyphFold(s) {
+		s = glyphs.Replace(s)
+	}
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// needsGlyphFold reports whether s contains any character the glyph replacer
+// rewrites: an ASCII hyphen, or any non-ASCII byte (every other glyph — the
+// ligatures, the dashes, the invisible spaces — is multi-byte UTF-8).
+func needsGlyphFold(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c == '-' || c >= 0x80 {
+			return true
+		}
+	}
+	return false
 }
 
 var (
@@ -301,7 +334,7 @@ func repair(rec Record, source string) Record {
 	if quote == "" || len(quote) > maxRepairExtension {
 		return rec
 	}
-	tooShort := len([]rune(quote)) < rules.MinQuoteChars
+	tooShort := utf8.RuneCountInString(quote) < rules.MinQuoteChars
 	if !tooShort && !danglingTail.MatchString(quote) {
 		return rec
 	}
