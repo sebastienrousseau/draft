@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -50,6 +51,11 @@ func TestHelperProcess(t *testing.T) {
 		os.Stdout.WriteString(`{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"only deltas"}}}` + "\n")
 	case "stream-json-error":
 		os.Stdout.WriteString(`{"type":"result","subtype":"error_max_turns","is_error":true,"result":""}` + "\n")
+	case "stream-json-refusal":
+		// Observed from claude 2.x: a refusal result, nothing on stderr,
+		// and a non-zero exit.
+		os.Stdout.WriteString(`{"type":"result","subtype":"success","is_error":false,"result":"","stop_reason":"refusal","terminal_reason":"api_error"}` + "\n")
+		os.Exit(1)
 	default:
 		os.Stdout.WriteString("# Title\n\nbody text.")
 	}
@@ -164,6 +170,23 @@ func TestSessionStreamJSONError(t *testing.T) {
 		_, err := s.Generate(context.Background(), Request{Prompt: "p"})
 		if err == nil || !strings.Contains(err.Error(), "error_max_turns") {
 			t.Errorf("stream-json is_error should surface as an error, got %v", err)
+		}
+	})
+}
+
+// The claude CLI reports a refusal as a result event and then exits 1 with
+// an empty stderr. Session used to surface that as "claude: exit status 1",
+// indistinguishable from a crash, and the pipeline demoted the provider for
+// the rest of the queue.
+func TestSessionRefusalOutranksTheExitStatus(t *testing.T) {
+	withExec("stream-json-refusal", func() {
+		s := &Session{provider: Provider{Name: "claude", Bin: "claude", PromptViaStdin: true, StreamJSON: true}}
+		_, err := s.Generate(context.Background(), Request{Prompt: "p"})
+		if !errors.Is(err, ErrRefused) {
+			t.Fatalf("err = %v, want ErrRefused", err)
+		}
+		if !strings.HasPrefix(err.Error(), "claude: ") {
+			t.Errorf("error should name the provider, got %q", err)
 		}
 	})
 }

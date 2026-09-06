@@ -6,6 +6,20 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A refused prompt no longer demotes the provider for the rest of the
+  queue.** When the model declines a section (the API answers with
+  `stop_reason: "refusal"` and the claude CLI exits 1 with an empty stderr),
+  `draft` read it as a dead backend: in auto mode every later paper in the
+  queue was silently written by the next provider, and with `--engine claude`
+  the queue stranded on "no generation engine available". The session engine
+  now reads the stop reason from the stream and returns `engine.ErrRefused`;
+  the fallback chain leaves the cursor where it is, and claim extraction
+  records the declined section as having no claims and carries on. Seen on
+  two incident reports whose sections describe agents gaining remote code
+  execution.
+
 ## [0.0.33] - 2026-09-03
 
 ### Security

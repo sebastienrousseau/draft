@@ -157,6 +157,14 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		out, streamErr = streamAll(stdout, req.OnChunk)
 	}
 
+	// A refusal is reported in the stream, not on stderr: the CLI writes a
+	// result whose stop_reason is "refusal", then exits non-zero with nothing
+	// else to say. Read the stream's verdict before the exit status, or the
+	// caller sees a bare "exit status 1" and mistakes a declined prompt for a
+	// dead provider.
+	if errors.Is(streamErr, ErrRefused) {
+		return Result{}, fmt.Errorf("%s: %w", s.provider.Name, streamErr)
+	}
 	if err := cmd.Wait(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
@@ -180,12 +188,17 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 // machinery could never fire for a session provider, and a length-limited stop
 // would surface much later as a "article appears truncated" rule violation
 // costing a full rewrite.
+//
+// A stop reason of "refusal", on the message_delta event or on the final
+// result, is returned as ErrRefused. The model produced no answer because it
+// declined the prompt; that is not a provider error and is never reported as
+// one.
 func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated bool, err error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var acc strings.Builder
 	var result string
-	var haveResult, isError bool
+	var haveResult, isError, refused bool
 	for scanner.Scan() {
 		var ev struct {
 			Type  string `json:"type"`
@@ -197,9 +210,10 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated 
 					StopReason string `json:"stop_reason"`
 				} `json:"delta"`
 			} `json:"event"`
-			Subtype string `json:"subtype"`
-			IsError bool   `json:"is_error"`
-			Result  string `json:"result"`
+			Subtype    string `json:"subtype"`
+			IsError    bool   `json:"is_error"`
+			Result     string `json:"result"`
+			StopReason string `json:"stop_reason"`
 		}
 		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
 			continue // ignore non-JSON or partial lines
@@ -218,11 +232,17 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated 
 				if isLengthStop(ev.Event.Delta.StopReason) {
 					truncated = true
 				}
+				if isRefusal(ev.Event.Delta.StopReason) {
+					refused = true
+				}
 			}
 		case "result":
 			result = ev.Result
 			haveResult = true
 			isError = ev.IsError
+			if isRefusal(ev.StopReason) {
+				refused = true
+			}
 			if isError && result == "" {
 				result = ev.Subtype
 			}
@@ -230,6 +250,9 @@ func parseStreamJSON(r io.Reader, onChunk func(string)) (text string, truncated 
 	}
 	if err := scanner.Err(); err != nil {
 		return acc.String(), truncated, err
+	}
+	if refused {
+		return "", truncated, ErrRefused
 	}
 	if isError {
 		if result == "" {
@@ -252,6 +275,11 @@ func isLengthStop(reason string) bool {
 		return true
 	}
 	return false
+}
+
+// isRefusal reports whether a stop reason means the model declined the prompt.
+func isRefusal(reason string) bool {
+	return strings.EqualFold(strings.TrimSpace(reason), "refusal")
 }
 
 // streamAll reads r to completion, forwarding each chunk to onChunk if set,

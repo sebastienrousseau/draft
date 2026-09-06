@@ -15,6 +15,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -46,6 +47,13 @@ type Request struct {
 	// OnChunk, if set, receives streamed text as it arrives for live preview.
 	OnChunk func(string)
 }
+
+// ErrRefused reports that the model declined to answer a prompt. It is a
+// verdict on the text, not on the backend: the provider is up, logged in and
+// answering, and it will answer the next prompt. Callers must not treat it as
+// an outage. The pipeline keeps the engine and, for claim extraction, records
+// the section as having no claims.
+var ErrRefused = errors.New("the model declined to answer this prompt")
 
 // Result is the outcome of a generation call.
 type Result struct {

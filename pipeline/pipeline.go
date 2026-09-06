@@ -600,10 +600,21 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	r.cacheHits.Store(0)
 	extract := func(body string) (string, error) { return r.extractOne(ctx, body, nil) }
 
+	// A declined section is a section with no claims. The model has said it
+	// will not restate this text; the rest of the paper is still there, and
+	// the ledger stays honest because nothing is invented to fill the gap.
+	refused := func(i int, err error) bool {
+		if !errors.Is(err, engine.ErrRefused) {
+			return false
+		}
+		r.warn(fmt.Sprintf("claim section %d/%d: %v; recorded as having no claims", i+1, len(sections), err))
+		return true
+	}
+
 	// Section 0 settles the engine via the chain.
 	r.log(fmt.Sprintf("claim section 1/%d", len(sections)))
 	text0, err := extract(sections[0].Body)
-	if err != nil {
+	if err != nil && !refused(0, err) {
 		return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
 	}
 	raw[0] = text0
@@ -634,7 +645,9 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 				mu.Lock()
 				defer mu.Unlock()
 				if err != nil {
-					failed = append(failed, i)
+					if !refused(i, err) {
+						failed = append(failed, i)
+					}
 					return
 				}
 				raw[i] = text
@@ -650,7 +663,7 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 			r.log(fmt.Sprintf("claim section %d/%d%s", i+1, len(sections), eta.remaining(i)))
 			started := time.Now()
 			text, err := extract(sections[i].Body)
-			if err != nil {
+			if err != nil && !refused(i, err) {
 				return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
 			}
 			eta.observe(time.Since(started))
@@ -663,7 +676,7 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	for _, i := range failed {
 		r.log(fmt.Sprintf("retrying claim section %d/%d", i+1, len(sections)))
 		text, err := extract(sections[i].Body)
-		if err != nil {
+		if err != nil && !refused(i, err) {
 			return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
 		}
 		raw[i] = text
@@ -1006,6 +1019,15 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 		// Cancellation and timeout are the caller's decision, not a sick
 		// backend. Failing over would retry work the user just abandoned.
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return engine.Result{}, err
+		}
+		// A refusal is the model's verdict on this prompt, not on the backend.
+		// Demoting the chain here downgrades every remaining job in the queue
+		// because one section of one paper described something the model
+		// would not touch, and with a single pinned engine it strands the
+		// queue with nothing to fall back to. Keep the engine; let the caller
+		// decide what a declined prompt means for its stage.
+		if errors.Is(err, engine.ErrRefused) {
 			return engine.Result{}, err
 		}
 		lastErr = err

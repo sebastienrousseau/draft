@@ -111,7 +111,10 @@ Almost every extension goes through one of these.
 implements them and nothing else changes: the pipeline, the prompts and the
 validation are identical whichever backend runs. `engine.Chain` orders backends
 and fails over between them; the cursor is sticky so a dead provider is not
-retried per paper, and half-open so a blip does not demote a whole queue.
+retried per paper, and half-open so a blip does not demote a whole queue. A
+refusal (`engine.ErrRefused`, the model declining a prompt) is a verdict on
+the text, not the backend, and never moves the cursor; extraction records the
+declined section as having no claims.
 
 **`pipeline.Event`** — a sum type on a channel. The TUI, the `--print` runner
 and the `--json` runner are three consumers of the same stream, which is why

@@ -88,6 +88,34 @@ func TestParseStreamJSONDefaultErrorAndReadFailure(t *testing.T) {
 	}
 }
 
+// A refusal arrives as a stop reason, on the message_delta event or on the
+// final result, with no text and is_error false. It must come back as the
+// ErrRefused sentinel so the pipeline can tell a declined prompt from a dead
+// provider; a generic error here is what demoted whole queues.
+func TestParseStreamJSONRefusalIsTheSentinel(t *testing.T) {
+	cases := map[string]string{
+		"on the result": strings.Join([]string{
+			`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}`,
+			`{"type":"result","subtype":"success","is_error":false,"result":"","stop_reason":"refusal"}`,
+		}, "\n"),
+		"on message_delta": strings.Join([]string{
+			`{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"refusal"}}}`,
+			`{"type":"result","subtype":"success","is_error":false,"result":""}`,
+		}, "\n"),
+	}
+	for name, stream := range cases {
+		t.Run(name, func(t *testing.T) {
+			text, _, err := parseStreamJSON(strings.NewReader(stream), nil)
+			if !errors.Is(err, ErrRefused) {
+				t.Fatalf("err = %v, want ErrRefused", err)
+			}
+			if text != "" {
+				t.Errorf("text = %q, want none for a declined prompt", text)
+			}
+		})
+	}
+}
+
 // errReader returns some data and then a non-EOF failure.
 type errReader struct {
 	data string

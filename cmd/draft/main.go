@@ -383,7 +383,9 @@ func usage(w io.Writer) {
   unverified) and used by auto only with --experimental. Force any by name.
 
   If a session call fails because the machine is offline, draft fails over to a
-  local Ollama model and stays there for the rest of the run.
+  local Ollama model and stays there for the rest of the run. A prompt the model
+  declines is not a provider failure: the section is recorded as having no
+  claims and the provider is kept.
 
 `, strings.Join(engine.ProviderNames(), ", "))
 
