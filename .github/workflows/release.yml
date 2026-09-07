@@ -223,3 +223,37 @@ jobs:
           for artifact in draft_*.tar.gz draft_*.zip "$pkg"; do
             gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
           done
+
+  notify-tap:
+    # Bump the Homebrew cask the moment a release is verified, instead of
+    # waiting up to a day for the tap's scheduled cron. The tap's bump-draft
+    # workflow already listens for this repository_dispatch. This is a no-op
+    # (with a warning) until the TAP_DISPATCH_TOKEN secret exists, so it can
+    # never block a release; the cron remains the fallback either way.
+    needs: verify-release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Dispatch draft-release to the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_DISPATCH_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAP_TOKEN:-}" ]; then
+            echo "::warning::TAP_DISPATCH_TOKEN is not set; the tap's daily cron will bump the cask instead."
+            exit 0
+          fi
+          code="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${TAP_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/sebastienrousseau/homebrew-tap/dispatches \
+            -d "{\"event_type\":\"draft-release\",\"client_payload\":{\"version\":\"${VERSION#v}\"}}")"
+          if [ "$code" != "204" ]; then
+            echo "::error::tap dispatch failed (HTTP ${code}); the tap cron will still bump the cask"
+            exit 1
+          fi
+          echo "Dispatched draft-release to sebastienrousseau/homebrew-tap for ${VERSION}."
