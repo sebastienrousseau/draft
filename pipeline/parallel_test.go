@@ -74,24 +74,30 @@ func TestExtractConcurrency(t *testing.T) {
 		return NewRunner(config.Config{ExtractConcurrency: conc}, []engine.Engine{eng}, nil)
 	}
 
-	if got := runnerFor("claude", 4).extractConcurrency(); got != 4 {
+	// conc resolves the extraction chain from the runner and hands it to the
+	// gate explicitly, mirroring how the pipeline calls it.
+	conc := func(name string, c int) int {
+		r := runnerFor(name, c)
+		return r.extractConcurrency(r.chainFor(engine.KindExtract))
+	}
+	if got := conc("claude", 4); got != 4 {
 		t.Errorf("session engine concurrency = %d, want 4", got)
 	}
-	if got := runnerFor("ollama", 4).extractConcurrency(); got != ollamaExtractConcurrency {
+	if got := conc("ollama", 4); got != ollamaExtractConcurrency {
 		t.Errorf("ollama concurrency = %d, want %d (capped for a shared GPU)", got, ollamaExtractConcurrency)
 	}
-	if got := runnerFor("claude", 1).extractConcurrency(); got != 1 {
+	if got := conc("claude", 1); got != 1 {
 		t.Errorf("concurrency of 1 should stay 1, got %d", got)
 	}
 	// An explicit low value is honoured even for Ollama.
-	if got := runnerFor("ollama", 1).extractConcurrency(); got != 1 {
+	if got := conc("ollama", 1); got != 1 {
 		t.Errorf("ollama should honour an explicit 1, got %d", got)
 	}
 	// A writer on a session provider must not lift the local extractor's cap.
 	routed := NewRoutedRunner(config.Config{
 		Engine: "ollama", WriteEngine: "claude", ExtractConcurrency: 8,
 	}, nil)
-	if got := routed.extractConcurrency(); got != ollamaExtractConcurrency {
+	if got := routed.extractConcurrency(routed.chainFor(engine.KindExtract)); got != ollamaExtractConcurrency {
 		t.Errorf("routed ollama extraction = %d, want %d", got, ollamaExtractConcurrency)
 	}
 }

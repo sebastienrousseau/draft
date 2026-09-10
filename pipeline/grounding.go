@@ -46,9 +46,13 @@ const (
 // changed underneath, the records it no longer supports are dropped here, and a
 // wholly changed source resumes to an empty ledger that fails the write phase
 // honestly instead of producing an ungrounded draft.
-func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Section, outputDir string) ([]claims.Record, int, error) {
+//
+// xchain is the resolved extraction chain, passed in explicitly so the
+// grounding phase never reaches into the Runner's per-kind chain map: the gate
+// is a function of the sections, the chain it is handed, and the config.
+func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Section, outputDir string, xchain *chainState) ([]claims.Record, int, error) {
 	if !r.cfg.Resume {
-		return r.extractClaims(ctx, job, sections, outputDir)
+		return r.extractClaims(ctx, job, sections, outputDir, xchain)
 	}
 
 	ledgerPath := ledgerPathFor(outputDir, job)
@@ -57,7 +61,7 @@ func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Se
 		// No ledger to resume from is not an error: fall through to a normal
 		// run rather than refusing to work.
 		r.log("no ledger to resume from; extracting claims")
-		return r.extractClaims(ctx, job, sections, outputDir)
+		return r.extractClaims(ctx, job, sections, outputDir, xchain)
 	}
 
 	var corpus strings.Builder
@@ -67,7 +71,7 @@ func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Se
 	records, dropped := claims.ParseLedger(string(data), corpus.String())
 	if len(records) == 0 {
 		r.warn("the saved ledger no longer verifies against these sources; extracting afresh")
-		return r.extractClaims(ctx, job, sections, outputDir)
+		return r.extractClaims(ctx, job, sections, outputDir, xchain)
 	}
 
 	r.ledgerPath = ledgerPath
@@ -162,13 +166,13 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 // single local model that should not be hit in parallel). Any section that
 // fails a parallel call is retried through the chain, so a mid-run provider drop
 // still degrades to Ollama.
-func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Section, outputDir string) ([]claims.Record, int, error) {
+func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Section, outputDir string, xchain *chainState) ([]claims.Record, int, error) {
 	ledgerPath := ledgerPathFor(outputDir, job)
 	r.ledgerPath = ledgerPath
 	raw := make([]string, len(sections))
 
 	r.cacheHits.Store(0)
-	extract := func(body string) (string, error) { return r.extractOne(ctx, body, nil) }
+	extract := func(body string) (string, error) { return r.extractOne(ctx, body, nil, xchain) }
 
 	// A declined section is a section with no claims. The model has said it
 	// will not restate this text; the rest of the paper is still there, and
@@ -191,8 +195,8 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 
 	// Pin the backend section 0 settled on. Parallel workers call it directly
 	// rather than going through the chain, so they cannot race on the cursor.
-	conc := r.extractConcurrency()
-	pinned := r.chainFor(engine.KindExtract).active()
+	conc := r.extractConcurrency(xchain)
+	pinned := xchain.active()
 	if pinned == nil {
 		return nil, 0, errors.New("no extraction engine available")
 	}
@@ -211,13 +215,13 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 			go func(i int) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				text, err := r.extractOne(ctx, sections[i].Body, pinned)
+				text, err := r.extractOne(ctx, sections[i].Body, pinned, xchain)
 				if errors.Is(err, engine.ErrRefused) {
 					// Workers bypass the chain, so the chain's own routing
 					// for a refusal never runs here. Offer the section to
 					// the engines behind the pinned one ourselves; the
 					// cursor stays put either way.
-					text, err = r.extractAlternates(ctx, sections[i].Body, err)
+					text, err = r.extractAlternates(ctx, sections[i].Body, err, xchain)
 				}
 				mu.Lock()
 				defer mu.Unlock()
@@ -314,7 +318,7 @@ func ollamaParallelism() int {
 // extractConcurrency is the number of parallel extraction workers for the settled
 // engine: the configured value for a session provider (independent subprocesses),
 // and a small, capped amount for Ollama (concurrent requests to one local server).
-func (r *Runner) extractConcurrency() int {
+func (r *Runner) extractConcurrency(xchain *chainState) int {
 	n := r.cfg.ExtractConcurrency
 	if n < 1 {
 		n = 1
@@ -323,7 +327,7 @@ func (r *Runner) extractConcurrency() int {
 	// per-kind routing the writer may be a session provider while extraction
 	// runs locally, and it is the local one that must not be over-driven.
 	extractor := ""
-	if e := r.chainFor(engine.KindExtract).active(); e != nil {
+	if e := xchain.active(); e != nil {
 		extractor = e.Name()
 	}
 	if extractor == "ollama" {
@@ -344,10 +348,10 @@ func (r *Runner) extractConcurrency() int {
 // The cached text is never trusted on its own account: the caller still runs
 // claims.Parse over it against the freshly read section, so a stale entry can
 // only ever yield fewer verified claims, never an ungrounded one.
-func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engine) (string, error) {
+func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engine, xchain *chainState) (string, error) {
 	serving := direct
 	if serving == nil {
-		serving = r.chainFor(engine.KindExtract).active()
+		serving = xchain.active()
 	}
 	if key := r.extractKey(body, serving); key != "" {
 		if text, ok := r.cache.Get(key); ok {
@@ -367,7 +371,7 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 			r.addUsage(res.Usage)
 		}
 	} else {
-		text, err = r.generateText(ctx, req)
+		text, err = r.generateTextOn(ctx, req, xchain)
 	}
 	if err != nil {
 		return "", err
@@ -376,7 +380,7 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 	// and tryAlternates where content refusals are otherwise caught. So a
 	// worker detects the pinned engine's content refusal here and returns
 	// ErrRefused; the caller then routes it to the alternates like any other.
-	// The chain path (direct == nil) is handled inside generate().
+	// The chain path (direct == nil) is handled inside generateOn(xchain).
 	if direct != nil && contentRefusal(req, engine.Result{Text: text}) {
 		return "", fmt.Errorf("%s: %w", serving.Name(), engine.ErrRefused)
 	}
@@ -386,7 +390,7 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 	// it under the wrong name would serve one model's output for another.
 	actual := direct
 	if actual == nil {
-		actual = r.chainFor(engine.KindExtract).active()
+		actual = xchain.active()
 	}
 	if key := r.extractKey(body, actual); key != "" {
 		if putErr := r.cache.Put(key, text); putErr != nil {
@@ -450,8 +454,8 @@ var refusalMarkers = []string{
 // extractAlternates asks each engine behind the extraction chain's active one
 // for a section the active engine declined. It returns the first answer, or
 // the original refusal when every alternate declines or fails.
-func (r *Runner) extractAlternates(ctx context.Context, body string, refusal error) (string, error) {
-	cs := r.chainFor(engine.KindExtract)
+func (r *Runner) extractAlternates(ctx context.Context, body string, refusal error, xchain *chainState) (string, error) {
+	cs := xchain
 	if cs == nil || cs.cur >= len(cs.engines) {
 		return "", refusal
 	}

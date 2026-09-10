@@ -18,9 +18,12 @@ func (r *Runner) currentUsage() engine.Usage {
 	return r.usage
 }
 
-// generateText runs a request through the engine chain and returns its text.
-func (r *Runner) generateText(ctx context.Context, req engine.Request) (string, error) {
-	res, err := r.generate(ctx, req)
+// generateTextOn runs a request against an explicitly supplied chain and
+// returns its text. The grounding phase calls this with the chain it was
+// handed, so extraction generation is a function of that chain rather than of
+// whichever chain the Runner's per-kind map happens to resolve.
+func (r *Runner) generateTextOn(ctx context.Context, req engine.Request, cs *chainState) (string, error) {
+	res, err := r.generateOn(ctx, req, cs)
 	if err != nil {
 		return "", err
 	}
@@ -40,7 +43,13 @@ func (r *Runner) addUsage(u engine.Usage) {
 // fails the run does not return to it, so a queue of sections is not re-attempted
 // against a dead provider.
 func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Result, error) {
-	cs := r.chainFor(req.Kind)
+	return r.generateOn(ctx, req, r.chainFor(req.Kind))
+}
+
+// generateOn is generate against an explicitly supplied chain. generate is the
+// common case that resolves the chain from the request's kind; the grounding
+// phase uses this form to walk the exact chain it was handed.
+func (r *Runner) generateOn(ctx context.Context, req engine.Request, cs *chainState) (engine.Result, error) {
 	if cs.rehabilitate(timeNow()) {
 		r.log("retrying " + cs.engines[0].Name() + " after its earlier failure")
 		r.engineName = cs.engines[0].Name()
