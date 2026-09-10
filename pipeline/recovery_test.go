@@ -113,16 +113,16 @@ func TestExtractConcurrencyRespectsTheServerSetting(t *testing.T) {
 	r := NewRunner(config.Config{ExtractConcurrency: 8}, []engine.Engine{ollama}, nil)
 
 	t.Setenv("OLLAMA_NUM_PARALLEL", "")
-	if got := r.extractConcurrency(); got != ollamaExtractConcurrency {
+	if got := r.extractConcurrency(r.chainFor(engine.KindExtract)); got != ollamaExtractConcurrency {
 		t.Errorf("default cap = %d, want %d", got, ollamaExtractConcurrency)
 	}
 	t.Setenv("OLLAMA_NUM_PARALLEL", "4")
-	if got := r.extractConcurrency(); got != 4 {
+	if got := r.extractConcurrency(r.chainFor(engine.KindExtract)); got != 4 {
 		t.Errorf("with four server slots, cap = %d, want 4", got)
 	}
 	// The configured worker count is still the ceiling.
 	t.Setenv("OLLAMA_NUM_PARALLEL", "64")
-	if got := r.extractConcurrency(); got != 8 {
+	if got := r.extractConcurrency(r.chainFor(engine.KindExtract)); got != 8 {
 		t.Errorf("cap = %d, want the configured 8", got)
 	}
 }

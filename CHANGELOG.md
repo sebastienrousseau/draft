@@ -17,6 +17,15 @@ series until `0.0.999`.
   explicit file; `DRAFT_NO_CONFIG` disables the layer. The loader is a
   dependency-free flat-key parser — no new module. (#69)
 
+### Changed
+
+- **The grounding phase takes its engine chain explicitly.** Claim extraction
+  no longer reaches into the Runner's per-kind chain map; the resolved
+  extraction chain is passed in and threaded through, so the gate is a function
+  of the sections, the chain it is handed, and the config. Behaviour is
+  unchanged — the pipeline still hands it the extraction chain — but the gate
+  can now be driven without the Runner's chain wiring. (#68)
+
 ## [0.0.35] - 2026-09-07
 
 ### Fixed

@@ -46,7 +46,7 @@ func TestExtractionIsReusedAcrossRuns(t *testing.T) {
 	run := func(outDir string) *Runner {
 		cfg := config.Config{HomeDir: outDir, DraftsDir: outDir, CacheDir: cacheDir}
 		r := NewRunner(cfg, []engine.Engine{eng}, nil)
-		if _, _, err := r.extractClaims(context.Background(), Job{Sources: []string{"p.pdf"}}, sections, outDir); err != nil {
+		if _, _, err := r.extractClaims(context.Background(), Job{Sources: []string{"p.pdf"}}, sections, outDir, r.chainFor(engine.KindExtract)); err != nil {
 			t.Fatal(err)
 		}
 		return r
@@ -80,13 +80,13 @@ func TestCacheMissesWhenTheBackendChanges(t *testing.T) {
 	cfg := config.Config{HomeDir: t.TempDir(), CacheDir: cacheDir}
 	dir := t.TempDir()
 	r := NewRunner(cfg, []engine.Engine{warm}, nil)
-	if _, _, err := r.extractClaims(context.Background(), Job{}, sections, dir); err != nil {
+	if _, _, err := r.extractClaims(context.Background(), Job{}, sections, dir, r.chainFor(engine.KindExtract)); err != nil {
 		t.Fatal(err)
 	}
 
 	other := &countingEngine{name: "second", out: "NONE"}
 	r2 := NewRunner(cfg, []engine.Engine{other}, nil)
-	if _, _, err := r2.extractClaims(context.Background(), Job{}, sections, t.TempDir()); err != nil {
+	if _, _, err := r2.extractClaims(context.Background(), Job{}, sections, t.TempDir(), r2.chainFor(engine.KindExtract)); err != nil {
 		t.Fatal(err)
 	}
 	if got := other.calls.Load(); got != int64(len(sections)) {
@@ -104,7 +104,7 @@ func TestCacheDisabledWhenNoCacheDirIsSet(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		r := NewRunner(cfg, []engine.Engine{eng}, nil)
-		if _, _, err := r.extractClaims(context.Background(), Job{}, sections, t.TempDir()); err != nil {
+		if _, _, err := r.extractClaims(context.Background(), Job{}, sections, t.TempDir(), r.chainFor(engine.KindExtract)); err != nil {
 			t.Fatal(err)
 		}
 		if got := r.cacheHits.Load(); got != 0 {
@@ -130,7 +130,7 @@ func TestCachedExtractionIsStillVerifiedAgainstTheSource(t *testing.T) {
 
 	sections := []pdf.Section{{Label: "a", Body: "the system hit 99 pages per second in testing"}}
 	r := NewRunner(cfg, []engine.Engine{eng}, nil)
-	records, _, err := r.extractClaims(context.Background(), Job{}, sections, t.TempDir())
+	records, _, err := r.extractClaims(context.Background(), Job{}, sections, t.TempDir(), r.chainFor(engine.KindExtract))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestCachedExtractionIsStillVerifiedAgainstTheSource(t *testing.T) {
 	changed := []pdf.Section{{Label: "a", Body: "the system hit 99 pages per second in testing"}}
 	changed[0].Body = "an entirely different sentence with no such measurement"
 	r2 := NewRunner(cfg, []engine.Engine{eng}, nil)
-	records2, dropped, err := r2.extractClaims(context.Background(), Job{}, changed, t.TempDir())
+	records2, dropped, err := r2.extractClaims(context.Background(), Job{}, changed, t.TempDir(), r2.chainFor(engine.KindExtract))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestCacheWriteFailureWarnsButDoesNotFailTheRun(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := r.extractClaims(context.Background(), Job{}, sections, t.TempDir()); err != nil {
+	if _, _, err := r.extractClaims(context.Background(), Job{}, sections, t.TempDir(), r.chainFor(engine.KindExtract)); err != nil {
 		t.Fatalf("a cache write failure must not fail the run: %v", err)
 	}
 	close(events)
@@ -188,4 +188,39 @@ func TestCacheWriteFailureWarnsButDoesNotFailTheRun(t *testing.T) {
 
 func writeFileAt(dir, name string) error {
 	return os.WriteFile(filepath.Join(dir, name), nil, 0o600)
+}
+
+// The grounding gate is a function of the chain it is handed, not of whichever
+// chain the Runner's per-kind map resolves. Issue A-2 (#68): the extraction
+// phase takes the chain explicitly so it can be driven without the Runner's
+// chain wiring. Here the Runner is built over one engine but the gate is handed
+// a different chain, and it is the handed chain that does the work.
+func TestGroundingGateUsesInjectedChain(t *testing.T) {
+	section := "The model reached a val_bpb of 0.82 on the held-out set."
+	sections := []pdf.Section{{Label: "a", Body: section}}
+
+	wired := &countingEngine{name: "wired", out: "NONE"}
+	injected := &countingEngine{name: "injected", out: "CLAIM: The model reached a val_bpb of 0.82\n" +
+		"SOURCE_QUOTE: \"reached a val_bpb of 0.82 on the held-out set\"\n" +
+		"TYPE: metric\nSTRENGTH: demonstrated\n---"}
+
+	dir := t.TempDir()
+	cfg := config.Config{HomeDir: dir, DraftsDir: dir}
+	// The Runner's own chain points at wired; the gate is handed injected.
+	r := NewRunner(cfg, []engine.Engine{wired}, nil)
+	xchain := &chainState{engines: []engine.Engine{injected}}
+
+	records, dropped, err := r.extractClaims(context.Background(), Job{}, sections, dir, xchain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if injected.calls.Load() != 1 {
+		t.Errorf("injected chain served %d call(s), want 1 — the gate ignored the chain it was handed", injected.calls.Load())
+	}
+	if wired.calls.Load() != 0 {
+		t.Errorf("wired chain served %d call(s), want 0 — the gate reached into the Runner's map", wired.calls.Load())
+	}
+	if len(records) != 1 || dropped != 0 {
+		t.Fatalf("got %d record(s), %d dropped; want 1 verified claim from the injected chain", len(records), dropped)
+	}
 }

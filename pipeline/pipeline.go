@@ -364,7 +364,7 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	// Phase 2: extract claims, section by section — unless a ledger from an
 	// earlier attempt is already on disk and still verifies.
 	r.phase(PhaseClaims, "running")
-	records, dropped, err := r.resumeOrExtract(ctx, job, sections, outputDir)
+	records, dropped, err := r.resumeOrExtract(ctx, job, sections, outputDir, r.chainFor(engine.KindExtract))
 	if err != nil {
 		r.phase(PhaseClaims, "failed")
 		return err

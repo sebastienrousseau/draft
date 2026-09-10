@@ -61,7 +61,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	}
 
 	r.phase(PhaseClaims, "running")
-	records, dropped, err := r.extractClaims(ctx, job, sections, outputDir)
+	records, dropped, err := r.extractClaims(ctx, job, sections, outputDir, r.chainFor(engine.KindExtract))
 	if err != nil {
 		r.phase(PhaseClaims, "failed")
 		return err
