@@ -65,12 +65,18 @@ func Open(dir string) *Cache {
 }
 
 // Key derives the address of one extraction. Every input that can change the
-// output is folded in: a prompt edit, an engine switch or a model change all
-// produce a different key rather than silently serving output that different
-// instructions produced.
-func Key(section, promptVersion, engineName, model string) string {
+// output is folded in: the reader that produced the section text, a prompt
+// edit, an engine switch or a model change all produce a different key rather
+// than silently serving output that different instructions produced.
+//
+// The reader is included even though its effect already shows up in the
+// section text it produces, so the key is addressed by the full extraction
+// configuration (reader · prompt-version · engine · model · section) — the
+// same identity the run manifest records for reproducibility. Two readers that
+// happened to emit byte-identical section text are still keyed apart.
+func Key(section, reader, promptVersion, engineName, model string) string {
 	h := sha256.New()
-	for _, part := range []string{promptVersion, engineName, model, section} {
+	for _, part := range []string{reader, promptVersion, engineName, model, section} {
 		_, _ = h.Write([]byte(part))
 		// A separator, so that ("ab","c") and ("a","bc") cannot collide.
 		_, _ = h.Write([]byte{0})

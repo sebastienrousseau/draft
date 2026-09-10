@@ -477,5 +477,5 @@ func (r *Runner) extractKey(body string, e engine.Engine) string {
 	if e == nil || r.cache == nil {
 		return ""
 	}
-	return extractcache.Key(body, prompt.ClaimVersion(), e.Name(), engine.ResolveModel(r.cfg, e))
+	return extractcache.Key(body, r.cfg.Reader, prompt.ClaimVersion(), e.Name(), engine.ResolveModel(r.cfg, e))
 }
