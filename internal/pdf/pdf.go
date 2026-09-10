@@ -77,15 +77,15 @@ func ValidateReader(name string) error {
 // what the ceiling is for, not a slow but healthy conversion.
 const doclingTimeout = 15 * time.Minute
 
-// Extract returns the normalised plain text of a .pdf, .docx, .md, or .txt
-// file using the default reader. Unknown suffixes yield an error so the
+// Extract returns the normalised plain text of a .pdf, .docx, .md, .txt, or
+// .tex file using the default reader. Unknown suffixes yield an error so the
 // caller can skip them cleanly.
 func Extract(ctx context.Context, path string) (string, error) {
 	return ExtractWith(ctx, path, ReaderPDFToText)
 }
 
-// ExtractWith is Extract through a named reader. Markdown and text sources
-// are read directly whatever the reader; PDF and DOCX go through it.
+// ExtractWith is Extract through a named reader. Markdown, text and LaTeX
+// sources are read directly whatever the reader; PDF and DOCX go through it.
 func ExtractWith(ctx context.Context, path, reader string) (string, error) {
 	if err := ValidateReader(reader); err != nil {
 		return "", err
@@ -111,6 +111,20 @@ func ExtractWith(ctx context.Context, path, reader string) (string, error) {
 			return "", err
 		}
 		return NormaliseSpace(string(b)), nil
+	case ".tex":
+		// LaTeX carries maths as exact text, which is the whole reason to
+		// accept it: pdftotext scrambles a formula and a layout reader only
+		// approximates it. deTeX strips comments and the preamble and leaves
+		// the body verbatim, so a SOURCE_QUOTE still matches byte for byte.
+		b, err := readCapped(path)
+		if err != nil {
+			return "", err
+		}
+		text := NormaliseSpace(deTeX(string(b)))
+		if text == "" {
+			return "", ErrNoTextLayer
+		}
+		return text, nil
 	case ".pdf":
 		// Reading order, not physical layout. `-layout` preserves the visual
 		// arrangement, which on a two-column paper splices the left and right
