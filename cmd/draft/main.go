@@ -417,8 +417,13 @@ func usage(w io.Writer) {
 		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
 		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
 		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR, DRAFT_STRICT_NUMBERS,"),
-		dim("DRAFT_CACHE_DIR, DRAFT_NO_CACHE,"),
+		dim("DRAFT_CACHE_DIR, DRAFT_NO_CACHE, DRAFT_CONFIG, DRAFT_NO_CONFIG,"),
 		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
+
+	fmt.Fprintf(w, "%s\n", head("CONFIG"))
+	fmt.Fprintf(w, "  %s\n  %s\n\n",
+		dim("A draft.toml (project) or ~/.config/draft/config.toml (user) sets defaults"),
+		dim("(engine, reader, out, style, models). Environment variables and flags override it."))
 
 	fmt.Fprintf(w, "%s\n", head("OUTPUT"))
 	fmt.Fprintf(w, "  %s\n  %s\n  %s\n\n",

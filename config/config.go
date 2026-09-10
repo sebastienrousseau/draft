@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 // Package config resolves runtime configuration from command-line flags,
-// environment variables, and sensible defaults, in that order of precedence.
+// environment variables, an optional draft.toml config file, and sensible
+// defaults, in that order of precedence.
 package config
 
 import (
@@ -150,17 +151,18 @@ func Load(flags Flags) Config {
 	}
 
 	home := resolveHome(warn)
+	fc := loadFileConfig(warn)
 	c := Config{
-		Engine:             env("DRAFT_ENGINE", EngineAuto),
-		ExtractEngine:      env("DRAFT_EXTRACT_ENGINE", ""),
-		WriteEngine:        env("DRAFT_WRITE_ENGINE", ""),
-		EditEngine:         env("DRAFT_EDIT_ENGINE", ""),
-		Reader:             env("DRAFT_READER", DefaultReader),
+		Engine:             env("DRAFT_ENGINE", fc.get("engine", EngineAuto)),
+		ExtractEngine:      env("DRAFT_EXTRACT_ENGINE", fc.get("extract-engine", "")),
+		WriteEngine:        env("DRAFT_WRITE_ENGINE", fc.get("write-engine", "")),
+		EditEngine:         env("DRAFT_EDIT_ENGINE", fc.get("edit-engine", "")),
+		Reader:             env("DRAFT_READER", fc.get("reader", DefaultReader)),
 		Style:              rules.DefaultStyle(),
-		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", "")),
-		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", DefaultOllamaModel)),
-		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", DefaultExtractModel)),
-		EditModel:          env("DRAFT_EDIT_MODEL", env("DRAFT_MODEL", DefaultEditModel)),
+		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", fc.get("model", ""))),
+		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", fc.get("write-model", DefaultOllamaModel))),
+		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", fc.get("extract-model", DefaultExtractModel))),
+		EditModel:          env("DRAFT_EDIT_MODEL", env("DRAFT_MODEL", fc.get("edit-model", DefaultEditModel))),
 		ContextLength:      envInt(warn, "DRAFT_NUM_CTX", DefaultContextLen, 512, maxContextLen),
 		PredictLength:      envInt(warn, "DRAFT_NUM_PREDICT", DefaultPredictLen, 1024, maxPredictLen),
 		WriteRetries:       envInt(warn, "DRAFT_WRITE_RETRIES", DefaultWriteRetries, 0, maxWriteRetries),
@@ -169,8 +171,8 @@ func Load(flags Flags) Config {
 		OllamaHost:         resolveOllamaHost(warn),
 		CallTimeout:        resolveCallTimeout(warn),
 		HomeDir:            home,
-		SourcesDir:         resolveDir(warn, "DRAFT_SOURCES_DIR", home, filepath.Join(home, "Drop", "Drafts", "Sources")),
-		DraftsDir:          resolveDir(warn, "DRAFT_DRAFTS_DIR", home, filepath.Join(home, "Drop", "Drafts")),
+		SourcesDir:         resolveDir(warn, "DRAFT_SOURCES_DIR", home, fc.dir(warn, "sources-dir", home, filepath.Join(home, "Drop", "Drafts", "Sources"))),
+		DraftsDir:          resolveDir(warn, "DRAFT_DRAFTS_DIR", home, fc.dir(warn, "out", home, filepath.Join(home, "Drop", "Drafts"))),
 		CacheDir:           resolveDir(warn, "DRAFT_CACHE_DIR", home, defaultCacheDir(home)),
 	}
 
@@ -187,7 +189,7 @@ func Load(flags Flags) Config {
 	if flags.Reader != "" {
 		c.Reader = flags.Reader
 	}
-	if path := firstNonEmpty(flags.Style, os.Getenv("DRAFT_STYLE")); path != "" {
+	if path := firstNonEmpty(flags.Style, firstNonEmpty(os.Getenv("DRAFT_STYLE"), fc.get("style", ""))); path != "" {
 		if st, err := rules.LoadStyle(expandHome(path, home)); err != nil {
 			warn("style file: %v; using the default house style", err)
 		} else {

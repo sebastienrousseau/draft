@@ -92,7 +92,11 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 			roff("Where bare filenames resolve from. Override with --sources-dir.")+
 			"\n.TP\n.I $XDG_CACHE_HOME/draft/extract/\n"+
 			roff("Cached claim extractions, addressed by content. Override with "+
-				"DRAFT_CACHE_DIR; empty with --clear-cache."))
+				"DRAFT_CACHE_DIR; empty with --clear-cache.")+
+			"\n.TP\n.I ./draft.toml, $XDG_CONFIG_HOME/draft/config.toml\n"+
+			roff("Project and user defaults (engine, reader, out, style, models). "+
+				"Environment variables and flags override them; DRAFT_CONFIG names an "+
+				"explicit file and DRAFT_NO_CONFIG disables the layer."))
 
 	section(b, "EXIT STATUS",
 		".TP\n.B 0\n"+roff("Every job produced a draft.")+

@@ -6,6 +6,17 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- **Project and user config files.** A `draft.toml` in the working directory,
+  and a `~/.config/draft/config.toml` (honouring `XDG_CONFIG_HOME`), now set
+  default values for `engine`, `extract-engine`, `write-engine`, `edit-engine`,
+  `reader`, `model`, the Ollama models, `out` and `sources-dir`, and `style`.
+  Precedence is flags > environment > project file > user file > built-in
+  default, so nothing about existing setups changes. `DRAFT_CONFIG` names an
+  explicit file; `DRAFT_NO_CONFIG` disables the layer. The loader is a
+  dependency-free flat-key parser — no new module. (#69)
+
 ## [0.0.35] - 2026-09-07
 
 ### Fixed
