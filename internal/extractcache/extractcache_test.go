@@ -14,7 +14,7 @@ import (
 
 func TestRoundTrip(t *testing.T) {
 	c := Open(t.TempDir())
-	key := Key("section body", "v1", "claude", "sonnet")
+	key := Key("section body", "docling", "v1", "claude", "sonnet")
 	if _, ok := c.Get(key); ok {
 		t.Fatal("empty cache returned a hit")
 	}
@@ -30,28 +30,29 @@ func TestRoundTrip(t *testing.T) {
 // Every input that can change the output must change the address, or a prompt
 // edit or model switch silently serves output produced by something else.
 func TestKeyDependsOnEveryInput(t *testing.T) {
-	base := Key("body", "v1", "claude", "sonnet")
+	base := Key("body", "docling", "v1", "claude", "sonnet")
 	for _, tc := range []struct {
 		name string
 		key  string
 	}{
-		{"section", Key("other", "v1", "claude", "sonnet")},
-		{"prompt version", Key("body", "v2", "claude", "sonnet")},
-		{"engine", Key("body", "v1", "codex", "sonnet")},
-		{"model", Key("body", "v1", "claude", "opus")},
+		{"reader", Key("body", "ocr", "v1", "claude", "sonnet")},
+		{"section", Key("other", "docling", "v1", "claude", "sonnet")},
+		{"prompt version", Key("body", "docling", "v2", "claude", "sonnet")},
+		{"engine", Key("body", "docling", "v1", "codex", "sonnet")},
+		{"model", Key("body", "docling", "v1", "claude", "opus")},
 	} {
 		if tc.key == base {
 			t.Errorf("changing the %s did not change the key", tc.name)
 		}
 	}
-	if Key("body", "v1", "claude", "sonnet") != base {
+	if Key("body", "docling", "v1", "claude", "sonnet") != base {
 		t.Error("Key is not deterministic")
 	}
 }
 
 // Without a separator, ("ab","c") and ("a","bc") would address the same entry.
 func TestKeyFieldsCannotRunTogether(t *testing.T) {
-	if Key("ab", "c", "e", "m") == Key("a", "bc", "e", "m") {
+	if Key("ab", "r", "c", "e", "m") == Key("a", "r", "bc", "e", "m") {
 		t.Error("adjacent fields collide")
 	}
 }
@@ -59,7 +60,7 @@ func TestKeyFieldsCannotRunTogether(t *testing.T) {
 func TestExpiredEntryMissesAndIsRemoved(t *testing.T) {
 	dir := t.TempDir()
 	c := Open(dir)
-	key := Key("body", "v1", "e", "m")
+	key := Key("body", "r", "v1", "e", "m")
 	if err := c.Put(key, "stale"); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +82,7 @@ func TestExpiredEntryMissesAndIsRemoved(t *testing.T) {
 func TestCorruptEntryIsRemoved(t *testing.T) {
 	dir := t.TempDir()
 	c := Open(dir)
-	key := Key("body", "v1", "e", "m")
+	key := Key("body", "r", "v1", "e", "m")
 	path := c.path(key)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
@@ -101,10 +102,10 @@ func TestCorruptEntryIsRemoved(t *testing.T) {
 // simply miss.
 func TestDisabledCacheAlwaysMisses(t *testing.T) {
 	for _, c := range []*Cache{nil, Open(""), {}} {
-		if _, ok := c.Get(Key("b", "v", "e", "m")); ok {
+		if _, ok := c.Get(Key("b", "r", "v", "e", "m")); ok {
 			t.Error("disabled cache returned a hit")
 		}
-		if err := c.Put(Key("b", "v", "e", "m"), "x"); err != nil {
+		if err := c.Put(Key("b", "r", "v", "e", "m"), "x"); err != nil {
 			t.Errorf("disabled cache Put returned %v", err)
 		}
 	}
@@ -121,7 +122,7 @@ func TestDisabledCacheAlwaysMisses(t *testing.T) {
 func TestClearRemovesShardsAndNothingElse(t *testing.T) {
 	dir := t.TempDir()
 	c := Open(dir)
-	if err := c.Put(Key("body", "v1", "e", "m"), "x"); err != nil {
+	if err := c.Put(Key("body", "r", "v1", "e", "m"), "x"); err != nil {
 		t.Fatal(err)
 	}
 	// A mistyped DRAFT_CACHE_DIR must not delete someone's documents.
@@ -137,7 +138,7 @@ func TestClearRemovesShardsAndNothingElse(t *testing.T) {
 	if err := Clear(dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := c.Get(Key("body", "v1", "e", "m")); ok {
+	if _, ok := c.Get(Key("body", "r", "v1", "e", "m")); ok {
 		t.Error("Clear left an entry behind")
 	}
 	for _, p := range []string{keep, loose} {
@@ -169,7 +170,7 @@ func TestClearReportsAnUnreadableDirectory(t *testing.T) {
 func TestPutReportsAnUnwritableShard(t *testing.T) {
 	dir := t.TempDir()
 	c := &Cache{dir: dir}
-	key := Key("body", "v1", "e", "m")
+	key := Key("body", "r", "v1", "e", "m")
 	// Occupy the shard path with a file so MkdirAll fails.
 	if err := os.WriteFile(filepath.Join(dir, key[:2]), nil, 0o600); err != nil {
 		t.Fatal(err)

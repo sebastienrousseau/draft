@@ -19,6 +19,13 @@ series until `0.0.999`.
 
 ### Changed
 
+- **The extraction cache key includes the reader.** The content-addressed
+  extraction cache already folded the prompt version, engine, model and section
+  text into its key; it now also folds in the reader name, so an entry is
+  addressed by the full extraction configuration — the same identity the run
+  manifest records for reproducibility — rather than only by the text a reader
+  happened to produce. Existing entries miss once and are re-extracted; nothing
+  else changes. (#65)
 - **The grounding phase takes its engine chain explicitly.** Claim extraction
   no longer reaches into the Runner's per-kind chain map; the resolved
   extraction chain is passed in and threaded through, so the gate is a function
