@@ -105,8 +105,9 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 
 	section(b, "REQUIREMENTS",
 		roff("pdftotext (Poppler) for PDF sources and textutil for DOCX on macOS, plus "+
-			"either an installed agent CLI or a running Ollama server. Run "+
-			"draft --doctor to see what is present."))
+			"either an installed agent CLI or a running Ollama server. Markdown, "+
+			"plain-text and LaTeX (.tex) sources are read directly and need no "+
+			"external tool. Run draft --doctor to see what is present."))
 
 	section(b, "SEE ALSO",
 		roff("Project documentation: https://draftlib.com")+"\n.PP\n"+

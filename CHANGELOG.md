@@ -8,6 +8,14 @@ series until `0.0.999`.
 
 ### Added
 
+- **LaTeX (`.tex`) sources.** A `.tex` file is now accepted directly, with no
+  external tool. LaTeX carries a formula as exact text, where `pdftotext`
+  scrambles it and even a layout reader only approximates it — so the reader
+  keeps the body verbatim (maths included) and strips only what can never be
+  quoted: comments and the preamble. It is deliberately not a full LaTeX-to-text
+  conversion; macro expansion and environment rendering remain a heavier
+  reader's job. (#71)
+
 - **Project and user config files.** A `draft.toml` in the working directory,
   and a `~/.config/draft/config.toml` (honouring `XDG_CONFIG_HOME`), now set
   default values for `engine`, `extract-engine`, `write-engine`, `edit-engine`,
