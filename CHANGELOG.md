@@ -8,6 +8,17 @@ series until `0.0.999`.
 
 ### Added
 
+- **Claim JSON Schema + GBNF grammar (foundation for constrained decoding).**
+  `claims.Schema()` emits the JSON Schema for a claim ledger — an array of
+  objects with a non-empty claim and quote and an enumerated type and strength —
+  from canonical `claims.ClaimTypes` / `claims.ClaimStrengths`. The new
+  `internal/gbnf` package compiles that schema to a GBNF grammar for the local
+  llama.cpp/Ollama path; an engine that supports `response_format: json_schema`
+  can take the schema directly. This is additive scaffolding: nothing is wired
+  into the live extraction path yet (that step must measure the drop-rate
+  against a model before the legacy repair path can be retired), so behaviour is
+  unchanged. A drift-guard test ties the extraction prompt's TYPE/STRENGTH
+  vocabulary to the schema. (#64)
 - **LaTeX (`.tex`) sources.** A `.tex` file is now accepted directly, with no
   external tool. LaTeX carries a formula as exact text, where `pdftotext`
   scrambles it and even a layout reader only approximates it — so the reader
