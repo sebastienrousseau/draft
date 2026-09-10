@@ -48,12 +48,16 @@ func TestFileConfigGet(t *testing.T) {
 }
 
 func TestFileConfigDir(t *testing.T) {
+	// An absolute home so absDir returns the tilde-expanded path unchanged on
+	// every platform (a bare "/home/u" gains a drive letter on Windows).
+	home := t.TempDir()
 	fc := fileConfig{"out": "~/drafts"}
-	if got := fc.dir(noWarn, "out", "/home/u", "/def"); got != filepath.Join("/home/u", "drafts") {
-		t.Errorf("dir(set) = %q", got)
+	if got, want := fc.dir(noWarn, "out", home, "/def"), filepath.Join(home, "drafts"); got != want {
+		t.Errorf("dir(set) = %q, want %q", got, want)
 	}
-	if got := fc.dir(noWarn, "missing", "/home/u", "/def"); got != "/def" {
-		t.Errorf("dir(unset) = %q, want /def", got)
+	fallback := filepath.Join(home, "def")
+	if got := fc.dir(noWarn, "missing", home, fallback); got != fallback {
+		t.Errorf("dir(unset) = %q, want %q", got, fallback)
 	}
 }
 
