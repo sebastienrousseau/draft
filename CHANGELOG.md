@@ -8,6 +8,15 @@ series until `0.0.999`.
 
 ### Added
 
+- **Portable verification records (`draft --verify --json`).** `--verify` can
+  now emit a stable, machine-readable JSON record (`kind:
+  draft.verification-record/v1`) of the outcome — the article digest and whether
+  it matches, the grounding summary, the ledger and source checks, the C2PA
+  signature state when a credential is present, and the overall verdict —
+  instead of the human report. The schema type lives in the importable
+  `provenance` package, so another tool or a verifier can consume it without the
+  CLI: bring your own artifact, verify anywhere. Exit code still reflects the
+  verdict.
 - **Direct-API escape hatch (`--engine api:anthropic`, `--engine api:openai`).**
   For a machine with no agent CLI installed, draft can now call a hosted chat
   API directly, reading the key from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.

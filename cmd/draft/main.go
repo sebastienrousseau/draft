@@ -139,6 +139,9 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 
 	if verifyPath != "" {
+		if jsonOut {
+			return runVerifyJSON(verifyPath, stdout, stderr)
+		}
 		return runVerify(verifyPath, stdout, stderr)
 	}
 	if frontmatterPath != "" {
@@ -355,7 +358,7 @@ var flagHelp = [][2]string{
 	{"--combine <file>", "alias for --frontmatter"},
 	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 	{"--print", "run without the TUI; print draft paths to stdout"},
-	{"--json", "run without the TUI; one JSON object per job on stdout"},
+	{"--json", "machine-readable output: one JSON object per job, or a verification record with --verify"},
 	{"--dry-run", "report what a run would do, without calling a model"},
 	{"--doctor", "check that this machine can run draft, and exit"},
 	{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
