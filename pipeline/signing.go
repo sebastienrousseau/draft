@@ -11,6 +11,13 @@ import (
 	"github.com/sebastienrousseau/draft/internal/c2pa"
 )
 
+// Seams over the c2pa package so the signing wiring is testable without the
+// c2patool binary installed. Production points them at the real functions.
+var (
+	c2paAvailable = c2pa.Available
+	c2paSign      = c2pa.Sign
+)
+
 // signManifest turns the just-written manifest definition into a signed,
 // detached C2PA credential beside the set, when a signing certificate is
 // configured and c2patool is installed. It binds the credential to the body
@@ -24,7 +31,7 @@ func (r *Runner) signManifest(ctx context.Context, outputDir, stem, bodyPath str
 	if r.cfg.SignCert == "" || r.cfg.SignKey == "" {
 		return // signing not configured: keyless, unsigned manifest (the default)
 	}
-	if !c2pa.Available() {
+	if !c2paAvailable() {
 		r.warn("C2PA signing is configured but c2patool is not installed; wrote an unsigned manifest")
 		return
 	}
@@ -36,7 +43,7 @@ func (r *Runner) signManifest(ctx context.Context, outputDir, stem, bodyPath str
 		r.warn("could not read the manifest to sign: " + err.Error())
 		return
 	}
-	cred, err := c2pa.Sign(ctx, bodyPath, manifest, c2pa.Signer{
+	cred, err := c2paSign(ctx, bodyPath, manifest, c2pa.Signer{
 		CertPath: r.cfg.SignCert, KeyPath: r.cfg.SignKey, Alg: r.cfg.SignAlg,
 	})
 	if err != nil {

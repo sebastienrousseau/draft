@@ -19,6 +19,13 @@ import (
 	"github.com/sebastienrousseau/draft/provenance"
 )
 
+// Seams over the c2pa package so signature reporting is testable without the
+// c2patool binary. Production points them at the real functions.
+var (
+	c2paAvail  = c2pa.Available
+	c2paVerify = c2pa.Verify
+)
+
 // setSuffixes are the filename endings that identify one file of a draft set,
 // longest first so "-frontmatter.yaml" is matched before a bare stem guess.
 var setSuffixes = []string{"-body.md", "-final.md", "-frontmatter.yaml", "-c2pa.json", "-attribution.json"}
@@ -202,11 +209,11 @@ func printSignatureReport(w io.Writer, bodyPath string, sidecar []byte) bool {
 	dim := func(s string) string { return brand.Help.Render(s) }
 	row := func(status, label, detail string) { fmt.Fprintf(w, "  %-3s %-20s %s\n", status, label, dim(detail)) }
 	fmt.Fprintf(w, "\n%s\n", brand.Title.Render("SIGNATURE"))
-	if !c2pa.Available() {
+	if !c2paAvail() {
 		row("--", "credential", "signed credential present; install c2patool to verify its signature")
 		return true
 	}
-	rep, err := c2pa.Verify(context.Background(), bodyPath, sidecar)
+	rep, err := c2paVerify(context.Background(), bodyPath, sidecar)
 	if err != nil {
 		row("!!", "credential", "could not be verified: "+err.Error())
 		return false

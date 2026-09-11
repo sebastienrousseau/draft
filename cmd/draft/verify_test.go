@@ -312,3 +312,66 @@ func c2paAvailable() bool { return c2pa.Available() }
 func c2paSign(bodyPath string, manifest []byte, cert, key string) ([]byte, error) {
 	return c2pa.Sign(context.Background(), bodyPath, manifest, c2pa.Signer{CertPath: cert, KeyPath: key})
 }
+
+func TestPrintSignatureReportBranches(t *testing.T) {
+	origA, origV := c2paAvail, c2paVerify
+	defer func() { c2paAvail, c2paVerify = origA, origV }()
+
+	// c2patool absent: noted, not a failure.
+	c2paAvail = func() bool { return false }
+	var b strings.Builder
+	if !printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("missing c2patool should not fail verification")
+	}
+	if !strings.Contains(b.String(), "install c2patool") {
+		t.Errorf("expected an install note, got %q", b.String())
+	}
+
+	c2paAvail = func() bool { return true }
+
+	// Verify error: a failure.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) { return c2pa.Report{}, errVerify }
+	b.Reset()
+	if printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("a verify error should fail")
+	}
+
+	// Invalid signature: a failure.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: false, State: "Invalid"}, nil
+	}
+	b.Reset()
+	if printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("an invalid signature should fail")
+	}
+	if !strings.Contains(b.String(), "INVALID") {
+		t.Errorf("expected INVALID in output, got %q", b.String())
+	}
+
+	// Valid and trusted.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
+	}
+	b.Reset()
+	if !printSignatureReport(&b, "body.md", []byte("x")) || !strings.Contains(b.String(), "trusted") {
+		t.Errorf("valid+trusted should pass and say so, got %q", b.String())
+	}
+
+	// Valid but untrusted (a dev certificate): still acceptable.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid"}, nil
+	}
+	b.Reset()
+	if !printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("valid-but-untrusted should be acceptable")
+	}
+	if !strings.Contains(b.String(), "trust list") {
+		t.Errorf("expected an untrusted note, got %q", b.String())
+	}
+}
+
+var errVerify = errString("verify blew up")
+
+type errString string
+
+func (e errString) Error() string { return string(e) }

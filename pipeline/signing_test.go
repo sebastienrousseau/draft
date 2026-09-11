@@ -73,3 +73,70 @@ func TestSaveWritesVerifiableSignature(t *testing.T) {
 		t.Errorf("the sidecar save wrote does not verify: state %q failures %v", rep.State, rep.Failures)
 	}
 }
+
+func TestSignManifestWritesSidecarWithFakeSigner(t *testing.T) {
+	origA, origS := c2paAvailable, c2paSign
+	defer func() { c2paAvailable, c2paSign = origA, origS }()
+	c2paAvailable = func() bool { return true }
+	c2paSign = func(context.Context, string, []byte, c2pa.Signer) ([]byte, error) { return []byte("cred"), nil }
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "provenance"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
+	_ = os.WriteFile(r.manifestPath, []byte(`{"assertions":[]}`), 0o644)
+
+	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
+	b, err := os.ReadFile(filepath.Join(dir, "provenance", "m-c2pa.c2pa"))
+	if err != nil || string(b) != "cred" {
+		t.Errorf("sidecar = %q, err %v; want the signed credential", b, err)
+	}
+}
+
+func TestSignManifestWarnsWhenToolMissing(t *testing.T) {
+	origA := c2paAvailable
+	defer func() { c2paAvailable = origA }()
+	c2paAvailable = func() bool { return false }
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = "irrelevant"
+	// Must not panic and must not write a sidecar.
+	r.signManifest(context.Background(), t.TempDir(), "m", "body.md")
+}
+
+func TestSignManifestNoManifestPath(t *testing.T) {
+	origA := c2paAvailable
+	defer func() { c2paAvailable = origA }()
+	c2paAvailable = func() bool { return true }
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = "" // nothing to sign
+	r.signManifest(context.Background(), t.TempDir(), "m", "body.md")
+}
+
+func TestSignManifestReadError(t *testing.T) {
+	origA := c2paAvailable
+	defer func() { c2paAvailable = origA }()
+	c2paAvailable = func() bool { return true }
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = filepath.Join(t.TempDir(), "does-not-exist.json")
+	r.signManifest(context.Background(), t.TempDir(), "m", "body.md") // warns, no panic
+}
+
+func TestSignManifestSignError(t *testing.T) {
+	origA, origS := c2paAvailable, c2paSign
+	defer func() { c2paAvailable, c2paSign = origA, origS }()
+	c2paAvailable = func() bool { return true }
+	c2paSign = func(context.Context, string, []byte, c2pa.Signer) ([]byte, error) {
+		return nil, errTest
+	}
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "provenance"), 0o755)
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
+	_ = os.WriteFile(r.manifestPath, []byte(`{}`), 0o644)
+	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
+	if _, err := os.Stat(filepath.Join(dir, "provenance", "m-c2pa.c2pa")); !os.IsNotExist(err) {
+		t.Error("a sidecar was written despite a signing error")
+	}
+}
