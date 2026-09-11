@@ -34,3 +34,12 @@ func ExampleParseJSON() {
 	fmt.Printf("%d verified, %d dropped\n", len(records), dropped)
 	// Output: 1 verified, 0 dropped
 }
+
+func ExampleTableClaims() {
+	// A Markdown table, as a layout reader (Docling) emits it.
+	source := "| Model | Accuracy |\n|-------|----------|\n| M1 | 0.82 |\n"
+	for _, r := range claims.TableClaims(source) {
+		fmt.Println(r.Claim)
+	}
+	// Output: For M1, Accuracy is 0.82.
+}

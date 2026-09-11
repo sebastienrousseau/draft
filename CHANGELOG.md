@@ -8,6 +8,15 @@ series until `0.0.999`.
 
 ### Added
 
+- **Table-cell claims.** A layout reader (Docling) preserves a table as
+  Markdown, where plain-text extraction flattens its numbers into an unquotable
+  jumble. `claims.TableClaims` now mines each numeric cell into a claim naming
+  its row and column headers, quoted by the verbatim data row — the value is
+  read from the parsed cell, so the (row, column, value) association is grounded
+  by construction, and every candidate is put through the same `Verify` gate as
+  a model-extracted claim. The extraction phase appends these per section, so a
+  run over a source with Markdown tables gains the facts its tables state; a
+  plain-text source carries no Markdown tables, so it is a no-op there. (#70)
 - **Keyed session pool with idle close (foundation for the ACP session pool).**
   New `internal/sessionpool` keeps one live backend process per key, reused
   across jobs and closed once it has been idle, so a batch queue pays a
