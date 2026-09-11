@@ -12,7 +12,7 @@ make build      # compile to ./bin/draft
 make test       # run the suite
 ```
 
-You need Go 1.24+. Runtime tools (`pdftotext`, a session CLI or Ollama) are only
+You need Go 1.25+. Runtime tools (`pdftotext`, a session CLI or Ollama) are only
 needed to actually draft; the test suite fakes them and needs neither a network
 nor an LLM.
 
@@ -65,7 +65,42 @@ headless invocation (derived from the CLI's `--help`) and should be marked
 `Experimental: true` until its article output is verified end to end — auto mode
 only uses non-experimental providers.
 
-## License
+## Project structure
 
-By contributing, you agree that your contributions are licensed under the
-project's dual **MIT OR Apache-2.0** license.
+`draft` — the CLI, the grounding and claim gate, verification, local execution,
+and the importable Go packages — is and stays open source under **MIT OR
+Apache-2.0**, with no account or licence server. That is the product's promise,
+not a trial.
+
+Any hosted or enterprise components (managed attestation, signing/key
+management, organisation policy and audit) are developed in a **separate
+repository** and are not part of this tree. Contributions here are to the open
+core; the boundary is deliberate, so a contribution never lands you in
+proprietary territory by accident.
+
+## License and Developer Certificate of Origin
+
+`draft` is licensed **MIT OR Apache-2.0**, and by contributing you agree your
+contributions are licensed under those same terms (inbound = outbound).
+
+Every commit must also be **signed off** under the
+[Developer Certificate of Origin](DCO): a line-by-line certification that you
+wrote the change, or have the right to submit it, under the project's licence.
+It is a lightweight attestation of origin — not a copyright assignment — and it
+keeps the project's provenance clean for everyone downstream.
+
+Add the sign-off automatically with `-s`:
+
+```sh
+git commit -s -m "feat: …"
+```
+
+which appends a trailer matching your commit author:
+
+```
+Signed-off-by: Your Name <you@example.com>
+```
+
+CI checks that every commit in a pull request carries it. (This is distinct
+from the cryptographic commit *signature* the branch ruleset also requires —
+you need both: `git commit -s -S` once signing is configured.)
