@@ -27,3 +27,24 @@ func TestClaimPromptListsCanonicalEnums(t *testing.T) {
 		}
 	}
 }
+
+func TestEntailmentPromptShape(t *testing.T) {
+	p := Entailment("The method improves accuracy.", "the method improves accuracy across all benchmarks")
+	// The claim and the (fenced) quote are both present, and the model is asked
+	// for the one-word verdict the parser reads.
+	for _, want := range []string{
+		"The method improves accuracy.",
+		"improves accuracy across all benchmarks",
+		"SUPPORTED",
+		"UNSUPPORTED",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("entailment prompt missing %q", want)
+		}
+	}
+	// The quote is wrapped in the untrusted fence, not pasted raw as an
+	// instruction.
+	if !strings.Contains(p, "UNTRUSTED SOURCE QUOTE") {
+		t.Errorf("quote is not fenced as untrusted:\n%s", p)
+	}
+}

@@ -282,3 +282,12 @@ func TestAPIMalformedJSON(t *testing.T) {
 		srv.Close()
 	}
 }
+
+func TestNewEngineDispatchesAPINames(t *testing.T) {
+	if _, ok := NewEngine("api:anthropic", config.Config{}); !ok {
+		t.Error("NewEngine should build a known api: engine")
+	}
+	if _, ok := NewEngine("api:nope", config.Config{}); ok {
+		t.Error("NewEngine must not build an unknown api provider")
+	}
+}
