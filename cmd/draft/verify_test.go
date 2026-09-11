@@ -313,60 +313,70 @@ func c2paSign(bodyPath string, manifest []byte, cert, key string) ([]byte, error
 	return c2pa.Sign(context.Background(), bodyPath, manifest, c2pa.Signer{CertPath: cert, KeyPath: key})
 }
 
-func TestPrintSignatureReportBranches(t *testing.T) {
+func TestPrintSignatureReportStates(t *testing.T) {
+	cases := []struct {
+		name    string
+		sig     provenance.SignatureState
+		wantOK  bool
+		wantSub string
+	}{
+		{"unchecked", provenance.SignatureState{Present: true, Checked: false}, true, "install c2patool"},
+		{"invalid", provenance.SignatureState{Present: true, Checked: true, Valid: false}, false, "INVALID"},
+		{"valid trusted", provenance.SignatureState{Present: true, Checked: true, Valid: true, Trusted: true}, true, "trusted"},
+		{"valid untrusted", provenance.SignatureState{Present: true, Checked: true, Valid: true, Trusted: false}, true, "trust list"},
+	}
+	for _, tc := range cases {
+		var b strings.Builder
+		sig := tc.sig
+		if got := printSignatureReport(&b, &sig); got != tc.wantOK {
+			t.Errorf("%s: ok = %v, want %v", tc.name, got, tc.wantOK)
+		}
+		if !strings.Contains(b.String(), tc.wantSub) {
+			t.Errorf("%s: output %q missing %q", tc.name, b.String(), tc.wantSub)
+		}
+	}
+}
+
+func TestSignatureFor(t *testing.T) {
 	origA, origV := c2paAvail, c2paVerify
 	defer func() { c2paAvail, c2paVerify = origA, origV }()
 
-	// c2patool absent: noted, not a failure.
-	c2paAvail = func() bool { return false }
-	var b strings.Builder
-	if !printSignatureReport(&b, "body.md", []byte("x")) {
-		t.Error("missing c2patool should not fail verification")
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "x-c2pa.json")
+	sidecarPath := filepath.Join(dir, "x-c2pa.c2pa")
+	bodyPath := filepath.Join(dir, "x-body.md")
+
+	// No sidecar -> nil.
+	if sig := signatureFor(bodyPath, manifestPath); sig != nil {
+		t.Errorf("no credential should yield nil, got %+v", sig)
 	}
-	if !strings.Contains(b.String(), "install c2patool") {
-		t.Errorf("expected an install note, got %q", b.String())
+	if err := os.WriteFile(sidecarPath, []byte("cred"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// c2patool absent -> present, unchecked, not a failure.
+	c2paAvail = func() bool { return false }
+	sig := signatureFor(bodyPath, manifestPath)
+	if sig == nil || !sig.Present || sig.Checked {
+		t.Errorf("absent c2patool: %+v", sig)
 	}
 
 	c2paAvail = func() bool { return true }
 
-	// Verify error: a failure.
+	// verify error -> checked, invalid.
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) { return c2pa.Report{}, errVerify }
-	b.Reset()
-	if printSignatureReport(&b, "body.md", []byte("x")) {
-		t.Error("a verify error should fail")
+	sig = signatureFor(bodyPath, manifestPath)
+	if sig == nil || !sig.Checked || sig.Valid {
+		t.Errorf("verify error: %+v", sig)
 	}
 
-	// Invalid signature: a failure.
-	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
-		return c2pa.Report{SignatureValid: false, State: "Invalid"}, nil
-	}
-	b.Reset()
-	if printSignatureReport(&b, "body.md", []byte("x")) {
-		t.Error("an invalid signature should fail")
-	}
-	if !strings.Contains(b.String(), "INVALID") {
-		t.Errorf("expected INVALID in output, got %q", b.String())
-	}
-
-	// Valid and trusted.
-	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
-		return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
-	}
-	b.Reset()
-	if !printSignatureReport(&b, "body.md", []byte("x")) || !strings.Contains(b.String(), "trusted") {
-		t.Errorf("valid+trusted should pass and say so, got %q", b.String())
-	}
-
-	// Valid but untrusted (a dev certificate): still acceptable.
+	// valid, untrusted.
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid"}, nil
 	}
-	b.Reset()
-	if !printSignatureReport(&b, "body.md", []byte("x")) {
-		t.Error("valid-but-untrusted should be acceptable")
-	}
-	if !strings.Contains(b.String(), "trust list") {
-		t.Errorf("expected an untrusted note, got %q", b.String())
+	sig = signatureFor(bodyPath, manifestPath)
+	if sig == nil || !sig.Valid || sig.Trusted {
+		t.Errorf("valid untrusted: %+v", sig)
 	}
 }
 
@@ -375,3 +385,59 @@ var errVerify = errString("verify blew up")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestRunVerifyJSON(t *testing.T) {
+	day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
+	var out, errb strings.Builder
+	code := runVerifyJSON(filepath.Join(day, "final", stem+"-final.md"), &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit %d, stderr %s\n%s", code, errb.String(), out.String())
+	}
+	var rec provenance.VerificationRecord
+	if err := json.Unmarshal([]byte(out.String()), &rec); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out.String())
+	}
+	if rec.Kind != provenance.RecordKind || !rec.Verified {
+		t.Errorf("record = %+v", rec)
+	}
+
+	// A tampered set: the JSON record reports verified=false and exits 1.
+	body := filepath.Join(day, "source", stem+"-body.md")
+	if err := os.WriteFile(body, []byte("# Title\n\nAltered.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := runVerifyJSON(body, &out, &errb); code != 1 {
+		t.Errorf("tampered exit = %d, want 1", code)
+	}
+	var rec2 provenance.VerificationRecord
+	_ = json.Unmarshal([]byte(out.String()), &rec2)
+	if rec2.Verified || rec2.Article.Matches {
+		t.Errorf("tampered record should not verify: %+v", rec2)
+	}
+}
+
+func TestRunVerifyJSONLoadError(t *testing.T) {
+	var out, errb strings.Builder
+	if code := runVerifyJSON("/no/such/x-final.md", &out, &errb); code != 1 {
+		t.Errorf("missing file exit = %d, want 1", code)
+	}
+}
+
+func TestRunVerifyJSONManifestProblem(t *testing.T) {
+	// A tampered/empty manifest yields a report with Problems: the JSON record
+	// reports verified=false and no signature is attempted.
+	day, stem := writeSet(t, "# Title\n\nA sentence.", true)
+	var out, errb strings.Builder
+	if code := runVerifyJSON(filepath.Join(day, "final", stem+"-final.md"), &out, &errb); code != 1 {
+		t.Fatalf("exit = %d, want 1\n%s", code, out.String())
+	}
+	var rec provenance.VerificationRecord
+	if err := json.Unmarshal([]byte(out.String()), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Verified || rec.Signature != nil {
+		t.Errorf("record with manifest problems should be unverified and skip signature: %+v", rec)
+	}
+}
