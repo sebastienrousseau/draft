@@ -115,6 +115,16 @@ type Config struct {
 	// unsupported claims are dropped before writing. Off by default; the
 	// verbatim gate is always the primary check.
 	SecondGate bool
+
+	// SignCert and SignKey are PEM paths for a C2PA signing certificate chain
+	// (leaf first) and its private key. When both are set and c2patool is
+	// installed, draft signs each article's manifest into a detached .c2pa
+	// credential beside the set. Empty (the default) leaves the manifest an
+	// unsigned definition, exactly as before. SignAlg overrides the default
+	// signature algorithm (es256).
+	SignCert   string
+	SignKey    string
+	SignAlg    string
 	OllamaHost string
 
 	// CallTimeout bounds a single generation call (0 = no timeout).
@@ -223,6 +233,9 @@ func Load(flags Flags) Config {
 	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
 	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
 	c.SecondGate = flags.SecondGate || envBool("DRAFT_SECOND_GATE")
+	c.SignCert = env("DRAFT_C2PA_CERT", fc.get("c2pa-cert", ""))
+	c.SignKey = env("DRAFT_C2PA_KEY", fc.get("c2pa-key", ""))
+	c.SignAlg = env("DRAFT_C2PA_ALG", fc.get("c2pa-alg", ""))
 	if flags.NoCache || envBool("DRAFT_NO_CACHE") {
 		c.CacheDir = ""
 	}

@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,7 +45,7 @@ func (r *Runner) writerName() string {
 // save writes the article as a day-folder set — source/<stem>-body.md,
 // yaml/<stem>-frontmatter.yaml and final/<stem>-final.md under outputDir —
 // and returns the final document's path.
-func (r *Runner) save(outputDir, markdown string, records []claims.Record) (string, int, error) {
+func (r *Runner) save(ctx context.Context, outputDir, markdown string, records []claims.Record) (string, int, error) {
 	_, body := frontmatter.Split(markdown)
 	body = strings.TrimSpace(body)
 
@@ -123,6 +124,7 @@ func (r *Runner) save(outputDir, markdown string, records []claims.Record) (stri
 	r.log("saved body: " + shortPath(r.cfg, bodyPath))
 	r.log("saved frontmatter: " + shortPath(r.cfg, fmPath))
 	r.saveProvenance(outputDir, stem, title, body+"\n", records, now)
+	r.signManifest(ctx, outputDir, stem, bodyPath)
 
 	return finalPath, validate.WordCount(body), nil
 }

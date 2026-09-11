@@ -8,6 +8,16 @@ series until `0.0.999`.
 
 ### Added
 
+- **Signed C2PA credentials (`DRAFT_C2PA_CERT`, `DRAFT_C2PA_KEY`).** The C2PA
+  manifest draft writes has always been a definition a publisher signs. When a
+  signing certificate chain and key are configured and `c2patool` is installed,
+  draft now also emits a signed, detached `.c2pa` credential beside each set,
+  bound to the body file, and `draft --verify` validates that signature and its
+  trust chain — not only the digests. Signing is opt-in: with no certificate
+  configured the manifest stays an unsigned definition, exactly as before, and
+  a valid-but-untrusted signature (a development certificate) is reported as
+  such rather than failed. `DRAFT_C2PA_ALG` overrides the algorithm (default
+  es256). (#63)
 - **Opt-in semantic second gate (`--second-gate`, `DRAFT_SECOND_GATE`).** The
   verbatim gate documents that it checks wording, not meaning — a quote can be
   present and its numbers match while the claim misreads it. With the second
