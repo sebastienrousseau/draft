@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -14,7 +15,15 @@ import (
 
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
+	"github.com/sebastienrousseau/draft/internal/c2pa"
 	"github.com/sebastienrousseau/draft/provenance"
+)
+
+// Seams over the c2pa package so signature reporting is testable without the
+// c2patool binary. Production points them at the real functions.
+var (
+	c2paAvail  = c2pa.Available
+	c2paVerify = c2pa.Verify
 )
 
 // setSuffixes are the filename endings that identify one file of a draft set,
@@ -79,9 +88,27 @@ func runVerify(path string, stdout, stderr io.Writer) int {
 
 	report := provenance.CheckArticle(body+"\n", manifest, ledger, resolveSourceDigest)
 	printVerifyReport(stdout, path, manifestPath, report)
-	if report.OK() {
+
+	// A manifest that could not be read is already reported by
+	// printVerifyReport; there is nothing further to check.
+	if len(report.Problems) > 0 {
+		return 1
+	}
+
+	// When a signed credential sits beside the set, validate its signature too,
+	// binding it to the body file the manifest was computed over.
+	sigOK := true
+	sidecarPath := strings.TrimSuffix(manifestPath, ".json") + ".c2pa"
+	if sc, err := os.ReadFile(sidecarPath); err == nil {
+		sigOK = printSignatureReport(stdout, bodyPath, sc)
+	}
+
+	fmt.Fprintln(stdout)
+	if report.OK() && sigOK {
+		fmt.Fprintln(stdout, "  "+brand.Help.Render("Verified. The article matches the provenance written beside it."))
 		return 0
 	}
+	fmt.Fprintln(stdout, "  "+brand.Accent.Render("Not verified.")+" The article or a source no longer matches its manifest.")
 	return 1
 }
 
@@ -170,12 +197,37 @@ func printVerifyReport(w io.Writer, path, manifestPath string, r provenance.Chec
 			}
 		}
 	}
-	fmt.Fprintln(w)
-	if r.OK() {
-		fmt.Fprintln(w, "  "+dim("Verified. The article matches the provenance written beside it."))
-	} else {
-		fmt.Fprintln(w, "  "+brand.Accent.Render("Not verified.")+" The article or a source no longer matches its manifest.")
+}
+
+// printSignatureReport verifies a detached C2PA credential against the body and
+// prints a SIGNATURE section, returning whether the signature is acceptable. A
+// valid-but-untrusted credential (a development certificate) is acceptable and
+// reported as such; only an invalid or unverifiable signature is a failure. If
+// c2patool is not installed, the credential is noted but not treated as a
+// failure — the digest checks still stand.
+func printSignatureReport(w io.Writer, bodyPath string, sidecar []byte) bool {
+	dim := func(s string) string { return brand.Help.Render(s) }
+	row := func(status, label, detail string) { fmt.Fprintf(w, "  %-3s %-20s %s\n", status, label, dim(detail)) }
+	fmt.Fprintf(w, "\n%s\n", brand.Title.Render("SIGNATURE"))
+	if !c2paAvail() {
+		row("--", "credential", "signed credential present; install c2patool to verify its signature")
+		return true
 	}
+	rep, err := c2paVerify(context.Background(), bodyPath, sidecar)
+	if err != nil {
+		row("!!", "credential", "could not be verified: "+err.Error())
+		return false
+	}
+	if !rep.SignatureValid {
+		row("!!", "signature", "INVALID — the credential does not match this article")
+		return false
+	}
+	if rep.Trusted {
+		row("ok", "signature", "valid and trusted")
+	} else {
+		row("--", "signature", "valid; signing certificate not in a known trust list (e.g. a development certificate)")
+	}
+	return true
 }
 
 func shortHash(h string) string {

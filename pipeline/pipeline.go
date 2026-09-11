@@ -401,7 +401,7 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, markdown, verr)
 	}
-	outputPath, words, err := r.save(outputDir, markdown, records)
+	outputPath, words, err := r.save(ctx, outputDir, markdown, records)
 	if err != nil {
 		r.phase(PhaseSave, "failed")
 		return err

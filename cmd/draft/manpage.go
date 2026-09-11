@@ -109,6 +109,15 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 			"plain-text and LaTeX (.tex) sources are read directly and need no "+
 			"external tool. Run draft --doctor to see what is present."))
 
+	section(b, "SIGNING",
+		roff("Set DRAFT_C2PA_CERT and DRAFT_C2PA_KEY to a PEM certificate chain "+
+			"(leaf first) and its private key, with c2patool installed, and draft "+
+			"signs each article's manifest into a detached .c2pa credential beside "+
+			"the set. draft --verify then validates the signature and its trust "+
+			"chain as well as the digests. DRAFT_C2PA_ALG overrides the algorithm "+
+			"(default es256). Without a certificate the manifest is an unsigned "+
+			"definition, as before."))
+
 	section(b, "SEE ALSO",
 		roff("Project documentation: https://draftlib.com")+"\n.PP\n"+
 			roff("Source and issue tracker: https://github.com/sebastienrousseau/draft"))

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sebastienrousseau/draft/internal/c2pa"
+	"github.com/sebastienrousseau/draft/internal/c2pa/c2patest"
 	"github.com/sebastienrousseau/draft/provenance"
 )
 
@@ -260,3 +263,115 @@ func TestVerifyHelpers(t *testing.T) {
 		t.Error("firstNonEmpty")
 	}
 }
+
+// A signed set verifies its signature: --verify reports the SIGNATURE section,
+// accepts a valid dev-cert credential (untrusted but valid), and fails when the
+// body is altered after signing.
+func TestRunVerifySignature(t *testing.T) {
+	if !c2paAvailable() {
+		t.Skip("c2patool not installed")
+	}
+	day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
+	certPath, keyPath := c2patest.MustChain(t.TempDir())
+	bodyPath := filepath.Join(day, "source", stem+"-body.md")
+	manifestPath := filepath.Join(day, "provenance", stem+"-c2pa.json")
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cred, err := c2paSign(bodyPath, manifest, certPath, keyPath)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	sidecarPath := strings.TrimSuffix(manifestPath, ".json") + ".c2pa"
+	if err := os.WriteFile(sidecarPath, cred, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb strings.Builder
+	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), &out, &errb); code != 0 {
+		t.Errorf("signed verify: exit %d, out %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "SIGNATURE") || !strings.Contains(out.String(), "valid") {
+		t.Errorf("verify output missing signature section:\n%s", out.String())
+	}
+
+	// Alter the body after signing: the signature must now fail.
+	if err := os.WriteFile(bodyPath, []byte("# Title\n\nAn altered sentence.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := runVerify(bodyPath, &out, &errb); code != 1 {
+		t.Errorf("tampered signed verify: exit %d, want 1\n%s", code, out.String())
+	}
+}
+
+func c2paAvailable() bool { return c2pa.Available() }
+
+func c2paSign(bodyPath string, manifest []byte, cert, key string) ([]byte, error) {
+	return c2pa.Sign(context.Background(), bodyPath, manifest, c2pa.Signer{CertPath: cert, KeyPath: key})
+}
+
+func TestPrintSignatureReportBranches(t *testing.T) {
+	origA, origV := c2paAvail, c2paVerify
+	defer func() { c2paAvail, c2paVerify = origA, origV }()
+
+	// c2patool absent: noted, not a failure.
+	c2paAvail = func() bool { return false }
+	var b strings.Builder
+	if !printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("missing c2patool should not fail verification")
+	}
+	if !strings.Contains(b.String(), "install c2patool") {
+		t.Errorf("expected an install note, got %q", b.String())
+	}
+
+	c2paAvail = func() bool { return true }
+
+	// Verify error: a failure.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) { return c2pa.Report{}, errVerify }
+	b.Reset()
+	if printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("a verify error should fail")
+	}
+
+	// Invalid signature: a failure.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: false, State: "Invalid"}, nil
+	}
+	b.Reset()
+	if printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("an invalid signature should fail")
+	}
+	if !strings.Contains(b.String(), "INVALID") {
+		t.Errorf("expected INVALID in output, got %q", b.String())
+	}
+
+	// Valid and trusted.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
+	}
+	b.Reset()
+	if !printSignatureReport(&b, "body.md", []byte("x")) || !strings.Contains(b.String(), "trusted") {
+		t.Errorf("valid+trusted should pass and say so, got %q", b.String())
+	}
+
+	// Valid but untrusted (a dev certificate): still acceptable.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid"}, nil
+	}
+	b.Reset()
+	if !printSignatureReport(&b, "body.md", []byte("x")) {
+		t.Error("valid-but-untrusted should be acceptable")
+	}
+	if !strings.Contains(b.String(), "trust list") {
+		t.Errorf("expected an untrusted note, got %q", b.String())
+	}
+}
+
+var errVerify = errString("verify blew up")
+
+type errString string
+
+func (e errString) Error() string { return string(e) }

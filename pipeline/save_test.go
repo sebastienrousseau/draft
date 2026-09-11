@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -33,7 +34,7 @@ func TestSaveUniquifiesTheWholeSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, words, err := r.save(outputDir, body, nil)
+	path, words, err := r.save(context.Background(), outputDir, body, nil)
 	if err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -59,11 +60,11 @@ func TestSaveClaimsTheBodyExclusively(t *testing.T) {
 	r := NewRunner(cfg, nil, nil)
 	body := validArticle(".")
 
-	first, _, err := r.save(outputDir, body, nil)
+	first, _, err := r.save(context.Background(), outputDir, body, nil)
 	if err != nil {
 		t.Fatalf("first save: %v", err)
 	}
-	second, _, err := r.save(outputDir, body, nil)
+	second, _, err := r.save(context.Background(), outputDir, body, nil)
 	if err != nil {
 		t.Fatalf("second save: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestSaveFailsWhenTheOutputTreeIsUnwritable(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(srcDir, 0o755) })
 
-	if _, _, err := r.save(outputDir, validArticle("."), nil); err == nil {
+	if _, _, err := r.save(context.Background(), outputDir, validArticle("."), nil); err == nil {
 		t.Error("expected save to fail on an unwritable source directory")
 	} else if errors.Is(err, os.ErrExist) {
 		t.Errorf("a permission failure must not be mistaken for a name collision: %v", err)
@@ -124,7 +125,7 @@ func TestSavePropagatesOutputDirectoryCreationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewRunner(testConfig(t), nil, nil)
-	if _, _, err := r.save(path, validArticle("."), nil); err == nil {
+	if _, _, err := r.save(context.Background(), path, validArticle("."), nil); err == nil {
 		t.Fatal("expected output directory creation to fail")
 	}
 }
@@ -149,7 +150,7 @@ func TestSaveStopsAfterBoundedFilenameSearch(t *testing.T) {
 	}
 
 	r := NewRunner(testConfig(t), nil, nil)
-	if _, _, err := r.save(outputDir, body, nil); err == nil || !strings.Contains(err.Error(), "could not find a free filename") {
+	if _, _, err := r.save(context.Background(), outputDir, body, nil); err == nil || !strings.Contains(err.Error(), "could not find a free filename") {
 		t.Fatalf("expected the bounded filename error, got %v", err)
 	}
 }
