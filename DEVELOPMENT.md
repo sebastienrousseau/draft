@@ -20,7 +20,7 @@ with one command, and where CI pins a version this file names the same pin.
 
 | Tool             | Version                                | Why this version                                                                                                                                                                                                                |
 | ---------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Go               | 1.24 minimum, latest stable to develop | 1.24 is the declared floor in `go.mod` and is built and tested by the `msrv` CI job. See the [minimum-Go policy](README.md#minimum-go-policy).                                                                                  |
+| Go               | 1.25 minimum, latest stable to develop | 1.25 is the declared floor in `go.mod` and is built and tested by the `msrv` CI job. See the [minimum-Go policy](README.md#minimum-go-policy).                                                                                  |
 | `golangci-lint`  | v2.13.2                                | Pinned **together with** Go 1.26 in `ci.yml`. The linter embeds `go/types` from the toolchain it was built against, so a pinned linter against a floating toolchain breaks on every Go release. Bump the pair, never one alone. |
 | Node (via `npx`) | any current                            | Only for `markdownlint-cli2`; fetched on demand.                                                                                                                                                                                |
 | Python 3         | 3.9+                                   | `codespell` and `scripts/check-links.py`.                                                                                                                                                                                       |
@@ -80,7 +80,7 @@ job passes.
 | `build` → coverage            | `make cover`                                        |
 | `test (ubuntu/macos/windows)` | `go test ./...`                                     |
 | `lint`                        | `golangci-lint run`                                 |
-| `msrv (go 1.24)`              | `go build ./... && go test ./...` on Go 1.24        |
+| `msrv (go 1.25)`              | `go build ./... && go test ./...` on Go 1.25        |
 | `govulncheck`                 | `make vuln`                                         |
 | `reuse`                       | `reuse lint`                                        |
 | `docs-lint`                   | `make docs-lint`                                    |
