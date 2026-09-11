@@ -15,3 +15,13 @@ func BenchmarkSplitSections(b *testing.B) {
 		_ = SplitSections("paper.pdf", text)
 	}
 }
+
+func BenchmarkDeTeX(b *testing.B) {
+	src := "\\documentclass{article}\n\\usepackage{amsmath} % noise\n\\begin{document}\n" +
+		strings.Repeat("The loss reached $\\mathcal{L} = 0.82$. % a comment\nSome prose about the result.\n", 200) +
+		"\\end{document}\n"
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = deTeX(src)
+	}
+}
