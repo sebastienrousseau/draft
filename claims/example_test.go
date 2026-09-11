@@ -25,3 +25,12 @@ func ExampleSchema() {
 	fmt.Printf("%s of claims; type is one of %d values\n", s["type"], len(types))
 	// Output: array of claims; type is one of 6 values
 }
+
+func ExampleParseJSON() {
+	source := "The method used 5x fewer tokens than the baseline."
+	// The structured shape claims.Schema() describes: a JSON array of claims.
+	raw := `[{"claim":"used 5x fewer tokens","source_quote":"used 5x fewer tokens than the baseline","type":"result","strength":"demonstrated"}]`
+	records, dropped := claims.ParseJSON(raw, source)
+	fmt.Printf("%d verified, %d dropped\n", len(records), dropped)
+	// Output: 1 verified, 0 dropped
+}
