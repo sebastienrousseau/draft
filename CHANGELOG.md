@@ -27,7 +27,11 @@ series until `0.0.999`.
   into the live extraction path yet (that step must measure the drop-rate
   against a model before the legacy repair path can be retired), so behaviour is
   unchanged. A drift-guard test ties the extraction prompt's TYPE/STRENGTH
-  vocabulary to the schema. (#64)
+  vocabulary to the schema. `claims.ParseJSON` is the decoder half: it reads a
+  structured extraction in that schema's shape and returns verified records
+  through exactly the same grounding gate as the text parser (verbatim quote,
+  numbers in quote, one re-verified repair attempt), so the wire format can
+  change without weakening the guarantee. (#64)
 - **LaTeX (`.tex`) sources.** A `.tex` file is now accepted directly, with no
   external tool. LaTeX carries a formula as exact text, where `pdftotext`
   scrambles it and even a layout reader only approximates it — so the reader
