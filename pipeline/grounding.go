@@ -290,6 +290,10 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
 		records = deduped
 	}
+	// Opt-in semantic second pass: a model judges whether each verified quote
+	// actually supports its claim. Off by default and fail-open, so it can only
+	// tighten the ledger, never weaken it.
+	records = r.secondGate(ctx, records)
 	// Report what actually happened. Logging "claims saved" unconditionally
 	// after a discarded write tells the user a fact-checking artefact exists
 	// when it may not.

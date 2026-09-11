@@ -8,6 +8,15 @@ series until `0.0.999`.
 
 ### Added
 
+- **Opt-in semantic second gate (`--second-gate`, `DRAFT_SECOND_GATE`).** The
+  verbatim gate documents that it checks wording, not meaning — a quote can be
+  present and its numbers match while the claim misreads it. With the second
+  gate on, a local model judges whether each verified quote actually supports
+  its claim, and unsupported claims are dropped before writing. It is strictly
+  additive: off by default, the verbatim gate stays primary, and it is
+  fail-open — a model error or an unreadable verdict keeps the claim, so the
+  pass can only tighten the ledger, never weaken it on a transient failure. The
+  verdict call's output is capped to a single word. (#72)
 - **Table-cell claims.** A layout reader (Docling) preserves a table as
   Markdown, where plain-text extraction flattens its numbers into an unquotable
   jumble. `claims.TableClaims` now mines each numeric cell into a claim naming
