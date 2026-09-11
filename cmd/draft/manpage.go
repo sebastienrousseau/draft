@@ -65,7 +65,12 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 				"the section is recorded as having no claims and the provider is kept.")+"\n.PP\n"+
 			roff("No provider is invoked with a flag that grants it tools: draft only ever "+
 				"asks for text, and its prompts carry verbatim text from third-party "+
-				"documents."))
+				"documents.")+"\n.PP\n"+
+			roff("For a machine with no agent CLI, --engine "+
+				strings.Join(prefixedAPINames(), " or --engine ")+" is an opt-in escape "+
+				"hatch that calls a hosted API directly, reading the key from "+
+				"ANTHROPIC_API_KEY or OPENAI_API_KEY. The keyless agent-session path is "+
+				"the default; the escape hatch is never chosen automatically."))
 
 	fmt.Fprintf(b, ".SH EXAMPLES\n")
 	for _, ex := range usageExamples {
@@ -147,4 +152,15 @@ func capitalise(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// prefixedAPINames returns the direct-API engine names ("api:anthropic", ...)
+// for the manual's ENGINE section.
+func prefixedAPINames() []string {
+	names := engine.APIProviderNames()
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = "api:" + n
+	}
+	return out
 }

@@ -84,7 +84,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { usage(stderr) }
-	fs.StringVar(&flags.Engine, "engine", "", "backend: auto (default), ollama, or a provider name")
+	fs.StringVar(&flags.Engine, "engine", "", "backend: auto (default), ollama, a provider name, or api:<provider>")
 	fs.StringVar(&flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
 	fs.StringVar(&flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
 	fs.StringVar(&flags.Reader, "reader", "", "document reader: pdftotext (default) or docling")
