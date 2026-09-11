@@ -16,3 +16,12 @@ func ExampleParse() {
 	fmt.Printf("%d verified, %d dropped\n", len(records), dropped)
 	// Output: 1 verified, 0 dropped
 }
+
+func ExampleSchema() {
+	s := claims.Schema()
+	items := s["items"].(map[string]any)
+	props := items["properties"].(map[string]any)
+	types := props["type"].(map[string]any)["enum"].([]any)
+	fmt.Printf("%s of claims; type is one of %d values\n", s["type"], len(types))
+	// Output: array of claims; type is one of 6 values
+}
