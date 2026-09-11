@@ -269,10 +269,22 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 
 	var records []claims.Record
 	dropped := 0
+	tableClaims := 0
 	for i, sec := range sections {
 		secRecords, secDropped := claims.Parse(raw[i], sec.Body)
 		records = append(records, secRecords...)
 		dropped += secDropped
+		// A layout reader (Docling) preserves tables as Markdown, where the
+		// prose extraction cannot quote a cell. Mine those cells directly: the
+		// value is read from the parsed cell and re-verified against the source
+		// like any other claim, so this only ever adds grounded facts. Plain
+		// text sources carry no Markdown tables, so this is a no-op for them.
+		cells := claims.TableClaims(sec.Body)
+		records = append(records, cells...)
+		tableClaims += len(cells)
+	}
+	if tableClaims > 0 {
+		r.log(fmt.Sprintf("mined %d claim(s) from tables", tableClaims))
 	}
 	if deduped := claims.Dedupe(records); len(deduped) != len(records) {
 		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
