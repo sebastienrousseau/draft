@@ -19,7 +19,7 @@
   <a href="https://github.com/sebastienrousseau/draft/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/coverage-gated%20%E2%89%A598%25-brightgreen?style=for-the-badge" alt="Coverage gated at 98%" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/sebastienrousseau/draft"><img src="https://img.shields.io/ossf-scorecard/github.com/sebastienrousseau/draft?style=for-the-badge&label=openssf%20scorecard" alt="OpenSSF Scorecard" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue?style=for-the-badge" alt="License: MIT OR Apache-2.0" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/go-1.24%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.24+" /></a>
+  <a href="#"><img src="https://img.shields.io/badge/go-1.25%2B-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.25+" /></a>
 </p>
 <!-- markdownlint-enable MD013 -->
 
@@ -1051,7 +1051,7 @@ that read untrusted input — claim extraction, frontmatter splitting, metadata,
 surgical edits — are fuzzed against invariants, the most important being that a
 surviving claim must quote its source verbatim.
 
-Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.24,
+Every pull request runs build, three-OS tests, lint, an MSRV check on Go 1.25,
 `govulncheck`, CodeQL, REUSE compliance, and a base-versus-head benchmark
 regression check. A scheduled deep-quality workflow fuzzes every untrusted-input
 parser and mutation-tests the grounding gate each day.
@@ -1089,7 +1089,7 @@ and is listed under `Deprecated` in the changelog. `--claude-model` and
 
 ## Minimum Go policy
 
-The floor is **Go 1.24**, declared in `go.mod`, built and tested on every pull
+The floor is **Go 1.25**, declared in `go.mod`, built and tested on every pull
 request by the `msrv` CI job — the number is enforced, not aspirational.
 
 **When it may rise.** Only for a concrete need: a standard-library API that

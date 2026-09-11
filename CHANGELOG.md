@@ -47,6 +47,15 @@ series until `0.0.999`.
 
 ### Changed
 
+- **Minimum Go is now 1.25** (was 1.24). Raised for a security fix unavailable
+  on the floor: `golang.org/x/sys` carried GO-2026-5024 (an integer overflow in
+  `NewNTUnicodeString` on Windows), and the fix landed in `x/sys` v0.44.0, whose
+  own `go` directive requires 1.25. draft does not call the affected function,
+  so this was never exploitable here, but the module is upgraded and the floor
+  raised so `govulncheck` is clean. The `msrv` CI job now builds and tests on
+  Go 1.25. This is the raise the minimum-Go policy anticipates for a security
+  fix; the `msrv` gate is updated in the same change so the floor and its test
+  cannot disagree.
 - **The extraction cache key includes the reader.** The content-addressed
   extraction cache already folded the prompt version, engine, model and section
   text into its key; it now also folds in the reader name, so an entry is
