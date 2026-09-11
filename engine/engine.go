@@ -178,6 +178,12 @@ func chainForName(cfg config.Config, name string) []Engine {
 // one-shot headless invocation otherwise. It returns false for an unknown
 // name.
 func NewEngine(name string, cfg config.Config) (Engine, bool) {
+	if _, isAPI := isAPIName(name); isAPI {
+		if e, ok := NewAPIEngine(name, cfg); ok {
+			return e, true
+		}
+		return nil, false
+	}
 	if p, ok := LookupProvider(name); ok && p.ACP {
 		return NewACP(name, cfg)
 	}
@@ -210,11 +216,19 @@ func validateName(setting, name string) error {
 	case config.EngineAuto, config.EngineOllama, "":
 		return nil
 	}
+	if provider, ok := isAPIName(name); ok {
+		if _, known := apiProviders[provider]; known {
+			return nil
+		}
+		return fmt.Errorf("%s: unknown api provider %q (want %s)",
+			setting, provider, strings.Join(prefixed(APIPrefix, APIProviderNames()), ", "))
+	}
 	if _, ok := LookupProvider(name); ok {
 		return nil
 	}
-	return fmt.Errorf("%s: unknown engine %q (want %s, %s, or one of: %s)",
-		setting, name, config.EngineAuto, config.EngineOllama, strings.Join(ProviderNames(), ", "))
+	return fmt.Errorf("%s: unknown engine %q (want %s, %s, one of: %s, or %s)",
+		setting, name, config.EngineAuto, config.EngineOllama,
+		strings.Join(ProviderNames(), ", "), strings.Join(prefixed(APIPrefix, APIProviderNames()), ", "))
 }
 
 // ResolveModel returns the model label the given engine will use, for display.
@@ -224,6 +238,9 @@ func ResolveModel(cfg config.Config, e Engine) string {
 	}
 	if e.Name() == "ollama" {
 		return cfg.OllamaModel
+	}
+	if m, ok := e.(interface{ resolvedModel() string }); ok {
+		return m.resolvedModel()
 	}
 	if cfg.Model != "" {
 		return cfg.Model

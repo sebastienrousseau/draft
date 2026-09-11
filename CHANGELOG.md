@@ -8,6 +8,13 @@ series until `0.0.999`.
 
 ### Added
 
+- **Direct-API escape hatch (`--engine api:anthropic`, `--engine api:openai`).**
+  For a machine with no agent CLI installed, draft can now call a hosted chat
+  API directly, reading the key from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
+  It is strictly opt-in and never chosen by auto mode: the keyless agent-session
+  path — which reads and stores no key — remains the default. `DRAFT_MODEL`
+  overrides the model. Like every other backend it is asked only for text, and
+  a session failure still fails over to Ollama. (#73)
 - **Signed C2PA credentials (`DRAFT_C2PA_CERT`, `DRAFT_C2PA_KEY`).** The C2PA
   manifest draft writes has always been a definition a publisher signs. When a
   signing certificate chain and key are configured and `c2patool` is installed,
