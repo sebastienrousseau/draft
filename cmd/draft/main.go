@@ -101,6 +101,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
 	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
 	fs.BoolVar(&flags.StrictNumbers, "strict-numbers", false, "fail a draft that contains a number found in no verified claim")
+	fs.BoolVar(&flags.SecondGate, "second-gate", false, "run an opt-in semantic second pass; drop verified claims a local model finds unsupported by their quote")
 	fs.BoolVar(&flags.NoCache, "no-cache", false, "ignore cached claim extractions and re-extract everything")
 	fs.BoolVar(&clearCache, "clear-cache", false, "delete every cached claim extraction and exit")
 	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
@@ -338,6 +339,7 @@ var flagHelp = [][2]string{
 	{"--model <name>", "session-provider model override (e.g. opus)"},
 	{"--experimental", "let auto mode use experimental providers"},
 	{"--strict-numbers", "fail on a number found in no verified claim"},
+	{"--second-gate", "semantic second pass: drop claims a local model finds unsupported"},
 	{"--no-cache", "re-extract instead of reusing cached claims"},
 	{"--clear-cache", "delete every cached claim extraction and exit"},
 	{"--num-ctx <n>", "Ollama context window (default 8192)"},

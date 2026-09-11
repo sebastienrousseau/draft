@@ -110,7 +110,12 @@ type Config struct {
 	// StrictNumbers blocks a save when the article carries a number that
 	// appears in no verified claim, instead of only warning.
 	StrictNumbers bool
-	OllamaHost    string
+	// SecondGate runs an opt-in semantic second pass over the verified claims:
+	// a local model judges whether each claim's quote actually supports it, and
+	// unsupported claims are dropped before writing. Off by default; the
+	// verbatim gate is always the primary check.
+	SecondGate bool
+	OllamaHost string
 
 	// CallTimeout bounds a single generation call (0 = no timeout).
 	CallTimeout time.Duration
@@ -217,6 +222,7 @@ func Load(flags Flags) Config {
 	c.KeepArtifacts = flags.KeepArtifacts
 	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
 	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
+	c.SecondGate = flags.SecondGate || envBool("DRAFT_SECOND_GATE")
 	if flags.NoCache || envBool("DRAFT_NO_CACHE") {
 		c.CacheDir = ""
 	}
@@ -320,6 +326,7 @@ type Flags struct {
 	Experimental  bool
 	StrictNumbers bool
 	NoCache       bool
+	SecondGate    bool
 }
 
 // defaultCacheDir is the per-user cache location, following the platform

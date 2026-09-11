@@ -269,3 +269,21 @@ func clip(s string, n int) string {
 	}
 	return s
 }
+
+// Entailment builds the second-gate prompt: it asks a model whether a claim's
+// meaning is actually supported by its own verified source quote — the
+// semantic check the verbatim gate documents that it does not make. The quote
+// is verbatim source text and so is fenced as untrusted; the model is asked
+// for a single-word verdict so the answer is trivial and cheap to parse.
+func Entailment(claim, quote string) string {
+	return fmt.Sprintf(`You are a strict fact-checker. Decide whether the QUOTE, on its own, supports the CLAIM.
+
+The QUOTE is a verbatim span already confirmed to occur in the source, so you are not checking wording — you are checking meaning. The CLAIM is SUPPORTED only if the QUOTE states or directly entails it: same subject, same direction, and no cause, significance, or certainty the QUOTE does not itself carry. If the QUOTE says the opposite, only hedges what the CLAIM states as settled, or is about something else, the CLAIM is UNSUPPORTED.
+
+Answer with exactly one word, either SUPPORTED or UNSUPPORTED. Output nothing else.
+
+CLAIM: %s
+
+## QUOTE
+%s`, claim, Untrusted("UNTRUSTED SOURCE QUOTE", quote))
+}
