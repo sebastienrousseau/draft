@@ -16,14 +16,14 @@ import (
 )
 
 var (
-	h2Pat          = regexp.MustCompile(`(?m)^##\s+.+$`)
-	tagPat         = regexp.MustCompile(`<[^>]+>`)
-	mdNoisePat     = regexp.MustCompile("[#>*`_]+")
-	wordTokenPat   = regexp.MustCompile(`[a-z][a-z-]{4,}`)
-	paraWordPat    = regexp.MustCompile(`[a-z0-9]+`)
-	blankLinePat   = regexp.MustCompile(`\n\s*\n`)
-	bannedWordRe   = compileWordBoundary(bannedWordForms())
-	placeholderPat = regexp.MustCompile(`(?mi)^(#{1,6}[ \t]*(\.{2,}|…)[ \t]*$|\*\*[ \t]*(\.{2,}|…)[ \t]*\*\*|\*\*opening thesis paragraph)`)
+	h2Pat                = regexp.MustCompile(`(?m)^##\s+.+$`)
+	tagPat               = regexp.MustCompile(`<[^>]+>`)
+	mdNoisePat           = regexp.MustCompile("[#>*`_]+")
+	wordTokenPat         = regexp.MustCompile(`[a-z][a-z-]{4,}`)
+	paraWordPat          = regexp.MustCompile(`[a-z0-9]+`)
+	blankLinePat         = regexp.MustCompile(`\n\s*\n`)
+	defaultBannedScanner = newBannedScanner(bannedWordForms())
+	placeholderPat       = regexp.MustCompile(`(?mi)^(#{1,6}[ \t]*(\.{2,}|…)[ \t]*$|\*\*[ \t]*(\.{2,}|…)[ \t]*\*\*|\*\*opening thesis paragraph)`)
 )
 
 // Duplicate-detection tuning.
@@ -94,13 +94,13 @@ func ErrorsWithStyle(md string, style rules.Style) []string {
 	// repair pass has already removed it — so paying up front made every
 	// clean draft subsidise the rare dirty one.
 	lowered := strings.ToLower(md)
-	wordRe := bannedWordRe
+	scanner := defaultBannedScanner
 	bannedPhrases := rules.BannedPhrases
 	if !isDefaultVocabulary(style) {
-		wordRe = compileWordBoundary(style.BannedWordForms())
+		scanner = newBannedScanner(style.BannedWordForms())
 		bannedPhrases = style.BannedPhrases
 	}
-	wordHits := wordRe.FindAllStringIndex(lowered, -1)
+	wordHits := scanner.findAll(lowered)
 	var phrases []string
 	for _, p := range bannedPhrases {
 		if strings.Contains(lowered, p) {
