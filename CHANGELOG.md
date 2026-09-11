@@ -8,6 +8,15 @@ series until `0.0.999`.
 
 ### Added
 
+- **Keyed session pool with idle close (foundation for the ACP session pool).**
+  New `internal/sessionpool` keeps one live backend process per key, reused
+  across jobs and closed once it has been idle, so a batch queue pays a
+  provider's multi-second startup once instead of per source. It is generic
+  over a `Session` (alive/close), safe for concurrent use, and closes an unused
+  process after a configurable idle interval. This is the concurrency core,
+  fully unit-tested (including race and lifecycle tests at 100% coverage);
+  wiring it into the ACP engine and validating against a live agent is a
+  separate step, so behaviour is unchanged. (#66)
 - **Claim JSON Schema + GBNF grammar (foundation for constrained decoding).**
   `claims.Schema()` emits the JSON Schema for a claim ledger — an array of
   objects with a non-empty claim and quote and an enumerated type and strength —
