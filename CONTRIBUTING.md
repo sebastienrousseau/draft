@@ -97,7 +97,7 @@ git commit -s -m "feat: …"
 
 which appends a trailer matching your commit author:
 
-```
+```text
 Signed-off-by: Your Name <you@example.com>
 ```
 
