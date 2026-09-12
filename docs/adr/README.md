@@ -17,6 +17,9 @@ Format: [MADR](https://adr.github.io/madr/)-flavoured, deliberately short.
 | [0006](0006-agent-client-protocol-transport.md)    | Add an Agent Client Protocol transport beside the one-shot CLIs          | Accepted |
 | [0007](0007-pluggable-document-reader.md)          | Make the document reader pluggable, with plain text the default          | Accepted |
 | [0008](0008-sentence-attribution-c2pa.md)          | Attribute sentences to claims; emit a C2PA manifest definition           | Accepted |
+| [0009](0009-optional-semantic-second-gate.md)      | Add an opt-in semantic second gate over the verified claims              | Accepted |
+| [0010](0010-signed-c2pa-credential.md)             | Sign the C2PA manifest, and emit a portable verification record          | Accepted |
+| [0011](0011-direct-api-escape-hatch.md)            | Add a direct-API escape hatch beside the keyless default                 | Accepted |
 
 ## Writing a new one
 

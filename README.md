@@ -233,6 +233,14 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   stays there for the rest of the run.
 - **Verbatim grounding.** Quote-checked claims, numeric cross-checks, and
   metric-conversion detection. Unverifiable claims are dropped before writing.
+- **Semantic second gate (opt-in).** `--second-gate` runs each verified claim
+  past a local model that judges whether its quote actually *supports* it — the
+  one thing verbatim matching cannot check. Strictly additive and fail-open: it
+  only ever tightens the ledger, and it is never the default.
+- **Tables become claims.** With `--reader docling`, numeric table cells are
+  mined into grounded claims — the value with its row and column headers,
+  verified against the source like any other — recovering the figures a
+  plain-text reader flattens into noise.
 - **Truncation-proof.** Length-limited stops are detected and continued to a
   clean ending.
 - **House style, enforced.** Banned words and phrases in every inflection,
@@ -251,6 +259,18 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   model that keeps tables and headings, reads DOCX on every platform, and
   takes seconds to minutes per document. Same pipeline either way, and the
   extraction cache tells their sections apart.
+- **PDF, DOCX, Markdown, text — and LaTeX.** A `.tex` source is read directly
+  with no external tool, and its maths is kept as exact text where `pdftotext`
+  would scramble a formula.
+- **Signed, verifiable provenance.** Every article ships per-sentence
+  attribution and a C2PA manifest; configure a certificate and `draft` signs a
+  detached credential bound to the article. `draft --verify` re-checks the
+  digests and, when present, the signature and trust chain; `--verify --json`
+  emits a portable verification record a script or CI can gate on.
+- **Keyless by default, with an escape hatch.** No API key is read or stored.
+  For a machine with no agent CLI installed, `--engine api:anthropic` (or
+  `api:openai`) is an opt-in direct-API path — it is never chosen
+  automatically, and the keyless session path stays the default.
 - **Split local and cloud per stage.** Extraction is a dozen cheap, mechanical
   calls; writing is one that decides the article's quality. Point them at
   different backends and a local model does the bulk for free while the best
@@ -298,6 +318,18 @@ takes the first installed provider, skipping experimental rows unless
 | 13 | `codex-acp`    | experimental | `codex-acp` over the Agent Client Protocol                                                                    |
 
 `go run ./examples/providers` shows which are installed on your machine.
+
+### Direct API (escape hatch)
+
+The keyless session path above is the default and the point of the tool:
+`draft` drives an agent CLI you are already logged into, and reads no key. For
+a machine with no agent CLI at all, `--engine api:anthropic` or `--engine
+api:openai` calls the hosted API directly, reading the key from
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` and the model from `DRAFT_MODEL`. It is
+strictly opt-in — auto mode never selects it — and a failed call still falls
+over to Ollama like any other backend. The keyless default is what keeps your
+source text and your credentials on your own machine; the escape hatch exists
+only so a bare box is not stuck.
 
 ### Agent Client Protocol
 
@@ -436,10 +468,15 @@ sources as ingredients, and under `com.draftlib.grounding` the article's
 digest, the ledger's digest, the extraction prompt version, the engine, model
 and reader, the claim identifiers, and the attribution counts.
 
-`draft` holds no signing key and embeds nothing. Signing is the publisher's
-step: `c2patool` with `-m` on this file produces the signed manifest, as a
-sidecar for a Markdown asset. Until then the file is a definition, and this
-paragraph is the only place it is described as anything else.
+**Signing.** By default `draft` holds no key and the manifest stays a
+definition — keyless, like the rest of the tool. Point `DRAFT_C2PA_CERT` and
+`DRAFT_C2PA_KEY` at a PEM certificate chain and its key, with `c2patool`
+installed, and `draft` signs the manifest into a detached `.c2pa` credential
+beside the set, bound to the body's exact bytes. A development certificate
+produces a valid credential that reports as *untrusted* rather than failing;
+production key custody (KMS/HSM) is yours. `DRAFT_C2PA_ALG` overrides the
+algorithm (default `es256`). Nothing is signed and no key is read unless you
+configure one.
 
 **Checking a draft.** `draft --verify <file>` recomputes the article's digest
 and compares it to the manifest written beside it, so you can tell whether a
@@ -450,8 +487,19 @@ are still on the machine it hashes them too; when they are not, it says so and
 still checks the article. It exits non-zero if the article, the ledger or a
 source no longer matches.
 
+When a signed `.c2pa` credential sits beside the set and `c2patool` is
+installed, `--verify` also validates its signature and trust chain: an altered
+article fails, and a development certificate is reported as valid-but-untrusted
+rather than failed. Add `--json` to emit a portable
+`draft.verification-record/v1` receipt instead of the human report — the
+article digest and whether it matches, the grounding summary, the source and
+signature state, and the overall verdict — for a script, a CI gate, or an
+independent verifier. The record schema lives in the importable `provenance`
+package, so anything can consume it without the CLI.
+
 ```sh
 draft --verify 2026-07-29/final/2026-07-29-<slug>-final.md
+draft --verify --json 2026-07-29/final/2026-07-29-<slug>-final.md
 ```
 
 ---
@@ -553,7 +601,37 @@ contents listing, and a page with no text layer at all.
 
 ## Configuration
 
-Flags beat environment variables. Environment variables beat defaults.
+Flags beat environment variables, which beat a project `draft.toml`, which
+beats a user config file, which beats the built-in defaults. Nothing about an
+existing setup changes: config files only fill in what a flag or variable did
+not set.
+
+<details>
+<summary><strong>Config files</strong> — <code>draft.toml</code> for a project or a user</summary>
+
+A `draft.toml` in the working directory sets defaults for that project; a
+`~/.config/draft/config.toml` (honouring `XDG_CONFIG_HOME`) sets them for you
+everywhere. The project file wins over the user file, and both lose to
+environment variables and flags — so a file is a convenience, never a surprise.
+
+```toml
+# draft.toml — flat key = value, "#" or ";" comments, [sections] ignored
+engine        = "claude"
+extract-engine = "ollama"   # local extraction, cloud writing
+reader        = "docling"
+out           = "~/Drop/Drafts"
+style         = "~/.config/draft/house-style.json"
+```
+
+Recognised keys mirror the settings below: `engine`, `extract-engine`,
+`write-engine`, `edit-engine`, `reader`, `model`, `write-model`,
+`extract-model`, `edit-model`, `out`, `sources-dir`, `style`, and the C2PA
+signing keys `c2pa-cert` / `c2pa-key` / `c2pa-alg`. `DRAFT_CONFIG` names an
+explicit file to load instead of discovery; `DRAFT_NO_CONFIG=1` disables the
+file layer entirely. The parser is a dependency-free flat-key reader — no new
+module, no TOML library.
+
+</details>
 
 <details>
 <summary><strong>Environment variables</strong></summary>
@@ -579,6 +657,12 @@ Flags beat environment variables. Environment variables beat defaults.
 | `DRAFT_CALL_TIMEOUT`        | `1800`                          | Seconds bounding a single generation call; `0` disables |
 | `DRAFT_EXPERIMENTAL`        | —                               | `1` to let auto use experimental providers              |
 | `DRAFT_STRICT_NUMBERS`      | —                               | `1` to fail a draft carrying an ungrounded number       |
+| `DRAFT_SECOND_GATE`         | —                               | `1` for an opt-in semantic second pass (see below)      |
+| `DRAFT_C2PA_CERT`           | —                               | PEM certificate chain for signing the C2PA credential   |
+| `DRAFT_C2PA_KEY`            | —                               | PEM private key paired with `DRAFT_C2PA_CERT`           |
+| `DRAFT_C2PA_ALG`            | `es256`                         | Signature algorithm when signing is configured          |
+| `DRAFT_CONFIG`              | —                               | Explicit config file (skips project/user discovery)     |
+| `DRAFT_NO_CONFIG`           | —                               | `1` to disable the config-file layer                    |
 | `DRAFT_DRAFTS_DIR`          | `~/Drop/Drafts`                 | Where finished drafts are written                       |
 | `DRAFT_SOURCES_DIR`         | `~/Drop/Drafts/Sources`         | Where bare filenames resolve from                       |
 | `DRAFT_CACHE_DIR`           | `$XDG_CACHE_HOME/draft/extract` | Cached claim extractions                                |
