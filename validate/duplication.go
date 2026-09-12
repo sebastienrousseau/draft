@@ -22,7 +22,7 @@ func Paragraphs(article string) []string { return blankLinePat.Split(article, -1
 func DuplicateParagraphIndexes(article string) []int {
 	type entry struct {
 		index int
-		shing map[string]bool
+		shing map[uint64]struct{}
 	}
 	var entries []entry
 	for i, para := range Paragraphs(article) {
@@ -104,27 +104,50 @@ func paragraphWords(para string) []string {
 	return paraWordPat.FindAllString(strings.ToLower(tagPat.ReplaceAllString(para, " ")), -1)
 }
 
-func shingles(words []string, k int) map[string]bool {
-	out := map[string]bool{}
+func shingles(words []string, k int) map[uint64]struct{} {
+	out := make(map[uint64]struct{})
 	if len(words) < k {
 		if len(words) > 0 {
-			out[strings.Join(words, "\x00")] = true
+			out[shingleHash(words)] = struct{}{}
 		}
 		return out
 	}
 	for i := 0; i <= len(words)-k; i++ {
-		out[strings.Join(words[i:i+k], "\x00")] = true
+		out[shingleHash(words[i:i+k])] = struct{}{}
 	}
 	return out
 }
 
-func jaccard(a, b map[string]bool) float64 {
+// shingleHash is the FNV-1a hash of a k-word shingle, computed over the words'
+// bytes with a NUL separator between them — the same collision-avoidance the
+// old "\x00"-joined string key gave, without allocating a string per shingle
+// (which was 96% of Faithfulness's allocations). A 64-bit collision across the
+// few thousand shingles in an article is astronomically unlikely, and the
+// check is a fuzzy 80%-overlap heuristic in any case.
+func shingleHash(words []string) uint64 {
+	const (
+		offset64 = 14695981039346656037
+		prime64  = 1099511628211
+	)
+	h := uint64(offset64)
+	for i, w := range words {
+		if i > 0 {
+			h *= prime64 // FNV-1a step for a NUL separator byte (h ^ 0 == h)
+		}
+		for j := 0; j < len(w); j++ {
+			h = (h ^ uint64(w[j])) * prime64
+		}
+	}
+	return h
+}
+
+func jaccard(a, b map[uint64]struct{}) float64 {
 	if len(a) == 0 && len(b) == 0 {
 		return 0
 	}
 	inter := 0
 	for k := range a {
-		if b[k] {
+		if _, ok := b[k]; ok {
 			inter++
 		}
 	}
