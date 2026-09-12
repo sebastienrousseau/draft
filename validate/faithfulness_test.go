@@ -127,11 +127,15 @@ func TestShinglesAndJaccard(t *testing.T) {
 	if len(shingles([]string{"a", "b"}, 4)) != 1 {
 		t.Error("fewer than k words -> single shingle")
 	}
-	if jaccard(map[string]bool{}, map[string]bool{}) != 0 {
+	if jaccard(map[uint64]struct{}{}, map[uint64]struct{}{}) != 0 {
 		t.Error("two empty sets -> 0")
 	}
-	if jaccard(map[string]bool{"x": true}, map[string]bool{"x": true}) != 1 {
+	if jaccard(map[uint64]struct{}{1: {}}, map[uint64]struct{}{1: {}}) != 1 {
 		t.Error("identical sets -> 1")
+	}
+	// Half-overlap: {1,2} vs {2,3} -> inter 1, union 3.
+	if got := jaccard(map[uint64]struct{}{1: {}, 2: {}}, map[uint64]struct{}{2: {}, 3: {}}); got < 0.33 || got > 0.34 {
+		t.Errorf("half-overlap jaccard = %v, want ~0.333", got)
 	}
 }
 
