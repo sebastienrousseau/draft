@@ -5,6 +5,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -250,5 +251,30 @@ func TestValidateWithRetryRepairsDuplicatesInsteadOfRegenerating(t *testing.T) {
 	}
 	if !logged {
 		t.Error("the repair should be reported")
+	}
+}
+
+func TestFileSHA256Error(t *testing.T) {
+	if _, err := fileSHA256("/nonexistent/file/path"); err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestUniquePathExhausted(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "doc.md")
+	if err := os.WriteFile(base, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 2; i <= maxStemAttempts; i++ {
+		candidate := fmt.Sprintf("%s-%d.md", filepath.Join(dir, "doc"), i)
+		if err := os.WriteFile(candidate, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := uniquePath(base)
+	want := fmt.Sprintf("%s-%d.md", filepath.Join(dir, "doc"), maxStemAttempts+1)
+	if got != want {
+		t.Errorf("uniquePath exhausted: got %s, want %s", got, want)
 	}
 }

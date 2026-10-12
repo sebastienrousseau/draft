@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -440,4 +441,111 @@ func TestRunVerifyJSONManifestProblem(t *testing.T) {
 	if rec.Verified || rec.Signature != nil {
 		t.Errorf("record with manifest problems should be unverified and skip signature: %+v", rec)
 	}
+}
+
+func TestRunVerifyWithMockedSignatures(t *testing.T) {
+	origA, origV := c2paAvail, c2paVerify
+	defer func() { c2paAvail, c2paVerify = origA, origV }()
+
+	day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
+	manifestPath := filepath.Join(day, "provenance", stem+"-c2pa.json")
+	sidecarPath := strings.TrimSuffix(manifestPath, ".json") + ".c2pa"
+	if err := os.WriteFile(sidecarPath, []byte("fake-c2pa-signature"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	finalPath := filepath.Join(day, "final", stem+"-final.md")
+
+	t.Run("c2patool not installed", func(t *testing.T) {
+		c2paAvail = func() bool { return false }
+		var out, errb strings.Builder
+		code := runVerify(finalPath, &out, &errb)
+		if code != 0 {
+			t.Errorf("exit = %d, want 0", code)
+		}
+		if !strings.Contains(out.String(), "install c2patool to verify its signature") {
+			t.Errorf("missing unchecked message:\n%s", out.String())
+		}
+		out.Reset()
+		errb.Reset()
+		code = runVerifyJSON(finalPath, &out, &errb)
+		if code != 0 {
+			t.Errorf("json exit = %d, want 0", code)
+		}
+	})
+
+	t.Run("valid and trusted signature", func(t *testing.T) {
+		c2paAvail = func() bool { return true }
+		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+			return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
+		}
+		var out, errb strings.Builder
+		code := runVerify(finalPath, &out, &errb)
+		if code != 0 {
+			t.Errorf("exit = %d, want 0", code)
+		}
+		if !strings.Contains(out.String(), "valid and trusted") {
+			t.Errorf("missing valid and trusted message:\n%s", out.String())
+		}
+		out.Reset()
+		errb.Reset()
+		code = runVerifyJSON(finalPath, &out, &errb)
+		if code != 0 {
+			t.Errorf("json exit = %d, want 0", code)
+		}
+	})
+
+	t.Run("valid untrusted signature", func(t *testing.T) {
+		c2paAvail = func() bool { return true }
+		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+			return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid"}, nil
+		}
+		var out, errb strings.Builder
+		code := runVerify(finalPath, &out, &errb)
+		if code != 0 {
+			t.Errorf("exit = %d, want 0", code)
+		}
+		if !strings.Contains(out.String(), "trust list") {
+			t.Errorf("missing untrusted message:\n%s", out.String())
+		}
+	})
+
+	t.Run("invalid signature", func(t *testing.T) {
+		c2paAvail = func() bool { return true }
+		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+			return c2pa.Report{SignatureValid: false, Trusted: false, State: "Invalid"}, nil
+		}
+		var out, errb strings.Builder
+		code := runVerify(finalPath, &out, &errb)
+		if code != 1 {
+			t.Errorf("exit = %d, want 1", code)
+		}
+		if !strings.Contains(out.String(), "INVALID") {
+			t.Errorf("missing INVALID message:\n%s", out.String())
+		}
+		out.Reset()
+		errb.Reset()
+		code = runVerifyJSON(finalPath, &out, &errb)
+		if code != 1 {
+			t.Errorf("json exit = %d, want 1", code)
+		}
+	})
+
+	t.Run("verify returns error", func(t *testing.T) {
+		c2paAvail = func() bool { return true }
+		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+			return c2pa.Report{}, fmt.Errorf("c2patool failed")
+		}
+		var out, errb strings.Builder
+		code := runVerify(finalPath, &out, &errb)
+		if code != 1 {
+			t.Errorf("exit = %d, want 1", code)
+		}
+		out.Reset()
+		errb.Reset()
+		code = runVerifyJSON(finalPath, &out, &errb)
+		if code != 1 {
+			t.Errorf("json exit = %d, want 1", code)
+		}
+	})
 }
