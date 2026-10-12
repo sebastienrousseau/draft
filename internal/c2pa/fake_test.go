@@ -169,3 +169,19 @@ func TestParseReportInvalidJSON(t *testing.T) {
 		t.Error("expected error for invalid JSON")
 	}
 }
+
+func TestSignVerifyError(t *testing.T) {
+	fakeTool(t)
+	t.Setenv("FAKE_VERIFY_FAIL", "1")
+	if _, err := Sign(context.Background(), writeArticle(t), []byte(`{}`), Signer{CertPath: "c", KeyPath: "k"}); err == nil {
+		t.Error("expected error when Verify fails inside Sign")
+	}
+}
+
+func TestVerifyParseReportError(t *testing.T) {
+	fakeTool(t)
+	t.Setenv("FAKE_VERIFY_JSON", "not json")
+	if _, err := Verify(context.Background(), writeArticle(t), []byte("sidecar")); err == nil {
+		t.Error("expected error when report is not json")
+	}
+}
