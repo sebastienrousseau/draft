@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-10-12
+
 ### Added
 
 - **Portable verification records (`draft --verify --json`).** `--verify` can
@@ -1142,6 +1144,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.36]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.36
 [0.0.35]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.35
 [0.0.34]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.34
 [0.0.33]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.33

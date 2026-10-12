@@ -26,7 +26,11 @@ func fakeTool(t *testing.T) {
 	script := filepath.Join(dir, "fake-c2patool.sh")
 	body := `#!/bin/sh
 case "$*" in
-  *--external-manifest*) printf '%s' "$FAKE_VERIFY_JSON"; exit 0 ;;
+  *--external-manifest*)
+    [ -n "$FAKE_VERIFY_FAIL" ] && exit 1
+    printf '%s' "$FAKE_VERIFY_JSON"
+    exit 0
+    ;;
 esac
 # sign mode: locate the -o output and write the sidecar beside it.
 out=""; prev=""
@@ -110,5 +114,74 @@ func TestParseReportFlatStatus(t *testing.T) {
 	}
 	if !rep.SignatureValid || rep.Trusted {
 		t.Errorf("flat status: valid=%v trusted=%v, want true/false", rep.SignatureValid, rep.Trusted)
+	}
+}
+
+func TestVerifyDirectWithFakeTool(t *testing.T) {
+	fakeTool(t)
+	t.Setenv("FAKE_VERIFY_JSON", validJSON)
+	rep, err := Verify(context.Background(), writeArticle(t), []byte("fake-sidecar"))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if !rep.SignatureValid || rep.Trusted {
+		t.Errorf("unexpected report: %+v", rep)
+	}
+}
+
+func TestVerifyDirectInformationalAndFailures(t *testing.T) {
+	fakeTool(t)
+	reportJSON := `{"validation_state":"Valid","validation_results":{"activeManifest":{"success":[],"failure":[{"code":"ingredient.unverified"},{"code":""},{"code":"signingCredential.untrusted"},{"code":"assertion.dataHash.mismatch"}]}}}`
+	t.Setenv("FAKE_VERIFY_JSON", reportJSON)
+	rep, err := Verify(context.Background(), writeArticle(t), []byte("fake-sidecar"))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if len(rep.Failures) != 1 || rep.Failures[0] != "assertion.dataHash.mismatch" {
+		t.Errorf("unexpected failures: %+v", rep.Failures)
+	}
+	if rep.Trusted {
+		t.Errorf("expected untrusted")
+	}
+}
+
+func TestVerifyDirectToolFailure(t *testing.T) {
+	fakeTool(t)
+	t.Setenv("FAKE_VERIFY_FAIL", "1")
+	if _, err := Verify(context.Background(), writeArticle(t), []byte("fake-sidecar")); err == nil {
+		t.Error("expected error when tool fails")
+	}
+}
+
+func TestSignerAlg(t *testing.T) {
+	s1 := Signer{}
+	if s1.alg() != DefaultAlg {
+		t.Errorf("got %s, want %s", s1.alg(), DefaultAlg)
+	}
+	s2 := Signer{Alg: "es384"}
+	if s2.alg() != "es384" {
+		t.Errorf("got %s, want es384", s2.alg())
+	}
+}
+
+func TestParseReportInvalidJSON(t *testing.T) {
+	if _, err := parseReport("not json"); err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestSignVerifyError(t *testing.T) {
+	fakeTool(t)
+	t.Setenv("FAKE_VERIFY_FAIL", "1")
+	if _, err := Sign(context.Background(), writeArticle(t), []byte(`{}`), Signer{CertPath: "c", KeyPath: "k"}); err == nil {
+		t.Error("expected error when Verify fails inside Sign")
+	}
+}
+
+func TestVerifyParseReportError(t *testing.T) {
+	fakeTool(t)
+	t.Setenv("FAKE_VERIFY_JSON", "not json")
+	if _, err := Verify(context.Background(), writeArticle(t), []byte("sidecar")); err == nil {
+		t.Error("expected error when report is not json")
 	}
 }

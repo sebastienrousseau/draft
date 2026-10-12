@@ -140,3 +140,21 @@ func TestSignManifestSignError(t *testing.T) {
 		t.Error("a sidecar was written despite a signing error")
 	}
 }
+
+func TestSignManifestWriteSidecarError(t *testing.T) {
+	origA, origS := c2paAvailable, c2paSign
+	defer func() { c2paAvailable, c2paSign = origA, origS }()
+	c2paAvailable = func() bool { return true }
+	c2paSign = func(context.Context, string, []byte, c2pa.Signer) ([]byte, error) {
+		return []byte("cred"), nil
+	}
+	dir := t.TempDir()
+	provFile := filepath.Join(dir, "provenance")
+	if err := os.WriteFile(provFile, []byte("blocker"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
+	_ = os.WriteFile(r.manifestPath, []byte(`{}`), 0o644)
+	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
+}

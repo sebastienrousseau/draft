@@ -75,6 +75,21 @@ func TestSaveEnhancedWriteError(t *testing.T) {
 	}
 }
 
+func TestSaveEnhancedVariants(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.md")
+	if err := saveEnhanced(path, "title: Hello\n", "body text"); err != nil {
+		t.Fatalf("saveEnhanced with FM: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "title: Hello") || !strings.Contains(string(content), "body text") {
+		t.Errorf("unexpected content: %s", string(content))
+	}
+}
+
 func TestReviewAppliesEdits(t *testing.T) {
 	cfg := testConfig(t)
 	draft := writeDraft(t)
@@ -142,6 +157,12 @@ func TestParseSurgicalEdits(t *testing.T) {
 	}
 	if _, err := parseSurgicalEdits("no array here"); err == nil {
 		t.Error("expected error when no JSON array present")
+	}
+	if _, err := parseSurgicalEdits("] ["); err == nil {
+		t.Error("expected error when closing bracket precedes opening bracket")
+	}
+	if _, err := parseSurgicalEdits("[not valid json]"); err == nil {
+		t.Error("expected error on malformed json array")
 	}
 	// Chain-of-thought preamble is stripped.
 	if e, err := parseSurgicalEdits("<think>reasoning</think>[]"); err != nil || len(e) != 0 {
