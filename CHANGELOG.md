@@ -6,6 +6,12 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-10-12
+
+### Changed
+
+- Updated `actions/upload-artifact` to v7.0.2 in OpenSSF Scorecard workflow.
+
 ## [0.0.36] - 2026-10-12
 
 ### Added
@@ -1144,6 +1150,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.37]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.37
 [0.0.36]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.36
 [0.0.35]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.35
 [0.0.34]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.34
