@@ -41,6 +41,24 @@ func TestVerifyAccepts(t *testing.T) {
 	}
 }
 
+func TestVerifyRejectsInventedDashes(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, quote string
+	}{
+		{"leading dash", "C0 00000000", "-C0 00000000"},
+		{"trailing dash", "0 0 0000000", "0 0 0000000-"},
+		{"invented minus", "the rate was 10%", "the rate was -10%"},
+		{"isolated dash", "cost was low", "cost was - low"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := Record{Claim: "claim", SourceQuote: tc.quote, Type: "result", Strength: "demonstrated"}
+			if ok, reason := Verify(rec, tc.source); ok {
+				t.Errorf("quote with invented dash %q should not verify against %q, got verified (%s)", tc.quote, tc.source, reason)
+			}
+		})
+	}
+}
+
 func TestParseNoneAndEmpty(t *testing.T) {
 	if recs, dropped := Parse("NONE", src); len(recs) != 0 || dropped != 0 {
 		t.Error("NONE should yield nothing")

@@ -163,6 +163,7 @@ release:
   # overwrite artifacts people may already hold, so treat a re-run of a
   # published tag as deliberate.
   mode: replace
+  name_template: "{{ .ProjectName }} {{ .Version }}"
   github:
     owner: sebastienrousseau
     name: draft
