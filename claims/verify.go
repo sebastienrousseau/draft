@@ -76,7 +76,32 @@ func Numbers(s string) map[string]bool {
 }
 
 func quoteInSource(quote, source string) bool {
-	return strings.Contains(Normalise(source), Normalise(quote))
+	normQuote := Normalise(quote)
+	normSource := Normalise(source)
+	if strings.Contains(normSource, normQuote) {
+		return true
+	}
+	// If the model dropped hyphens or dashes present in the source (e.g.
+	// "polynomial-time" vs "polynomialtime", or "score — up" vs "score up"),
+	// check if the quote matches the source with dashes collapsed.
+	// A quote can never invent dashes: if the quote itself contains dashes
+	// that did not match above, it is ungrounded.
+	if !containsDash(quote) && containsDash(source) {
+		return strings.Contains(stripDashes(normSource), stripDashes(normQuote))
+	}
+	return false
+}
+
+func containsDash(s string) bool {
+	return strings.ContainsAny(s, "-–—‐‑")
+}
+
+var dashes = strings.NewReplacer(
+	"-", "", "–", "", "—", "", "‐", "", "‑", "",
+)
+
+func stripDashes(s string) string {
+	return strings.Join(strings.Fields(dashes.Replace(s)), " ")
 }
 
 // Normalise is the comparison form of source text and quotes. Two strings
@@ -86,9 +111,9 @@ func quoteInSource(quote, source string) bool {
 // Every rule here was paid for by a dropped claim. Measured over 3,217
 // extraction blocks on 2026-09-06, "quote not found in source" was 552 of
 // 953 drops, and the quotes were the source's words with a literal "\n"
-// where a line broke, a hyphen dropped from "polynomial-time", a ligature
-// the PDF rendered as one glyph, or a non-breaking space. None of those is
-// a different fact. A quote that differs by a word still fails.
+// where a line broke, a ligature the PDF rendered as one glyph, or a
+// non-breaking space. None of those is a different fact. A quote that differs
+// by a word still fails.
 func Normalise(s string) string {
 	return strings.ToLower(canonical(s))
 }
@@ -114,12 +139,11 @@ func canonical(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// needsGlyphFold reports whether s contains any character the glyph replacer
-// rewrites: an ASCII hyphen, or any non-ASCII byte (every other glyph — the
-// ligatures, the dashes, the invisible spaces — is multi-byte UTF-8).
+// needsGlyphFold reports whether s contains any non-ASCII byte that the glyph
+// replacer rewrites (ligatures, curly quotes, invisible spaces).
 func needsGlyphFold(s string) bool {
 	for i := 0; i < len(s); i++ {
-		if c := s[i]; c == '-' || c >= 0x80 {
+		if s[i] >= 0x80 {
 			return true
 		}
 	}
@@ -133,17 +157,12 @@ var (
 	// hyphenBreak joins a word the extractor split at a line end.
 	hyphenBreak = regexp.MustCompile(`-\s*\n\s*`)
 	// glyphs maps typographic variants onto the characters a model types,
-	// and removes the hyphens and invisible characters that separate the
-	// same word in two renderings.
+	// and removes the invisible characters that separate the same word in
+	// two renderings.
 	glyphs = strings.NewReplacer(
 		"“", `"`, "”", `"`, "‘", "'", "’", "'",
 		"ﬁ", "fi", "ﬂ", "fl", "ﬀ", "ff", "ﬃ", "ffi", "ﬄ", "ffl",
 		"\u00a0", " ", "\u00ad", "", "\u200b", "", "\ufeff", "",
-		// Every hyphen and dash variant collapses to nothing, so a word the
-		// source hyphenated and the model did not ("polynomial-time" vs
-		// "polynomialtime") compares equal. A single pass cannot map a dash
-		// to a hyphen and then remove that hyphen, so each maps straight to "".
-		"-", "", "–", "", "—", "", "‐", "", "‑", "",
 	)
 )
 

@@ -6,6 +6,13 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserved hyphens and dashes in quote verification to prevent fabricated
+  leading/trailing dashes and minus signs from matching unhyphenated sources.
+- Added explicit GoReleaser release name template (`{{ .ProjectName }} {{ .Version }}`)
+  to ensure release titles comply with the `<PROJECT_NAME> <VERSION>` naming invariant.
+
 ## [0.0.37] - 2026-10-12
 
 ### Changed
