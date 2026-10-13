@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.38] - 2026-10-13
+
 ### Fixed
 
 - Preserved hyphens and dashes in quote verification to prevent fabricated
@@ -1157,6 +1159,7 @@ series until `0.0.999`.
   online and a local Ollama model when offline, grounded by a verified claim
   ledger.
 
+[0.0.38]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.38
 [0.0.37]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.37
 [0.0.36]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.36
 [0.0.35]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.35
