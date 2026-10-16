@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/mdspan"
 	"github.com/sebastienrousseau/draft/rules"
 	"github.com/sebastienrousseau/draft/validate"
@@ -178,6 +179,10 @@ func normalizeDraft(s string) string {
 // truncation check, which is worse than asking the model again. Removing
 // duplicates often brings an over-long draft back inside the band anyway.
 func repairDuplicates(md string) (string, int) {
+	return repairDuplicatesWithMin(md, rules.MinWords)
+}
+
+func repairDuplicatesWithMin(md string, minWords int) (string, int) {
 	dups := validate.DuplicateParagraphIndexes(md)
 	if len(dups) == 0 {
 		return md, 0
@@ -189,13 +194,15 @@ func repairDuplicates(md string) (string, int) {
 
 	paras := validate.Paragraphs(md)
 	kept := make([]string, 0, len(paras))
+	remaining := validate.WordCount(md)
 	removed := 0
 	for i, p := range paras {
 		if drop[i] {
 			// Re-check the floor against what would remain, so the repair
 			// cannot trade one violation for another.
-			remaining := validate.WordCount(strings.Join(append(append([]string{}, kept...), paras[i+1:]...), "\n\n"))
-			if remaining >= rules.MinWords {
+			pw := validate.WordCount(p)
+			if remaining-pw >= minWords {
+				remaining -= pw
 				removed++
 				continue
 			}
@@ -257,29 +264,7 @@ func extractTitle(s string) string {
 }
 
 func slugify(s string) string {
-	s = strings.ToLower(s)
-	var b strings.Builder
-	lastDash := false
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if !lastDash {
-			b.WriteRune('-')
-			lastDash = true
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	out = slugRepeat.ReplaceAllString(out, "-")
-	if len(out) > 90 {
-		out = strings.Trim(out[:90], "-")
-	}
-	if out == "" {
-		return "draft-article"
-	}
-	return out
+	return frontmatter.Slugify(s)
 }
 
 // sha256Hex is the hex digest of s.

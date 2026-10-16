@@ -81,14 +81,38 @@ func loadSet(path string, stderr io.Writer) (report provenance.CheckReport, body
 	}
 	// The ledger is normally cleaned up after a successful run, so its digest
 	// is checked only when a --keep-artifacts ledger is still beside the set.
-	var ledger []byte
 	dayRoot := filepath.Dir(filepath.Dir(manifestPath))
-	if matches, _ := filepath.Glob(filepath.Join(dayRoot, "*-verified-claim-ledger.md")); len(matches) > 0 {
-		ledger, _ = os.ReadFile(matches[0])
-	}
+	ledger := findLedger(dayRoot, manifest)
 	report = provenance.CheckArticle(body+"\n", manifest, ledger, resolveSourceDigest)
 	ok = true
 	return
+}
+
+// findLedger returns the kept ledger in dayRoot that belongs to manifest. When
+// multiple papers were drafted on the same day, the ledger whose SHA-256
+// matches the manifest's recorded ledger_sha256 is selected, falling back to
+// the first candidate so a modified ledger is still reported as a mismatch.
+func findLedger(dayRoot string, manifest []byte) []byte {
+	matches, _ := filepath.Glob(filepath.Join(dayRoot, "*-verified-claim-ledger.md"))
+	if len(matches) == 0 {
+		return nil
+	}
+	first, _ := os.ReadFile(matches[0])
+	if len(matches) == 1 {
+		return first
+	}
+	g, _, err := provenance.ParseManifest(manifest)
+	if err != nil || g.LedgerSHA256 == "" {
+		return first
+	}
+	for _, m := range matches {
+		b, _ := os.ReadFile(m)
+		sum := sha256.Sum256(b)
+		if hex.EncodeToString(sum[:]) == g.LedgerSHA256 {
+			return b
+		}
+	}
+	return first
 }
 
 // runVerify checks an article against the provenance written beside it and

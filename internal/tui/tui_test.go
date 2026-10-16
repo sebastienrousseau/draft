@@ -5,6 +5,8 @@ package tui
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -120,15 +122,29 @@ func TestDoneAdvancesQueueThenAllDone(t *testing.T) {
 
 func TestQueueAnotherSource(t *testing.T) {
 	m := newModel(t, 1)
+	sourcesDir := t.TempDir()
+	m.cfg.SourcesDir = sourcesDir
+	if err := os.WriteFile(filepath.Join(sourcesDir, "bare.pdf"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	m = upd(m, pipeline.DoneEvent{OutputPath: "/out/a.md", Words: 500, Engine: "claude"})
 	if !m.allDone {
 		t.Fatal("expected all-done")
 	}
-	// Type a path then press enter to queue a new job.
-	m = upd(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/tmp/new.pdf")})
+	// Type a ~/ path then press enter to queue a new job with tilde expanded.
+	m = upd(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("~/new.pdf")})
 	m = upd(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if len(m.jobs) != 2 || m.allDone {
-		t.Errorf("enter should queue a new job and resume, jobs=%d allDone=%v", len(m.jobs), m.allDone)
+		t.Fatalf("enter should queue a new job and resume, jobs=%d allDone=%v", len(m.jobs), m.allDone)
+	}
+	if got := m.jobs[1].Sources[0]; got != filepath.Join("/home/seb", "new.pdf") {
+		t.Errorf("tilde path should expand against HomeDir, got %q", got)
+	}
+	if got := resolveInteractiveSource(m.cfg, "~"); got != "/home/seb" {
+		t.Errorf("bare tilde = %q, want /home/seb", got)
+	}
+	if got := resolveInteractiveSource(m.cfg, "bare.pdf"); got != filepath.Join(sourcesDir, "bare.pdf") {
+		t.Errorf("bare filename in SourcesDir = %q", got)
 	}
 }
 

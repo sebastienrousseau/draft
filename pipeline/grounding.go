@@ -441,7 +441,7 @@ func looksLikeExtractionRefusal(text string) bool {
 		return false
 	}
 	upper := strings.ToUpper(t)
-	if strings.Contains(upper, "CLAIM:") || upper == "NONE" {
+	if strings.Contains(upper, "CLAIM:") || upper == "NONE" || strings.HasPrefix(t, "[") {
 		return false
 	}
 	low := strings.ToLower(t)

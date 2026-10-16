@@ -443,10 +443,3 @@ func usage(w io.Writer) {
 	fmt.Fprintf(w, "%s\n  %s\n", head("KEYS"),
 		dim("q / esc quit · enter queue another source · j/k · arrows · pgup/pgdn scroll"))
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

@@ -141,7 +141,8 @@ func (r *Runner) continueGeneration(ctx context.Context, partial string) string 
 
 // validateWithRetry validates the draft and, on rule violations, re-prompts the
 // writer to fix the named problems, up to the configured retry budget.
-func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown string, records []claims.Record) (string, error) {
+func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown string, records []claims.Record, style rules.Style) (string, error) {
+	style = style.OrDefault()
 	var errs []string
 	for attempt := 0; attempt <= r.cfg.WriteRetries; attempt++ {
 		if attempt > 0 {
@@ -164,14 +165,14 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 		}
 		// Repair what a deterministic edit can settle before spending another
 		// generation on it. A rewrite is the most expensive call in the run.
-		if repaired, removed := repairDuplicates(markdown); removed > 0 {
-			if len(validate.ErrorsWithStyle(repaired, r.cfg.Style)) <= len(validate.ErrorsWithStyle(markdown, r.cfg.Style)) {
+		if repaired, removed := repairDuplicatesWithMin(markdown, style.MinWords); removed > 0 {
+			if len(validate.ErrorsWithStyle(repaired, style)) <= len(validate.ErrorsWithStyle(markdown, style)) {
 				markdown = repaired
 				r.log(fmt.Sprintf("removed %d near-duplicate paragraph(s) without regenerating", removed))
 			}
 		}
 
-		styleErrs := validate.ErrorsWithStyle(markdown, r.cfg.Style)
+		styleErrs := validate.ErrorsWithStyle(markdown, style)
 		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
 		errs = append(append([]string{}, styleErrs...), factErrs...)
 		if len(errs) == 0 {

@@ -145,8 +145,8 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
+	stderr := &limitedBuffer{limit: 8 * 1024}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return Result{}, err
 	}
@@ -164,6 +164,7 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		out, streamErr = streamAll(stdout, req.OnChunk)
 	}
 
+	waitErr := cmd.Wait()
 	// A refusal is reported in the stream, not on stderr: the CLI writes a
 	// result whose stop_reason is "refusal", then exits non-zero with nothing
 	// else to say. Read the stream's verdict before the exit status, or the
@@ -172,10 +173,10 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	if errors.Is(streamErr, ErrRefused) {
 		return Result{}, fmt.Errorf("%s: %w", s.provider.Name, streamErr)
 	}
-	if err := cmd.Wait(); err != nil {
+	if waitErr != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
-			msg = err.Error()
+			msg = waitErr.Error()
 		}
 		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(msg))
 	}

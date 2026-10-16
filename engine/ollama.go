@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/internal/gbnf"
 	"sync"
 )
 
@@ -102,6 +103,11 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 	if req.NumPredict > 0 && req.NumPredict < numPred {
 		numPred = req.NumPredict
 	}
+	options := map[string]any{
+		"temperature": req.Temperature,
+		"num_ctx":     o.numCtx,
+		"num_predict": numPred,
+	}
 	payload := map[string]any{
 		"model":  o.modelFor(req.Kind),
 		"prompt": req.Prompt,
@@ -111,11 +117,15 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 		// calls and the write, so a run is not slowed by repeated reloads even when
 		// the server was started without an OLLAMA_KEEP_ALIVE default.
 		"keep_alive": "10m",
-		"options": map[string]any{
-			"temperature": req.Temperature,
-			"num_ctx":     o.numCtx,
-			"num_predict": numPred,
-		},
+		"options":    options,
+	}
+	if req.Schema != nil {
+		grammar, err := gbnf.FromJSONSchema(req.Schema)
+		if err != nil {
+			return Result{}, err
+		}
+		payload["format"] = req.Schema
+		options["grammar"] = grammar
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

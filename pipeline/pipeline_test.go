@@ -59,9 +59,9 @@ func (f *fakeEngine) Generate(_ context.Context, req engine.Request) (engine.Res
 			return engine.Result{}, errors.New("edit failed")
 		}
 		if f.editResponse == "" {
-			return engine.Result{Text: "[]"}, nil
+			return engine.Result{Text: "[]", Usage: engine.Usage{InputTokens: 10, OutputTokens: 2, Reported: true}}, nil
 		}
-		return engine.Result{Text: f.editResponse}, nil
+		return engine.Result{Text: f.editResponse, Usage: engine.Usage{InputTokens: 10, OutputTokens: 5, Reported: true}}, nil
 	default:
 		f.mu.Lock()
 		f.writeCalls++
@@ -87,7 +87,7 @@ STRENGTH: demonstrated
 ---`
 
 func validArticle(suffix string) string {
-	body := strings.Repeat("The grounded result stands on its own and reads plainly. ", 110)
+	body := strings.Repeat("The grounded result stands on its own and reads plainly. ", 55)
 	return "# The Result That Holds\n\n" +
 		"**A single number tells the story.**\n\n" +
 		"<!-- lead-start -->\n" +

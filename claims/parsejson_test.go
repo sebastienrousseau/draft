@@ -72,12 +72,13 @@ func TestParseJSONMatchesTextParse(t *testing.T) {
 
 	jr, jd := ParseJSON(jsonText, source)
 	tr, td := Parse(textForm, source)
-	if len(jr) != len(tr) || jd != td {
-		t.Fatalf("ParseJSON (%d,%d) != Parse (%d,%d)", len(jr), jd, len(tr), td)
+	pr, pd := Parse(jsonText, source)
+	if len(jr) != len(tr) || jd != td || len(pr) != len(jr) || pd != jd {
+		t.Fatalf("ParseJSON (%d,%d) != Parse text (%d,%d) or Parse json (%d,%d)", len(jr), jd, len(tr), td, len(pr), pd)
 	}
 	for i := range jr {
-		if jr[i] != tr[i] {
-			t.Errorf("record %d differs: json=%+v text=%+v", i, jr[i], tr[i])
+		if jr[i] != tr[i] || pr[i] != jr[i] {
+			t.Errorf("record %d differs: json=%+v text=%+v auto=%+v", i, jr[i], tr[i], pr[i])
 		}
 	}
 }

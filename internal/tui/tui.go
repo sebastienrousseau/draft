@@ -9,6 +9,7 @@ package tui
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -416,10 +417,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "enter":
 		if m.allDone {
-			next := strings.Trim(strings.TrimSpace(m.input.Value()), `"'`)
-			if next == "" {
+			raw := strings.Trim(strings.TrimSpace(m.input.Value()), `"'`)
+			if raw == "" {
 				return m, nil
 			}
+			next := resolveInteractiveSource(m.cfg, raw)
 			m.input.Reset()
 			m.input.Blur()
 			m.jobs = append(m.jobs, pipeline.Job{Sources: []string{next}})
@@ -489,18 +491,25 @@ func label(j pipeline.Job) string {
 	return strings.Join(names, ", ")
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// resolveInteractiveSource expands ~ against cfg.HomeDir and resolves bare
+// filenames against cfg.SourcesDir when present on disk, matching CLI argument
+// resolution.
+func resolveInteractiveSource(cfg config.Config, arg string) string {
+	expanded := arg
+	if arg == "~" {
+		expanded = cfg.HomeDir
+	} else if strings.HasPrefix(arg, "~/") {
+		expanded = filepath.Join(cfg.HomeDir, arg[2:])
 	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
+	if !filepath.IsAbs(expanded) && cfg.SourcesDir != "" {
+		if _, err := os.Stat(expanded); err != nil {
+			inSources := filepath.Join(cfg.SourcesDir, expanded)
+			if _, sErr := os.Stat(inSources); sErr == nil {
+				expanded = inSources
+			}
+		}
 	}
-	return b
+	return expanded
 }
 
 func wordCount(s string) int {

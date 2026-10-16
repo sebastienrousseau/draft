@@ -49,15 +49,9 @@ func ParseJSON(text, source string) (records []Record, dropped int) {
 			Type:        strings.TrimSpace(r.Type),
 			Strength:    strings.TrimSpace(r.Strength),
 		}
-		if ok, _ := Verify(rec, source); ok {
-			records = append(records, rec)
+		if verified, ok := verifyOrRepair(rec, source); ok {
+			records = append(records, verified)
 			continue
-		}
-		if repaired := repair(rec, source); repaired.SourceQuote != rec.SourceQuote {
-			if ok, _ := Verify(repaired, source); ok {
-				records = append(records, repaired)
-				continue
-			}
 		}
 		dropped++
 	}
