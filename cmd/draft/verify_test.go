@@ -237,6 +237,29 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 	if code := runVerify(final, &out, &errb); code != 0 || !strings.Contains(out.String(), "not on this machine") {
 		t.Errorf("an absent source must not fail, exit %d:\n%s", code, out.String())
 	}
+
+	// A sibling ledger from an earlier run in the same dated directory (sorting
+	// lexicographically before stem) must not shadow this set's own ledger.
+	otherLedger := filepath.Join(day, "2026-09-06-aaaa-earlier-verified-claim-ledger.md")
+	if err := os.WriteFile(otherLedger, []byte("# Verified Claim Ledger\n\nCLAIM: unrelated earlier paper\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := runVerify(final, &out, &errb); code != 0 || !strings.Contains(out.String(), "matches the verified claims") {
+		t.Errorf("sibling ledger in the same day folder broke verification, exit %d:\n%s", code, out.String())
+	}
+	// If no ledger matches the manifest's digest, findLedger falls back to the
+	// first candidate so CheckArticle reports a ledger mismatch.
+	if got := findLedger(day, []byte(`{"assertions":[]}`)); string(got) != "# Verified Claim Ledger\n\nCLAIM: unrelated earlier paper\n" {
+		t.Errorf("findLedger with unparseable manifest = %q", string(got))
+	}
+	if err := os.WriteFile(filepath.Join(day, stem+"-verified-claim-ledger.md"), []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := runVerify(final, &out, &errb); code != 1 {
+		t.Errorf("tampered ledgers should fail verification, got %d", code)
+	}
 }
 
 func sha256File(t *testing.T, path string) string {

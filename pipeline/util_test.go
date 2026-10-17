@@ -232,7 +232,7 @@ func TestValidateWithRetryRepairsDuplicatesInsteadOfRegenerating(t *testing.T) {
 	events := make(chan Event, 64)
 	r := NewRunner(config.Config{WriteRetries: 2}, []engine.Engine{eng}, events)
 
-	out, err := r.validateWithRetry(context.Background(), "base prompt", md, nil)
+	out, err := r.validateWithRetry(context.Background(), "base prompt", md, nil, rules.DefaultStyle())
 	if err != nil {
 		t.Fatalf("validateWithRetry returned %v", err)
 	}
@@ -251,6 +251,29 @@ func TestValidateWithRetryRepairsDuplicatesInsteadOfRegenerating(t *testing.T) {
 	}
 	if !logged {
 		t.Error("the repair should be reported")
+	}
+}
+
+func TestRunEnforcesScaledWriteBudget(t *testing.T) {
+	cfg := testConfig(t)
+	// With 1 extracted claim, writeBudget scales maxWords to 650 (far below the
+	// 3000-word default ceiling). A 2800-word draft must fail validation against
+	// the scaled budget rather than slipping through under the unscaled 3000 cap.
+	bloated := "# The Result That Holds\n\n" +
+		"**A single number tells the story.**\n\n" +
+		"<!-- lead-start -->\n" +
+		`<aside class="post-lead" aria-label="Article summary">` + "\n" +
+		`<p class="post-lead-tldr"><strong>TL;DR.</strong> A grounded look.</p>` + "\n" +
+		"</aside>\n<!-- lead-end -->\n\n" +
+		"> **Executive Summary**\n>\n> - The system reached a score on the test set.\n\n" +
+		"## What the result shows\n\n"
+	for i := 0; i < 200; i++ {
+		bloated += fmt.Sprintf("Paragraph %d discusses how the grounded result stands on its own and reads plainly.\n\n", i)
+	}
+	eng := &fakeEngine{name: "fake", writer: func(int) (string, bool) { return bloated, false }}
+	_, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}})
+	if !strings.Contains(errText, "maximum is 650") {
+		t.Errorf("expected validation to enforce the scaled 650-word budget, got %q", errText)
 	}
 }
 

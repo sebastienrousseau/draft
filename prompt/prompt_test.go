@@ -80,8 +80,8 @@ func TestWritingPromptUsesProvidedTemplates(t *testing.T) {
 func TestContinueWritingClipsTail(t *testing.T) {
 	long := strings.Repeat("x", 9000)
 	c := ContinueWriting(long)
-	if len(c) > 5000 {
-		t.Errorf("continuation prompt should clip the tail, len=%d", len(c))
+	if len(c) > 5600 || strings.Contains(c, strings.Repeat("x", 4001)) {
+		t.Errorf("continuation prompt should clip the tail to 4000 chars, len=%d", len(c))
 	}
 	if !strings.Contains(c, "Continue the Markdown article") {
 		t.Error("missing continuation instruction")

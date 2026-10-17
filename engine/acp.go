@@ -17,7 +17,11 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/internal/sessionpool"
 )
+
+// acpIdleTimeout bounds how long an unused ACP agent process lingers between calls.
+const acpIdleTimeout = 5 * time.Minute
 
 // ACP drives an agent over the Agent Client Protocol: JSON-RPC 2.0 on the
 // agent's stdio, one long-lived process for the life of the engine, and one
@@ -42,8 +46,8 @@ type ACP struct {
 	model    string
 	timeout  time.Duration
 
-	mu   sync.Mutex // guards conn across Generate calls
-	conn *acpConn
+	mu   sync.Mutex // guards lazy pool initialisation
+	pool *sessionpool.Pool
 }
 
 // NewACP builds an ACP engine for a provider registered with ACP set. It
@@ -57,7 +61,12 @@ func NewACP(name string, cfg config.Config) (*ACP, bool) {
 	if model == "" {
 		model = p.DefaultModel
 	}
-	return &ACP{provider: p, model: model, timeout: cfg.CallTimeout}, true
+	return &ACP{
+		provider: p,
+		model:    model,
+		timeout:  cfg.CallTimeout,
+		pool:     sessionpool.New(acpIdleTimeout),
+	}, true
 }
 
 // Name implements Engine.
@@ -71,10 +80,16 @@ func (a *ACP) Generate(ctx context.Context, req Request) (Result, error) {
 		ctx, cancel = context.WithTimeout(ctx, a.timeout)
 		defer cancel()
 	}
-	conn, err := a.connect(ctx)
+	pool := a.sessionPool()
+	pool.Reap()
+	raw, err := pool.Get(ctx, a.provider.Name, func(ctx context.Context) (sessionpool.Session, error) {
+		return startACP(ctx, a.provider)
+	})
 	if err != nil {
 		return Result{}, fmt.Errorf("%s: %w", a.provider.Name, err)
 	}
+	defer pool.Release(a.provider.Name)
+	conn := raw.(*acpConn)
 
 	// The session's working directory is a fresh empty one, for the same
 	// reason Session runs in one: an agent reads whatever configuration it
@@ -136,37 +151,24 @@ func (a *ACP) Generate(ctx context.Context, req Request) (Result, error) {
 	}
 }
 
-// connect returns the live agent process, starting one if none is running or
-// the last one has exited. A dead process is replaced once per call, not
-// retried in a loop: if the agent cannot stay up the caller should hear so.
-func (a *ACP) connect(ctx context.Context) (*acpConn, error) {
+func (a *ACP) sessionPool() *sessionpool.Pool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.conn != nil && a.conn.alive() {
-		return a.conn, nil
+	if a.pool == nil {
+		a.pool = sessionpool.New(acpIdleTimeout)
 	}
-	if a.conn != nil {
-		a.conn.close()
-		a.conn = nil
-	}
-	conn, err := startACP(ctx, a.provider)
-	if err != nil {
-		return nil, err
-	}
-	a.conn = conn
-	return conn, nil
+	return a.pool
+}
+
+// Reap closes any idle ACP agent process whose idle duration has elapsed.
+func (a *ACP) Reap() int {
+	return a.sessionPool().Reap()
 }
 
 // Close stops the agent process. The engine can be used again afterwards; the
 // next Generate starts a fresh one.
 func (a *ACP) Close() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.conn == nil {
-		return nil
-	}
-	a.conn.close()
-	a.conn = nil
+	a.sessionPool().CloseAll()
 	return nil
 }
 
@@ -471,6 +473,17 @@ func (c *acpConn) write(frame any) error {
 	defer c.wmu.Unlock()
 	_, err = c.stdin.Write(append(b, '\n'))
 	return err
+}
+
+// Alive implements sessionpool.Session.
+func (c *acpConn) Alive() bool {
+	return c.alive()
+}
+
+// Close implements sessionpool.Session.
+func (c *acpConn) Close() error {
+	c.close()
+	return nil
 }
 
 func (c *acpConn) alive() bool {

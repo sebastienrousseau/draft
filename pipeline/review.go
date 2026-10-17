@@ -18,6 +18,7 @@ import (
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/atomicfile"
 	"github.com/sebastienrousseau/draft/prompt"
+	"github.com/sebastienrousseau/draft/rules"
 	"github.com/sebastienrousseau/draft/validate"
 )
 
@@ -110,8 +111,8 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	// sources were supplied today. Failing on a violation the edit did not
 	// introduce makes an existing article permanently unreviewable for a reason
 	// the review had nothing to do with.
-	before := reviewViolations(draftBody, records, r.validateOptions())
-	after := reviewViolations(enhanced, records, r.validateOptions())
+	before := reviewViolations(draftBody, records, r.cfg.Style, r.validateOptions())
+	after := reviewViolations(enhanced, records, r.cfg.Style, r.validateOptions())
 	if introduced := newViolations(before, after); len(introduced) > 0 {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, enhanced, fmt.Errorf("enhanced draft broke the rules:\n- %s", strings.Join(introduced, "\n- ")))
@@ -144,6 +145,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		LedgerSHA256:  r.ledgerDigest,
 		Duration:      time.Since(r.started),
 		Timings:       append([]PhaseTiming(nil), r.timings...),
+		Usage:         r.currentUsage(),
 	})
 	return nil
 }
@@ -174,8 +176,8 @@ func saveEnhanced(path, originalFM, body string) error {
 
 // reviewViolations is every hard violation in an article: the house rules plus
 // the grounding checks, in one list so two articles can be compared.
-func reviewViolations(article string, records []claims.Record, opts validate.Options) []string {
-	errs := validate.Errors(article)
+func reviewViolations(article string, records []claims.Record, style rules.Style, opts validate.Options) []string {
+	errs := validate.ErrorsWithStyle(article, style)
 	factErrs, _ := validate.FaithfulnessWithOptions(article, records, opts)
 	return append(errs, factErrs...)
 }

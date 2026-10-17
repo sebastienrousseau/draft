@@ -249,3 +249,30 @@ func TestReviewEditGenerationFails(t *testing.T) {
 		t.Errorf("expected review generation failure, got %q", errText)
 	}
 }
+
+func TestReviewHonoursCustomStyleAndReportsUsage(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Style.BannedWords = []string{"custombanword"}
+	draft := writeDraft(t)
+
+	// An edit that introduces a word banned by cfg.Style (but not defaultStyle)
+	// must be caught by reviewViolations and rejected.
+	badEng := &fakeEngine{
+		name:         "fake",
+		editResponse: `[{"find":"A single number tells the story.","replace":"A single custombanword tells the story.","reason":"generic"}]`,
+	}
+	_, errText, _ := drain(t, cfg, []engine.Engine{badEng}, Job{Sources: []string{writeSource(t)}, ReviewPath: draft})
+	if !strings.Contains(errText, "broke the rules") || !strings.Contains(errText, "custombanword") {
+		t.Errorf("review should enforce custom cfg.Style.BannedWords, got %q", errText)
+	}
+
+	// And a successful review must populate DoneEvent.Usage from the runner.
+	goodEng := &fakeEngine{name: "fake"}
+	done, errText, _ := drain(t, cfg, []engine.Engine{goodEng}, Job{Sources: []string{writeSource(t)}, ReviewPath: draft})
+	if errText != "" {
+		t.Fatalf("review failed: %s", errText)
+	}
+	if !done.Usage.Reported || done.Usage.InputTokens == 0 {
+		t.Errorf("DoneEvent.Usage should report the review run's token usage, got %+v", done.Usage)
+	}
+}

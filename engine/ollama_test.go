@@ -189,3 +189,31 @@ func TestOllamaSelfStartsOnceAcrossConcurrentCalls(t *testing.T) {
 		t.Errorf("ensureRunning called %d times across concurrent calls, want exactly 1", got)
 	}
 }
+
+func TestOllamaSchemaAndGBNF(t *testing.T) {
+	var gotBody map[string]any
+	o := ollamaFor(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"response":"[]","done":true,"done_reason":"stop"}` + "\n"))
+	})
+	schema := map[string]any{
+		"type":  "array",
+		"items": map[string]any{"type": "string"},
+	}
+	res, err := o.Generate(context.Background(), Request{Kind: KindExtract, Schema: schema})
+	if err != nil || res.Text != "[]" {
+		t.Fatalf("Generate with Schema = (%q, %v)", res.Text, err)
+	}
+	if gotBody["format"] == nil {
+		t.Error("expected format field in payload when Schema is set")
+	}
+	opts, _ := gotBody["options"].(map[string]any)
+	if g, _ := opts["grammar"].(string); !strings.HasPrefix(g, "root ::=") {
+		t.Errorf("expected GBNF grammar in options, got %q", g)
+	}
+
+	// An unsupported schema must fail fast before contacting the server.
+	if _, err := o.Generate(context.Background(), Request{Kind: KindExtract, Schema: map[string]any{"type": "number"}}); err == nil {
+		t.Error("unsupported schema type should return a gbnf error")
+	}
+}

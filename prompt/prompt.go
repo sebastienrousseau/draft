@@ -189,7 +189,7 @@ func ContinueWriting(partial string) string {
 	return fmt.Sprintf(`Continue the Markdown article below exactly where it stops. Do not repeat any text already written, do not add a preamble, and do not restart. Output only the continuation, finishing the current sentence and completing the article so it ends on a clear final thought.
 
 ## ARTICLE SO FAR (tail)
-%s`, tail)
+%s`, Untrusted("UNTRUSTED PARTIAL DRAFT", tail))
 }
 
 // Review builds the surgical-edit prompt for enhancing an existing draft: the
@@ -282,8 +282,9 @@ The QUOTE is a verbatim span already confirmed to occur in the source, so you ar
 
 Answer with exactly one word, either SUPPORTED or UNSUPPORTED. Output nothing else.
 
-CLAIM: %s
+## CLAIM
+%s
 
 ## QUOTE
-%s`, claim, Untrusted("UNTRUSTED SOURCE QUOTE", quote))
+%s`, Untrusted("UNTRUSTED CLAIM", claim), Untrusted("UNTRUSTED SOURCE QUOTE", quote))
 }

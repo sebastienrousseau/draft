@@ -44,6 +44,10 @@ type Request struct {
 	// cannot pad a local model toward its token ceiling. Session providers, which
 	// manage their own generation, ignore it.
 	NumPredict int
+	// Schema, if non-nil, constrains the model's output to a JSON Schema
+	// (passed as format to Ollama and compiled to a GBNF grammar via
+	// internal/gbnf).
+	Schema map[string]any
 	// OnChunk, if set, receives streamed text as it arrives for live preview.
 	OnChunk func(string)
 }

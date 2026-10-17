@@ -26,7 +26,6 @@ var (
 	danglingTail = regexp.MustCompile(`(?i)(?:,|;|\b(?:and|or|but|the|a|an|of|to|in|for|with|that|which|is|are|was|were))\s*$`)
 	numberPat    = regexp.MustCompile(`\d+(?:[.,]\d+)*`)
 	spacePat     = regexp.MustCompile(`\s+`)
-	smartQuotes  = strings.NewReplacer("“", `"`, "”", `"`, "‘", "'", "’", "'")
 )
 
 // Parse reads a model's extraction output for a single source section and
@@ -35,6 +34,9 @@ func Parse(text, source string) (records []Record, dropped int) {
 	text = strings.TrimSpace(text)
 	if text == "" || text == "NONE" {
 		return nil, 0
+	}
+	if strings.HasPrefix(text, "[") {
+		return ParseJSON(text, source)
 	}
 	for _, block := range blockSep.Split(text, -1) {
 		block = strings.TrimSpace(block)
@@ -47,23 +49,28 @@ func Parse(text, source string) (records []Record, dropped int) {
 			Type:        fieldValue(block, "TYPE"),
 			Strength:    fieldValue(block, "STRENGTH"),
 		}
-		// The common case is a record that already verifies, so it pays for one
-		// Verify and nothing else. Repair — which allocates — runs only when the
-		// record would otherwise be dropped, and its result is re-verified so a
-		// rescued quote is held to exactly the same gate.
-		if ok, _ := Verify(rec, source); ok {
-			records = append(records, rec)
+		if verified, ok := verifyOrRepair(rec, source); ok {
+			records = append(records, verified)
 			continue
-		}
-		if repaired := repair(rec, source); repaired.SourceQuote != rec.SourceQuote {
-			if ok, _ := Verify(repaired, source); ok {
-				records = append(records, repaired)
-				continue
-			}
 		}
 		dropped++
 	}
 	return records, dropped
+}
+
+// verifyOrRepair checks rec against source, attempting one quote-extension
+// repair when the initial check fails and re-verifying the repaired record to
+// the same standard.
+func verifyOrRepair(rec Record, source string) (Record, bool) {
+	if ok, _ := Verify(rec, source); ok {
+		return rec, true
+	}
+	if repaired := repair(rec, source); repaired.SourceQuote != rec.SourceQuote {
+		if ok, _ := Verify(repaired, source); ok {
+			return repaired, true
+		}
+	}
+	return Record{}, false
 }
 
 // ParseLedger reads back a ledger previously written by RenderLedger,

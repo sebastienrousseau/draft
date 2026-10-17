@@ -95,7 +95,7 @@ func (stubEngine) Generate(_ context.Context, req engine.Request) (engine.Result
 	if req.Kind == engine.KindExtract {
 		return engine.Result{Text: "CLAIM: It scored 0.5 on the set\nSOURCE_QUOTE: \"scored 0.5 on the set\"\nTYPE: metric\nSTRENGTH: demonstrated\n---"}, nil
 	}
-	body := strings.Repeat("A clear grounded sentence that stands on its own. ", 120)
+	body := strings.Repeat("A clear grounded sentence that stands on its own. ", 55)
 	return engine.Result{Text: "# Title\n\n**Thesis.**\n\n<aside class=\"post-lead\"></aside>\n\n> **Executive Summary**\n>\n> - point\n\n## Section\n\n" + body + "."}, nil
 }
 

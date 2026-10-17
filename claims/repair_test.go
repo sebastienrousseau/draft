@@ -63,6 +63,12 @@ func TestRepairExtendsACutQuoteFromTheSource(t *testing.T) {
 			}
 		})
 	}
+	// A quote whose model-emitted newline escape or PDF ligature differs from
+	// the raw source is still found and extended once canonicalised.
+	ligSrc := "The ﬁnal result was clear and unambiguous. Next."
+	if got := repair(Record{SourceQuote: `The final\nresult was clear and`}, ligSrc).SourceQuote; got != "The final result was clear and unambiguous." {
+		t.Errorf("repair with ligature and newline escape = %q", got)
+	}
 
 	// A period inside a number is not a sentence end: repair skips "3.5" and
 	// extends to the real terminator.

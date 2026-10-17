@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -129,8 +128,6 @@ type (
 // import the engine package for the one type.
 type Usage = engine.Usage
 
-var slugRepeat = regexp.MustCompile(`-{2,}`)
-
 // chainState is one ordered engine chain plus the cursor into it. Each request
 // kind owns one, so extraction failing over to Ollama does not drag writing
 // down with it — the two are separately configurable and separately sticky.
@@ -189,6 +186,22 @@ type Runner struct {
 	// single-chain behaviour (including a shared cursor) exactly.
 	chains map[engine.Kind]*chainState
 	events chan<- Event
+	// usageMu guards concurrent updates to usage from parallel extraction workers.
+	usageMu sync.Mutex
+	// cache reuses claim extractions across runs, addressed by the content
+	// that produced them. Nil when caching is disabled; every method on it
+	// tolerates that, so there is no branch at the call sites.
+	cache *extractcache.Cache
+	// cacheHits counts reused extractions for this job. Written from the
+	// parallel extraction workers, so it is atomic.
+	cacheHits atomic.Int64
+	runState
+}
+
+// runState holds the per-job mutable state of a Runner, reset as a unit at the
+// start of each Run call so nothing from an earlier job in a queue can leak
+// into the next.
+type runState struct {
 	// engineName tracks the backend that actually produced the current output.
 	engineName string
 	// wroteWith is the engine that wrote the current article when it was not
@@ -201,10 +214,8 @@ type Runner struct {
 	attributionPath, manifestPath string
 	sentences, attributed         int
 	// usage accumulates what every model call in the current job cost, as far
-	// as the backends report it. Guarded because parallel extraction workers
-	// add to it concurrently.
-	usageMu sync.Mutex
-	usage   engine.Usage
+	// as the backends report it.
+	usage engine.Usage
 	// ledgerPath is the verified-claim-ledger scratch file for the current run,
 	// removed on success unless the user asked to keep artifacts.
 	ledgerPath string
@@ -229,13 +240,6 @@ type Runner struct {
 	started       time.Time
 	phaseStart    time.Time
 	timings       []PhaseTiming
-	// cache reuses claim extractions across runs, addressed by the content
-	// that produced them. Nil when caching is disabled; every method on it
-	// tolerates that, so there is no branch at the call sites.
-	cache *extractcache.Cache
-	// cacheHits counts reused extractions for this job. Written from the
-	// parallel extraction workers, so it is atomic.
-	cacheHits atomic.Int64
 }
 
 // Event is the sum type carried on the progress channel.
@@ -265,15 +269,26 @@ func NewRoutedRunner(cfg config.Config, events chan<- Event) *Runner {
 	cfg.Style = cfg.Style.OrDefault()
 	chains := make(map[engine.Kind]*chainState, 3)
 	// Kinds configured to the same engine share one chainState, so a fallback
-	// discovered while extracting is not re-discovered when writing.
+	// discovered while extracting is not re-discovered when writing. Distinct
+	// chains that still include the same fallback provider share the Engine
+	// instance itself, so a long-lived ACP agent is not started twice.
 	byName := map[string]*chainState{}
+	byEngine := map[string]engine.Engine{}
 	for _, k := range []engine.Kind{engine.KindExtract, engine.KindWrite, engine.KindEdit} {
 		name := engine.NameFor(cfg, k)
 		if existing, ok := byName[name]; ok {
 			chains[k] = existing
 			continue
 		}
-		cs := &chainState{engines: engine.ChainFor(cfg, k)}
+		engs := engine.ChainFor(cfg, k)
+		for i, e := range engs {
+			if shared, ok := byEngine[e.Name()]; ok {
+				engs[i] = shared
+			} else {
+				byEngine[e.Name()] = e
+			}
+		}
+		cs := &chainState{engines: engs}
 		byName[name] = cs
 		chains[k] = cs
 	}
@@ -304,16 +319,13 @@ func (r *Runner) chainFor(k engine.Kind) *chainState {
 // Run executes one job, reporting progress and a terminal Done/Err event. It
 // never closes the events channel; the caller owns its lifecycle.
 func (r *Runner) Run(ctx context.Context, job Job) {
-	// Bind emit to this run's cancellation before anything can be emitted, so
-	// a consumer that stops draining cannot wedge this goroutine.
-	r.done = ctx.Done()
-	r.started = time.Now()
-	r.timings = nil
-	r.sourceDigests = nil
-	r.ledgerDigest = ""
-	r.wroteWith = nil
-	r.attributionPath, r.manifestPath, r.sentences, r.attributed = "", "", 0, 0
-	r.usage = engine.Usage{}
+	// Reset all per-job state and bind emit to this run's cancellation before
+	// anything can be emitted, so a consumer that stops draining cannot wedge
+	// this goroutine.
+	r.runState = runState{
+		done:    ctx.Done(),
+		started: time.Now(),
+	}
 
 	// The cursor is deliberately NOT reset here. A Runner reused across a queue
 	// keeps the backend it settled on, so a dead provider is tried once for the
@@ -396,7 +408,7 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 
 	// Phase 4: validate, retry, save.
 	r.phase(PhaseSave, "running")
-	markdown, verr := r.validateWithRetry(ctx, writePrompt, markdown, records)
+	markdown, verr := r.validateWithRetry(ctx, writePrompt, markdown, records, style)
 	if verr != nil {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, markdown, verr)

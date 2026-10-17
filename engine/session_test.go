@@ -204,16 +204,25 @@ func TestSessionStreamJSONError(t *testing.T) {
 // indistinguishable from a crash, and the pipeline demoted the provider for
 // the rest of the queue.
 func TestSessionRefusalOutranksTheExitStatus(t *testing.T) {
-	withExec("stream-json-refusal", func() {
-		s := &Session{provider: Provider{Name: "claude", Bin: "claude", PromptViaStdin: true, StreamJSON: true}}
-		_, err := s.Generate(context.Background(), Request{Prompt: "p"})
-		if !errors.Is(err, ErrRefused) {
-			t.Fatalf("err = %v, want ErrRefused", err)
-		}
-		if !strings.HasPrefix(err.Error(), "claude: ") {
-			t.Errorf("error should name the provider, got %q", err)
-		}
-	})
+	var launched *exec.Cmd
+	orig := execCommand
+	execCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		launched = fakeExec("stream-json-refusal")(ctx, name, args...)
+		return launched
+	}
+	defer func() { execCommand = orig }()
+
+	s := &Session{provider: Provider{Name: "claude", Bin: "claude", PromptViaStdin: true, StreamJSON: true}}
+	_, err := s.Generate(context.Background(), Request{Prompt: "p"})
+	if !errors.Is(err, ErrRefused) {
+		t.Fatalf("err = %v, want ErrRefused", err)
+	}
+	if !strings.HasPrefix(err.Error(), "claude: ") {
+		t.Errorf("error should name the provider, got %q", err)
+	}
+	if launched == nil || launched.ProcessState == nil {
+		t.Error("Session.Generate must reap the child process with cmd.Wait() even on refusal")
+	}
 }
 
 func TestSessionPromptViaArg(t *testing.T) {

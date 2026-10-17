@@ -185,14 +185,14 @@ func repair(rec Record, source string) Record {
 	if !tooShort && !danglingTail.MatchString(quote) {
 		return rec
 	}
-	// Search the space-collapsed source in a case fold; slice the same
-	// collapsed source, un-folded, so the result is the source's text.
-	flat := strings.Join(strings.Fields(smartQuotes.Replace(source)), " ")
+	// Search the canonicalised source in a case fold; slice the same
+	// canonicalised source, un-folded, so the result is the source's text.
+	flat := canonical(source)
 	low := strings.ToLower(flat)
 	if len(low) != len(flat) {
 		return rec // a case fold that moves bytes cannot be sliced safely
 	}
-	needle := strings.ToLower(strings.Join(strings.Fields(smartQuotes.Replace(quote)), " "))
+	needle := strings.ToLower(canonical(quote))
 	start := strings.Index(low, needle)
 	if start < 0 {
 		return rec

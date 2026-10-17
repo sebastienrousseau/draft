@@ -24,7 +24,7 @@ func (demoEngine) Generate(_ context.Context, req engine.Request) (engine.Result
 	if req.Kind == engine.KindExtract {
 		return engine.Result{Text: "CLAIM: It used 5x fewer FLOPs\nSOURCE_QUOTE: \"used 5x fewer FLOPs\"\nTYPE: result\nSTRENGTH: demonstrated\n---"}, nil
 	}
-	body := strings.Repeat("The grounded result stands on its own and reads plainly. ", 110)
+	body := strings.Repeat("The grounded result stands on its own and reads plainly. ", 55)
 	return engine.Result{Text: "# Router-S Cuts Compute\n\n**One number tells the story.**\n\n" +
 		"<aside class=\"post-lead\"><p><strong>TL;DR.</strong> Fewer FLOPs.</p></aside>\n\n" +
 		"> **Executive Summary**\n>\n> - It used 5x fewer FLOPs.\n\n## What it shows\n\n" + body + "."}, nil

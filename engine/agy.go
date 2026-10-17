@@ -36,7 +36,8 @@ func agyUserEvent(prompt string) string {
 func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, Usage, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	var response, acc string
+	var response string
+	var acc strings.Builder
 	var haveResult, isError bool
 	var errMsg string
 	var usage Usage
@@ -71,7 +72,7 @@ func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, Usage, error
 				chunk = ev.Delta.Text
 			}
 			if chunk != "" {
-				acc += chunk
+				acc.WriteString(chunk)
 				if onChunk != nil {
 					onChunk(chunk)
 				}
@@ -91,7 +92,7 @@ func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, Usage, error
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return acc, usage, err
+		return acc.String(), usage, err
 	}
 	if isError {
 		if strings.TrimSpace(errMsg) == "" {
@@ -102,5 +103,5 @@ func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, Usage, error
 	if haveResult && strings.TrimSpace(response) != "" {
 		return strings.TrimSpace(response), usage, nil
 	}
-	return strings.TrimSpace(acc), usage, nil
+	return strings.TrimSpace(acc.String()), usage, nil
 }

@@ -6,6 +6,43 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Enforced the claim-scaled word budget (`writeBudget`) during post-generation
+  validation and near-duplicate paragraph repair so thin ledgers cannot pass
+  with bloated 3,000-word drafts.
+- Reaped child processes with `cmd.Wait()` on policy refusals (`ErrRefused`) in
+  `engine.Session.Generate` to prevent zombie processes and pipe leaks.
+- Applied custom `Style` rules (`--style`) and reported token usage on
+  `DoneEvent` during `--review` runs.
+- Selected the matching claim ledger by `ledger_sha256` in `draft --verify` when
+  multiple papers were drafted into the same dated directory.
+- Used `canonical` normalisation in `claims.repair` so truncated quotes
+  containing PDF ligatures or escaped newlines can be extended from the source.
+- Resolved `~` and bare filenames against `SourcesDir` when queueing additional
+  sources interactively in the TUI.
+- Fenced untrusted partial drafts in `prompt.ContinueWriting` and untrusted
+  claims in `prompt.Entailment` with per-call nonces (`prompt.Untrusted`), and
+  capped `stderr` capture in `engine.Session.Generate` with `limitedBuffer`.
+
+### Changed
+
+- Wired `internal/sessionpool.Pool` into `engine.ACP` to reap idle ACP agent
+  subprocesses and deduplicated `Engine` instances across per-kind chains in
+  `pipeline.NewRoutedRunner`.
+- Wired `internal/gbnf` schema-to-grammar compilation into `engine.Ollama` when
+  `Request.Schema` is set and routed JSON array extractions through
+  `claims.ParseJSON` in `claims.Parse`.
+- Isolated per-job mutable fields on `pipeline.Runner` into a single `runState`
+  struct reset at the start of every `Run` call.
+- Replaced quadratic paragraph word-count recomputation in `repairDuplicates`
+  with $O(P)$ incremental subtraction and `strings.Builder` accumulation in
+  `parseAgyStreamJSON`.
+- Deduplicated `pipeline.slugify` to delegate to `frontmatter.Slugify` and
+  removed custom `min`/`max` helpers shadowing Go builtins.
+- Folded the initial `[0.0.1]` changelog entry into `[0.0.2]` to align with the
+  repository's earliest git tag and release.
+
 ## [0.0.38] - 2026-10-13
 
 ### Fixed
@@ -1110,6 +1147,10 @@ series until `0.0.999`.
 
 ### Added
 
+- Initial release: a Bubble Tea CLI that turns research PDFs into grounded,
+  body-only Markdown drafts, writing with Claude via the active CLI session when
+  online and a local Ollama model when offline, grounded by a verified claim
+  ledger.
 - **Multi-provider session engines.** In `auto` mode `draft` now drives the
   first installed token-free coding-agent CLI — Claude, Codex, Gemini, Copilot,
   Cursor, Amp, Crush, Goose, Grok, or Qwen — through its own logged-in session.
@@ -1150,15 +1191,6 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
-## [0.0.1] - 2026-07-19
-
-### Added
-
-- Initial release: a Bubble Tea CLI that turns research PDFs into grounded,
-  body-only Markdown drafts, writing with Claude via the active CLI session when
-  online and a local Ollama model when offline, grounded by a verified claim
-  ledger.
-
 [0.0.38]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.38
 [0.0.37]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.37
 [0.0.36]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.36
@@ -1196,4 +1228,3 @@ series until `0.0.999`.
 [0.0.4]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.4
 [0.0.3]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.3
 [0.0.2]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.2
-[0.0.1]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.1

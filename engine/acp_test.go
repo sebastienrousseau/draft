@@ -181,6 +181,27 @@ func TestACPStreamsTextAndReusesTheProcess(t *testing.T) {
 		if res.Truncated {
 			t.Error("an end_turn stop must not be reported as truncated")
 		}
+		if got := a.Reap(); got != 0 {
+			t.Errorf("Reap before idle timeout = %d, want 0", got)
+		}
+	})
+}
+
+func TestACPReapsIdleSession(t *testing.T) {
+	withExec("acp-agent", func() {
+		a := acpEngine(t, config.Config{})
+		a.pool = nil
+		// Exercise lazy pool init on Reap().
+		_ = a.Reap()
+		res, err := a.Generate(context.Background(), Request{Prompt: "first"})
+		if err != nil || res.Text != "Hello from s1" {
+			t.Fatalf("first call = (%q, %v)", res.Text, err)
+		}
+		_ = a.Close()
+		res, err = a.Generate(context.Background(), Request{Prompt: "after close"})
+		if err != nil || res.Text != "Hello from s1" {
+			t.Fatalf("call after Close = (%q, %v), want fresh agent s1", res.Text, err)
+		}
 	})
 }
 
