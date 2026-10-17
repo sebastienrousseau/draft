@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.39] - 2026-10-17
+
 ### Fixed
 
 - Enforced the claim-scaled word budget (`writeBudget`) during post-generation
@@ -1191,6 +1193,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.39]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.39
 [0.0.38]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.38
 [0.0.37]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.37
 [0.0.36]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.36
