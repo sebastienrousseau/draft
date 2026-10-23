@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/sebastienrousseau/draft/rules"
@@ -96,12 +97,32 @@ func containsDash(s string) bool {
 	return strings.ContainsAny(s, "-–—‐‑")
 }
 
-var dashes = strings.NewReplacer(
-	"-", "", "–", "", "—", "", "‐", "", "‑", "",
-)
+func isDash(r rune) bool {
+	return strings.ContainsRune("-–—‐‑", r)
+}
 
+// stripDashes drops the dashes a model may leave out of a quote, except a
+// dash touching a digit. That one is part of a number: dropping it turns the
+// range "10-20" into the number 1020 and "-5" into 5, and Verify checks a
+// claim's numbers against its quote. Found by FuzzParse.
 func stripDashes(s string) string {
-	return strings.Join(strings.Fields(dashes.Replace(s)), " ")
+	rs := []rune(s)
+	var b strings.Builder
+	for i := 0; i < len(rs); i++ {
+		if !isDash(rs[i]) {
+			b.WriteRune(rs[i])
+			continue
+		}
+		j := i
+		for j < len(rs) && isDash(rs[j]) {
+			j++
+		}
+		if (i > 0 && unicode.IsDigit(rs[i-1])) || (j < len(rs) && unicode.IsDigit(rs[j])) {
+			b.WriteString(string(rs[i:j]))
+		}
+		i = j - 1
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
 
 // Normalise is the comparison form of source text and quotes. Two strings
@@ -131,13 +152,32 @@ func canonical(s string) string {
 		s = escapes.Replace(s)
 	}
 	if strings.IndexByte(s, '\n') >= 0 && strings.IndexByte(s, '-') >= 0 {
-		s = hyphenBreak.ReplaceAllString(s, "")
+		s = joinHyphenBreaks(s)
 	}
 	if needsGlyphFold(s) {
 		s = glyphs.Replace(s)
 	}
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// joinHyphenBreaks joins a word the extractor split at a line end, but not
+// digits either side of one: "10-\n20" is a range that wrapped, and joining
+// it would ground the number 1020. Found by FuzzParse.
+func joinHyphenBreaks(s string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range hyphenBreak.FindAllStringIndex(s, -1) {
+		if (m[0] > 0 && isASCIIDigit(s[m[0]-1])) || (m[1] < len(s) && isASCIIDigit(s[m[1]])) {
+			continue
+		}
+		b.WriteString(s[last:m[0]])
+		last = m[1]
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+func isASCIIDigit(c byte) bool { return '0' <= c && c <= '9' }
 
 // needsGlyphFold reports whether s contains any non-ASCII byte that the glyph
 // replacer rewrites (ligatures, curly quotes, invisible spaces).

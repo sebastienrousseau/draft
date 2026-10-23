@@ -6,6 +6,14 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Stopped quote verification joining digits across a dash or a line-break
+  hyphen, so a source range such as `10-20` (or `10-` wrapped before `20`) no
+  longer grounds the number `1020`, and `-5` no longer grounds `5`. Found by
+  `FuzzParse`; the fuzz oracle now models the escaped-newline and dropped-dash
+  tolerances `Normalise` documents, and the failing inputs are kept as seeds.
+
 ### Changed
 
 - Bumped `goreleaser/goreleaser-action` from 7.2.3 to 7.3.0 and
