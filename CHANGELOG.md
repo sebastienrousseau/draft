@@ -6,6 +6,11 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped `goreleaser/goreleaser-action` from 7.2.3 to 7.3.0 and
+  `ossf/scorecard-action` from 2.4.4 to 2.5.0 in CI.
+
 ## [0.0.39] - 2026-10-17
 
 ### Fixed
