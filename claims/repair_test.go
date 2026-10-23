@@ -35,6 +35,9 @@ func TestNormaliseTolerantOfRenderingNotOfWords(t *testing.T) {
 		{"a missing word", "the quick brown fox", "the quick fox"},
 		{"reordered words", "alpha then beta", "beta then alpha"},
 		{"an added negation", "the result was stable", "the result was not stable"},
+		{"a range joined into one number", "pages 10-20 of the report", "pages 1020 of the report"},
+		{"a dropped minus sign", "a change of -5 points", "a change of 5 points"},
+		{"a wrapped range joined into one number", "pages 10-\n20 of the report", "pages 1020 of the report"},
 	}
 	for _, tc := range misses {
 		if quoteInSource(tc.quote, tc.src) {

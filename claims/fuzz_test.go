@@ -4,6 +4,7 @@
 package claims
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -54,15 +55,55 @@ func FuzzParse(f *testing.F) {
 // to one space and never to none — "a b" does not match "ab", nor "ab" match
 // "a b".
 //
+// Two more renderings are not fabrication either, and Normalise measures both
+// as the commonest cause of dropped true claims: the two characters `\n`
+// standing for a line break, and a dash the model left out ("polynomialtime"
+// for "polynomial-time"). A dash touching a digit is not tolerated, because it
+// belongs to a number: "10-20" must not ground "1020", nor "-5" ground "5".
+//
 // This is written independently of the production normalise() so that the test
 // checks the property rather than restating the implementation.
 func groundedIn(source, quote string) bool {
 	fold := func(s string) string {
-		s = strings.NewReplacer("“", `"`, "”", `"`, "‘", "'", "’", "'").Replace(s)
+		s = strings.NewReplacer(`\n`, " ", `\r`, " ", `\t`, " ").Replace(s)
+		s = toFixedPoint(s, lineBreakHyphen)
+		s = strings.NewReplacer(
+			"“", `"`, "”", `"`, "‘", "'", "’", "'",
+			"ﬁ", "fi", "ﬂ", "fl", "ﬀ", "ff", "ﬃ", "ffi", "ﬄ", "ffl",
+			"\u00ad", "", "\u200b", "", "\ufeff", "",
+		).Replace(s)
 		return strings.ToLower(strings.Join(strings.Fields(s), " "))
 	}
-	return strings.Contains(fold(source), fold(quote))
+	src, q := fold(source), fold(quote)
+	if strings.Contains(src, q) {
+		return true
+	}
+	if strings.ContainsAny(quote, "-–—‐‑") {
+		return false // a quote may drop a dash, never add one
+	}
+	src = toFixedPoint(src, wordDash)
+	return strings.Contains(strings.Join(strings.Fields(src), " "), q)
 }
+
+// toFixedPoint deletes re's dash while keeping the characters either side of
+// it, until nothing matches: a match consumes the character after it, so one
+// pass would leave the second dash of "a-b-c".
+func toFixedPoint(s string, re *regexp.Regexp) string {
+	for {
+		next := re.ReplaceAllString(s, "$1$2")
+		if next == s {
+			return s
+		}
+		s = next
+	}
+}
+
+var (
+	// lineBreakHyphen is a word split at a line end, with no digit either side.
+	lineBreakHyphen = regexp.MustCompile(`(^|[^0-9])-\s*\n\s*([^0-9\s]|$)`)
+	// wordDash is a run of dashes with no digit on either side.
+	wordDash = regexp.MustCompile(`(^|[^0-9\-–—‐‑])[\-–—‐‑]+([^0-9\-–—‐‑]|$)`)
+)
 
 // The loosened invariant must still reject fabrication: collapsing whitespace
 // tolerates spacing, never invented content.
@@ -80,6 +121,11 @@ func TestGroundedInStillRejectsFabrication(t *testing.T) {
 		{name: "words split is not a match", source: "a b", quote: "ab", want: false},
 		{name: "invented number", source: "used 5x fewer FLOPs", quote: "used 9x fewer FLOPs", want: false},
 		{name: "invented clause", source: "used 5x fewer FLOPs", quote: "and halved training cost", want: false},
+		{name: "escaped line break", source: `used 5x\nfewer FLOPs`, quote: "used 5x fewer FLOPs", want: true},
+		{name: "dropped word hyphen", source: "a polynomial-time step", quote: "a polynomialtime step", want: true},
+		{name: "invented hyphen", source: "a polynomialtime step", quote: "a polynomial-time step", want: false},
+		{name: "range joined into a number", source: "pages 10-20", quote: "pages 1020", want: false},
+		{name: "dropped minus sign", source: "a change of -5", quote: "a change of 5", want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := groundedIn(tc.source, tc.quote); got != tc.want {
