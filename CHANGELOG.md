@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.40] - 2026-10-23
+
 ### Fixed
 
 - Stopped quote verification joining digits across a dash or a line-break
@@ -1206,6 +1208,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.40]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.40
 [0.0.39]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.39
 [0.0.38]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.38
 [0.0.37]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.37
