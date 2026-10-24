@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.41] - 2026-10-24
+
 ### Changed
 
 - Retracted `v0.0.33` in `go.mod`. Its tag was moved to a later commit after
@@ -1214,6 +1216,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.41]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.41
 [0.0.40]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.40
 [0.0.39]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.39
 [0.0.38]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.38
