@@ -6,6 +6,12 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Changed
+
+- Retracted `v0.0.33` in `go.mod`. Its tag was moved to a later commit after
+  the Go checksum database recorded it, so `go get` of that version fails
+  verification. Use `v0.0.34` or later.
+
 ## [0.0.40] - 2026-10-23
 
 ### Fixed
