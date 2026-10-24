@@ -26,6 +26,7 @@ import (
 	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/prompt"
+	"github.com/sebastienrousseau/draft/rules"
 	"github.com/sebastienrousseau/draft/validate"
 )
 
@@ -355,18 +356,10 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	r.phase(PhaseResolve, "done")
 
 	// Phase 1: read and section.
-	r.phase(PhaseExtract, "running")
-	sections, err := r.sections(ctx, job.Sources)
+	sections, err := r.readSections(ctx, job.Sources)
 	if err != nil {
-		r.phase(PhaseExtract, "failed")
 		return err
 	}
-	if len(sections) == 0 {
-		r.phase(PhaseExtract, "failed")
-		return fmt.Errorf("no readable text extracted from the source(s)")
-	}
-	r.log(fmt.Sprintf("read %d section(s)", len(sections)))
-	r.phase(PhaseExtract, "done")
 
 	outputDir := r.datedDir()
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -385,9 +378,38 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	ledger := claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars)
 	r.phase(PhaseClaims, "done")
 
-	// Phase 3: write. Size the article to the grounded material: a handful of
-	// claims cannot honestly fill 3000 words, and padding is what both slows
-	// local generation and trips the faithfulness checks into a costly retry.
+	// Phase 3: write.
+	markdown, writePrompt, style, err := r.compose(ctx, records, ledger)
+	if err != nil {
+		return err
+	}
+
+	// Phase 4: validate, retry, save.
+	return r.validateAndSave(ctx, outputDir, writePrompt, markdown, records, style)
+}
+
+// readSections is phase 1: read the sources and split them into sections.
+func (r *Runner) readSections(ctx context.Context, sources []string) ([]pdf.Section, error) {
+	r.phase(PhaseExtract, "running")
+	sections, err := r.sections(ctx, sources)
+	if err != nil {
+		r.phase(PhaseExtract, "failed")
+		return nil, err
+	}
+	if len(sections) == 0 {
+		r.phase(PhaseExtract, "failed")
+		return nil, fmt.Errorf("no readable text extracted from the source(s)")
+	}
+	r.log(fmt.Sprintf("read %d section(s)", len(sections)))
+	r.phase(PhaseExtract, "done")
+	return sections, nil
+}
+
+// compose is phase 3: write the article. It sizes the article to the grounded
+// material: a handful of claims cannot honestly fill 3000 words, and padding is
+// what both slows local generation and trips the faithfulness checks into a
+// costly retry. It returns the prompt and style validation needs.
+func (r *Runner) compose(ctx context.Context, records []claims.Record, ledger string) (markdown, writePrompt string, style rules.Style, err error) {
 	r.phase(PhaseWrite, "running")
 	minWords, maxWords := writeBudget(len(records), r.cfg.Style)
 	r.writeTokens = writeNumPredict(maxWords, r.cfg.PredictLength)
@@ -396,17 +418,24 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 	}
 	templates := loadTemplates(r.cfg)
 	r.styleText = prompt.EffectiveStyle(templates)
-	style := r.cfg.Style
+	style = r.cfg.Style
 	style.MinWords, style.MaxWords = minWords, maxWords
-	writePrompt := prompt.WritingWithStyle(templates, ledger, style)
-	markdown, err := r.write(ctx, writePrompt)
+	// The prompt aims below the limit; validation still enforces style.
+	aimed := style
+	aimed.MinWords, aimed.MaxWords = promptBudget(minWords, maxWords)
+	writePrompt = prompt.WritingWithStyle(templates, ledger, aimed)
+	markdown, err = r.write(ctx, writePrompt)
 	if err != nil {
 		r.phase(PhaseWrite, "failed")
-		return err
+		return "", "", style, err
 	}
 	r.phase(PhaseWrite, "done")
+	return markdown, writePrompt, style, nil
+}
 
-	// Phase 4: validate, retry, save.
+// validateAndSave is phase 4: validate the article (retrying the write when it
+// breaks a rule), save the set, and report the finished draft.
+func (r *Runner) validateAndSave(ctx context.Context, outputDir, writePrompt, markdown string, records []claims.Record, style rules.Style) error {
 	r.phase(PhaseSave, "running")
 	markdown, verr := r.validateWithRetry(ctx, writePrompt, markdown, records, style)
 	if verr != nil {

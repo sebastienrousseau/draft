@@ -28,11 +28,12 @@ type fakeEngine struct {
 	failEdit         bool   // if true, KindEdit calls return an error
 	writer           func(call int) (string, bool)
 
-	mu             sync.Mutex
-	writeCalls     int
-	extractCalls   int
-	lastWritePred  int    // NumPredict seen on the most recent write call
-	lastEditPrompt string // prompt seen on the most recent edit call
+	mu              sync.Mutex
+	writeCalls      int
+	extractCalls    int
+	lastWritePred   int    // NumPredict seen on the most recent write call
+	lastEditPrompt  string // prompt seen on the most recent edit call
+	lastWritePrompt string // prompt seen on the most recent write call
 }
 
 func (f *fakeEngine) Name() string { return f.name }
@@ -67,6 +68,7 @@ func (f *fakeEngine) Generate(_ context.Context, req engine.Request) (engine.Res
 		f.writeCalls++
 		n := f.writeCalls
 		f.lastWritePred = req.NumPredict
+		f.lastWritePrompt = req.Prompt
 		f.mu.Unlock()
 		if f.errOnWrite > 0 && n == f.errOnWrite {
 			return engine.Result{}, errors.New("write call failed")
@@ -162,6 +164,20 @@ func TestRunHappyPathAndCleanup(t *testing.T) {
 	// Ledger scratch file must be cleaned up by default.
 	if ledgers, _ := filepath.Glob(filepath.Join(cfg.DraftsDir, "*", "*-verified-claim-ledger.md")); len(ledgers) != 0 {
 		t.Errorf("ledger should have been cleaned up, found: %v", ledgers)
+	}
+}
+
+// The write prompt asks for a range ending below the hard word limit, so a
+// model that overshoots its target still lands inside the limit the
+// validator enforces. One claim gives a 500-650 word budget.
+func TestRunAsksForLessThanTheHardWordLimit(t *testing.T) {
+	cfg := testConfig(t)
+	eng := okEngine("fake")
+	if _, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}}); errText != "" {
+		t.Fatalf("an article inside the hard limit must pass: %s", errText)
+	}
+	if !strings.Contains(eng.lastWritePrompt, "between 500 and 585 words") {
+		t.Errorf("write prompt should aim below the 650-word limit:\n%s", eng.lastWritePrompt)
 	}
 }
 
