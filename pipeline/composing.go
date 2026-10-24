@@ -184,3 +184,16 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 	}
 	return markdown, fmt.Errorf("article failed the rules after %d retr(y/ies):\n- %s", r.cfg.WriteRetries, strings.Join(errs, "\n- "))
 }
+
+// promptBudget is the range the write prompt asks for. It ends a tenth below
+// the hard maximum the validator enforces, because a model aims at the top of
+// the range it is given and lands on or just past it: a dense ledger asked for
+// up to 3,000 words came back at 3,001 to 3,029 and was rejected, and asked for
+// up to 2,700 came back at 2,964. The headroom lets that overshoot pass.
+func promptBudget(minWords, maxWords int) (int, int) {
+	aim := maxWords - maxWords/10
+	if aim < minWords {
+		aim = minWords
+	}
+	return minWords, aim
+}

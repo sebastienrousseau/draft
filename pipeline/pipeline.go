@@ -420,7 +420,10 @@ func (r *Runner) compose(ctx context.Context, records []claims.Record, ledger st
 	r.styleText = prompt.EffectiveStyle(templates)
 	style = r.cfg.Style
 	style.MinWords, style.MaxWords = minWords, maxWords
-	writePrompt = prompt.WritingWithStyle(templates, ledger, style)
+	// The prompt aims below the limit; validation still enforces style.
+	aimed := style
+	aimed.MinWords, aimed.MaxWords = promptBudget(minWords, maxWords)
+	writePrompt = prompt.WritingWithStyle(templates, ledger, aimed)
 	markdown, err = r.write(ctx, writePrompt)
 	if err != nil {
 		r.phase(PhaseWrite, "failed")

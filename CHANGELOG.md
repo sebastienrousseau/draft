@@ -17,6 +17,11 @@ series until `0.0.999`.
   `validate.WordCount` split at every non-letter, so `3,000`, `FCA's` and
   `AI-driven` counted as two words each and the lead aside's HTML attributes
   counted too, putting real drafts 68 to 171 words over their prose length.
+- The write prompt now asks for a word range ending a tenth below the hard
+  maximum, which the validator still enforces. A model lands on or just past
+  the top of the range it is given: asked for up to 3,000 words, a dense
+  source came back at 3,001 to 3,029 and was rejected; asked for up to 2,700,
+  it came back at 2,964.
 
 ### Changed
 

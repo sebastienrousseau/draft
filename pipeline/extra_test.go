@@ -226,6 +226,19 @@ func TestWriteBudgetScalesWithClaims(t *testing.T) {
 	}
 }
 
+func TestPromptBudgetLeavesHeadroomUnderTheLimit(t *testing.T) {
+	for _, tc := range []struct{ lo, hi, wantHi int }{
+		{2250, 3000, 2700}, // a dense ledger at the house maximum
+		{500, 650, 585},    // a thin ledger at the floor
+		{600, 610, 600},    // never below the minimum
+	} {
+		lo, hi := promptBudget(tc.lo, tc.hi)
+		if lo != tc.lo || hi != tc.wantHi {
+			t.Errorf("promptBudget(%d, %d) = %d-%d, want %d-%d", tc.lo, tc.hi, lo, hi, tc.lo, tc.wantHi)
+		}
+	}
+}
+
 func TestWriteNumPredictBoundedByBudgetAndCeiling(t *testing.T) {
 	// A small budget produces a small cap; the ceiling always wins when lower.
 	if got := writeNumPredict(1000, 6000); got <= 1000 || got >= 6000 {
