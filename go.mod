@@ -32,3 +32,7 @@ require (
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
 )
+
+// The v0.0.33 tag was moved after the checksum database recorded it, so
+// the module no longer verifies. Use v0.0.34 or later.
+retract v0.0.33
