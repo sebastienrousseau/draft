@@ -13,6 +13,16 @@ series until `0.0.999`.
   and verify compared it with every other article's recorded digest. It now
   checks only a ledger that matches the digest or is named for the set, so a
   tampered ledger of its own still fails.
+- The word count behind the length limits now counts prose a reader sees.
+  `validate.WordCount` split at every non-letter, so `3,000`, `FCA's` and
+  `AI-driven` counted as two words each and the lead aside's HTML attributes
+  counted too, putting real drafts 68 to 171 words over their prose length.
+
+### Changed
+
+- `Runner.run` is split into phase helpers (`readSections`, `compose`,
+  `validateAndSave`) to bring it under the complexity ceilings. No behaviour
+  change.
 
 ## [0.0.41] - 2026-10-24
 

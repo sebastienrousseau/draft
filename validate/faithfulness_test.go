@@ -91,6 +91,30 @@ func TestFaithfulnessUngroundedNumbers(t *testing.T) {
 	}
 }
 
+// WordCount measures the prose a reader sees. Splitting at every non-letter
+// counted "3,000" and "FCA's" as two words each and the lead aside's tag
+// attributes as words too, which put real drafts 68 to 171 words over their
+// prose length and failed them against a limit they were inside.
+func TestWordCountCountsProseNotMarkup(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want int
+	}{
+		{"one two three", 3},
+		{"3,000 words and 0.82 on the test set", 8},
+		{"the FCA's AI-driven, technology-agnostic approach", 5},
+		{`<aside class="post-lead" aria-label="Article summary"><p>Two words</p></aside>`, 2},
+		{"<!-- lead-start -->\nkept\n<!-- lead-end -->", 1},
+		{"## Heading — here", 2},
+		{"**TL;DR.** See [the report](https://example.org/a-b-c).", 4},
+		{"café naïve", 2},
+	} {
+		if got := WordCount(tc.in); got != tc.want {
+			t.Errorf("WordCount(%q) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestWordCountAndArticleShape(t *testing.T) {
 	if WordCount("one two three") != 3 {
 		t.Error("word count wrong")
