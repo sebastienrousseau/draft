@@ -6,6 +6,14 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `draft --verify` no longer fails an article because another paper's claim
+  ledger sits in the same day folder. A failed job leaves its ledger behind,
+  and verify compared it with every other article's recorded digest. It now
+  checks only a ledger that matches the digest or is named for the set, so a
+  tampered ledger of its own still fails.
+
 ## [0.0.41] - 2026-10-24
 
 ### Changed

@@ -250,7 +250,7 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 	}
 	// If no ledger matches the manifest's digest, findLedger falls back to the
 	// first candidate so CheckArticle reports a ledger mismatch.
-	if got := findLedger(day, []byte(`{"assertions":[]}`)); string(got) != "# Verified Claim Ledger\n\nCLAIM: unrelated earlier paper\n" {
+	if got := findLedger(day, stem, []byte(`{"assertions":[]}`)); string(got) != "# Verified Claim Ledger\n\nCLAIM: unrelated earlier paper\n" {
 		t.Errorf("findLedger with unparseable manifest = %q", string(got))
 	}
 	if err := os.WriteFile(filepath.Join(day, stem+"-verified-claim-ledger.md"), []byte("tampered"), 0o644); err != nil {
@@ -259,6 +259,43 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 	out.Reset()
 	if code := runVerify(final, &out, &errb); code != 1 {
 		t.Errorf("tampered ledgers should fail verification, got %d", code)
+	}
+}
+
+// A run cleans its own ledger up, but a failed job drafted into the same day
+// folder leaves its ledger behind. That ledger belongs to another paper, so it
+// must not be checked against this article's recorded digest.
+func TestRunVerifyIgnoresAnotherPapersLedger(t *testing.T) {
+	day, stem, _ := writeRichSet(t, "the source text", true, false)
+	if err := os.Remove(filepath.Join(day, stem+"-verified-claim-ledger.md")); err != nil {
+		t.Fatal(err)
+	}
+	foreign := filepath.Join(day, "2026-09-06-another-paper-verified-claim-ledger.md")
+	if err := os.WriteFile(foreign, []byte("# Verified Claim Ledger\n\nCLAIM: another paper\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	final := filepath.Join(day, "final", stem+"-final.md")
+	if code := runVerify(final, &out, &errb); code != 0 || strings.Contains(out.String(), "does not match the recorded digest") {
+		t.Errorf("another paper's ledger failed verification, exit %d:\n%s", code, out.String())
+	}
+}
+
+// The pipeline names a ledger after the job's source, not the article, so a
+// tampered ledger under that name is still this set's own and must fail.
+func TestRunVerifyChecksALedgerNamedForTheSource(t *testing.T) {
+	day, stem, _ := writeRichSet(t, "the source text", true, false)
+	if err := os.Remove(filepath.Join(day, stem+"-verified-claim-ledger.md")); err != nil {
+		t.Fatal(err)
+	}
+	own := filepath.Join(day, "2026-09-06-paper-verified-claim-ledger.md")
+	if err := os.WriteFile(own, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	final := filepath.Join(day, "final", stem+"-final.md")
+	if code := runVerify(final, &out, &errb); code != 1 || !strings.Contains(out.String(), "does not match the recorded digest") {
+		t.Errorf("a tampered source-named ledger should fail, exit %d:\n%s", code, out.String())
 	}
 }
 

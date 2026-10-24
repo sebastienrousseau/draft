@@ -91,15 +91,25 @@ func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Se
 // included so a --merge job cannot collide with a single-source job that
 // happens to start from the same file.
 func ledgerPathFor(outputDir string, job Job) string {
+	return filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+LedgerStem(job.Sources)+LedgerSuffix)
+}
+
+// LedgerSuffix ends every verified-claim ledger's file name.
+const LedgerSuffix = "-verified-claim-ledger.md"
+
+// LedgerStem is the part of a ledger's name, between the date and
+// LedgerSuffix, that identifies the job's sources. It is exported so --verify
+// can tell a set's own ledger from another paper's in the same day folder.
+func LedgerStem(sources []string) string {
 	stem := "sources"
-	if len(job.Sources) > 0 {
-		base := filepath.Base(job.Sources[0])
+	if len(sources) > 0 {
+		base := filepath.Base(sources[0])
 		stem = slugify(strings.TrimSuffix(base, filepath.Ext(base)))
 	}
-	if len(job.Sources) > 1 {
-		stem = fmt.Sprintf("%s-plus-%d", stem, len(job.Sources)-1)
+	if len(sources) > 1 {
+		stem = fmt.Sprintf("%s-plus-%d", stem, len(sources)-1)
 	}
-	return filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+stem+"-verified-claim-ledger.md")
+	return stem
 }
 
 // cleanupArtifacts removes the scratch claim ledger after a successful draft so

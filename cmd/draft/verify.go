@@ -13,10 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
 	"github.com/sebastienrousseau/draft/internal/c2pa"
+	"github.com/sebastienrousseau/draft/pipeline"
 	"github.com/sebastienrousseau/draft/provenance"
 )
 
@@ -82,37 +84,67 @@ func loadSet(path string, stderr io.Writer) (report provenance.CheckReport, body
 	// The ledger is normally cleaned up after a successful run, so its digest
 	// is checked only when a --keep-artifacts ledger is still beside the set.
 	dayRoot := filepath.Dir(filepath.Dir(manifestPath))
-	ledger := findLedger(dayRoot, manifest)
+	stem := strings.TrimSuffix(filepath.Base(manifestPath), "-c2pa.json")
+	ledger := findLedger(dayRoot, stem, manifest)
 	report = provenance.CheckArticle(body+"\n", manifest, ledger, resolveSourceDigest)
 	ok = true
 	return
 }
 
-// findLedger returns the kept ledger in dayRoot that belongs to manifest. When
-// multiple papers were drafted on the same day, the ledger whose SHA-256
-// matches the manifest's recorded ledger_sha256 is selected, falling back to
-// the first candidate so a modified ledger is still reported as a mismatch.
-func findLedger(dayRoot string, manifest []byte) []byte {
-	matches, _ := filepath.Glob(filepath.Join(dayRoot, "*-verified-claim-ledger.md"))
+// findLedger returns the kept ledger in dayRoot that belongs to the set named
+// stem. The ledger whose SHA-256 matches the manifest's recorded ledger_sha256
+// is selected. Failing that, only a ledger named for this set is returned, so a
+// modified ledger is still reported as a mismatch while another paper's ledger
+// in the same day folder (a failed job's leftover) is not checked at all.
+func findLedger(dayRoot, stem string, manifest []byte) []byte {
+	matches, _ := filepath.Glob(filepath.Join(dayRoot, "*"+pipeline.LedgerSuffix))
 	if len(matches) == 0 {
 		return nil
 	}
-	first, _ := os.ReadFile(matches[0])
-	if len(matches) == 1 {
-		return first
-	}
 	g, _, err := provenance.ParseManifest(manifest)
 	if err != nil || g.LedgerSHA256 == "" {
+		// Without a recorded digest the ledger is never compared, so which
+		// candidate is returned cannot change the verdict.
+		first, _ := os.ReadFile(matches[0])
 		return first
 	}
+	var own []byte
 	for _, m := range matches {
-		b, _ := os.ReadFile(m)
+		b, err := os.ReadFile(m)
+		if err != nil {
+			continue
+		}
 		sum := sha256.Sum256(b)
 		if hex.EncodeToString(sum[:]) == g.LedgerSHA256 {
 			return b
 		}
+		if own == nil && ownsLedger(filepath.Base(m), stem, g.Sources) {
+			own = b
+		}
 	}
-	return first
+	return own
+}
+
+// ownsLedger reports whether a ledger file name belongs to the set: either
+// named for the article, or named the way the pipeline names it, after the
+// job's sources under the date of the run.
+func ownsLedger(name, stem string, sources []provenance.Source) bool {
+	if name == stem+pipeline.LedgerSuffix {
+		return true
+	}
+	if len(sources) == 0 {
+		return false
+	}
+	paths := make([]string, len(sources))
+	for i, s := range sources {
+		paths[i] = s.Path
+	}
+	date, ok := strings.CutSuffix(name, "-"+pipeline.LedgerStem(paths)+pipeline.LedgerSuffix)
+	if !ok {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", date)
+	return err == nil
 }
 
 // runVerify checks an article against the provenance written beside it and
