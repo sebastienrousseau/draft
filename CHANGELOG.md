@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.42] - 2026-10-24
+
 ### Fixed
 
 - `draft --verify` no longer fails an article because another paper's claim
@@ -1239,6 +1241,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.42]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.42
 [0.0.41]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.41
 [0.0.40]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.40
 [0.0.39]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.39
