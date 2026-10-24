@@ -108,6 +108,14 @@ func TestWordCountCountsProseNotMarkup(t *testing.T) {
 		{"## Heading — here", 2},
 		{"**TL;DR.** See [the report](https://example.org/a-b-c).", 4},
 		{"café naïve", 2},
+		// Unclosed markup is prose, as the regexp it replaced treated it.
+		{"<a no close", 3},
+		{"<!-- open", 1},
+		{"[x](y no close", 3},
+		{"<!-- a --> b <!-- c --", 2},
+		{"x <b>y</b> <i z", 4},
+		{"a ](b) c ](d", 3},
+		{"< 3 and 4 > 2", 4},
 	} {
 		if got := WordCount(tc.in); got != tc.want {
 			t.Errorf("WordCount(%q) = %d, want %d", tc.in, got, tc.want)
