@@ -71,6 +71,14 @@ api: ## Report how the public API moved since the last release
 vuln: ## Scan for known vulnerabilities (same check as CI)
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+.PHONY: complexity
+complexity: ## Hold every function to the complexity ceilings (same check as CI)
+	cd tools/complexity && go test ./... && go run . -root ../.. -baseline ../../complexity-baseline.txt
+
+.PHONY: complexity-baseline
+complexity-baseline: ## Record complexity improvements; refuses over a regression
+	cd tools/complexity && go run . -root ../.. -baseline ../../complexity-baseline.txt -write
+
 .PHONY: vet
 vet: ## Run go vet
 	go vet $(PKG)
@@ -119,7 +127,7 @@ tidy: ## Tidy module dependencies
 	go mod tidy
 
 .PHONY: check
-check: fmt vet test docs-lint ## Format, vet, test, and lint the docs
+check: fmt vet test complexity docs-lint ## Format, vet, test, complexity, and lint the docs
 
 .PHONY: clean
 clean: ## Remove build artefacts

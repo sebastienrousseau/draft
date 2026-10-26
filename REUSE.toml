@@ -12,6 +12,8 @@ path = [
   ".devcontainer/devcontainer.json",
   "go.mod",
   "go.sum",
+  "tools/complexity/go.mod",
+  "tools/complexity/go.sum",
   "Makefile",
   ".editorconfig",
   ".gitattributes",

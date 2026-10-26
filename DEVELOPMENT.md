@@ -51,8 +51,9 @@ make race       # go test -race ./...
 make cover      # coverage + the same 98% gate CI applies
 make bench      # benchmarks
 make lint       # golangci-lint
+make complexity # complexity ceilings against complexity-baseline.txt
 make docs-lint  # markdown, spelling, intra-repo links
-make check      # fmt, vet, test, docs-lint
+make check      # fmt, vet, test, complexity, docs-lint
 make help       # every target
 
 # The Unix install contract (GNU make reads GNUmakefile first, and it
@@ -80,6 +81,7 @@ job passes.
 | `build` → coverage            | `make cover`                                        |
 | `test (ubuntu/macos/windows)` | `go test ./...`                                     |
 | `lint`                        | `golangci-lint run`                                 |
+| `complexity`                  | `make complexity`                                   |
 | `msrv (go 1.25)`              | `go build ./... && go test ./...` on Go 1.25        |
 | `govulncheck`                 | `make vuln`                                         |
 | `reuse`                       | `reuse lint`                                        |
@@ -92,8 +94,25 @@ Everything at once, in CI order:
 
 ```console
 gofmt -s -l . && go vet ./... && go test -race ./... && make cover \
-  && golangci-lint run && make docs-lint && make vuln && reuse lint
+  && golangci-lint run && make complexity && make docs-lint && make vuln \
+  && reuse lint
 ```
+
+### Complexity ceilings
+
+Every non-test function is held to cyclomatic complexity 10, cognitive
+complexity 15, Halstead difficulty 30 and 60 lines, and every file to 500
+lines. `tools/complexity` measures them (gocyclo, gocognit, and its own
+Halstead count over the function's tokens) and compares the result with
+`complexity-baseline.txt`, which records what was already over a ceiling when
+the gate arrived.
+
+- New or changed code must be within every ceiling. A recorded offender may
+  not get worse, and renaming one makes it new, so it must then meet them.
+- When a recorded offender improves, the check fails until
+  `make complexity-baseline` writes the improvement down. That target refuses
+  while anything is worse than recorded, so the baseline only ever shrinks.
+- Tests are not measured: table-driven tests are long by design.
 
 ### Benchmark regressions
 

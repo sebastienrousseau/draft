@@ -6,6 +6,17 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- A complexity gate. `make complexity` (and the `complexity` CI job) holds
+  every non-test function to cyclomatic 10, cognitive 15, Halstead difficulty
+  30 and 60 lines, and every file to 500 lines. The 52 functions and files
+  already over a ceiling are recorded in `complexity-baseline.txt` and may
+  not get worse; an improvement must be recorded with
+  `make complexity-baseline`, which refuses over a regression, so the
+  baseline only shrinks. The tool lives in its own module,
+  `tools/complexity`, so its dependencies stay out of draft's.
+
 ## [0.0.42] - 2026-10-24
 
 ### Fixed
