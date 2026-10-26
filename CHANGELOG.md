@@ -17,6 +17,14 @@ series until `0.0.999`.
   baseline only shrinks. The tool lives in its own module,
   `tools/complexity`, so its dependencies stay out of draft's.
 
+### Changed
+
+- A write retry now logs each rule the previous draft broke, as
+  `write retry 1: article is 3104 words; maximum is 3000`, instead of only
+  how many it broke. A run that needed retries can now say why.
+  `Runner.validateWithRetry` is split to bring it under the cognitive
+  ceiling.
+
 ## [0.0.42] - 2026-10-24
 
 ### Fixed
