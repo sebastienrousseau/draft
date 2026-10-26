@@ -24,6 +24,9 @@ series until `0.0.999`.
   how many it broke. A run that needed retries can now say why.
   `Runner.validateWithRetry` is split to bring it under the cognitive
   ceiling.
+- `main.run`, the worst offender in the new baseline (cyclomatic 28,
+  cognitive 37, 172 lines), is split into flag parsing, the early-exit modes,
+  configuration checks and job dispatch. No behaviour change.
 
 ## [0.0.42] - 2026-10-24
 

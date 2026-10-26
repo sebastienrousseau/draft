@@ -11,7 +11,6 @@ claims/verify.go repair cyclomatic=14
 claims/verify.go stripDashes halstead=31
 cmd/draft/completion.go writeCompletion lines=65
 cmd/draft/doctor.go runDoctor cognitive=30 cyclomatic=26 halstead=39.7 lines=122
-cmd/draft/main.go run cognitive=37 cyclomatic=28 lines=172
 cmd/draft/main.go usage lines=74
 cmd/draft/manpage.go writeManPage lines=110
 cmd/draft/verify.go printVerifyReport cognitive=17 cyclomatic=12
