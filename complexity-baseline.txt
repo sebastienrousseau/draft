@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Functions and files already over a complexity ceiling, with the value each
+# may not exceed. Written by `make complexity-baseline`, which refuses
+# while anything is worse than recorded, so this file only ever shrinks.
+# Format: <path> <function or (file)> <metric>=<value>...
+claims/table.go tableBlockClaims cognitive=17 cyclomatic=11
+claims/verify.go Verify cyclomatic=15
+claims/verify.go repair cyclomatic=14
+claims/verify.go stripDashes halstead=31
+cmd/draft/completion.go writeCompletion lines=65
+cmd/draft/doctor.go runDoctor cognitive=30 cyclomatic=26 halstead=39.7 lines=122
+cmd/draft/main.go usage lines=74
+cmd/draft/manpage.go writeManPage lines=110
+cmd/draft/verify.go printVerifyReport cognitive=17 cyclomatic=12
+config/config.go Load cognitive=18 cyclomatic=17 lines=83
+engine/acp.go (file) filelines=540
+engine/acp.go ACP.Generate cognitive=16 cyclomatic=16 halstead=36.2 lines=76
+engine/acp.go acpConn.read cognitive=16 cyclomatic=12
+engine/agy.go parseAgyStreamJSON cognitive=29 cyclomatic=18 halstead=31 lines=72
+engine/api.go API.Generate cyclomatic=12
+engine/engine.go chainForName cognitive=16
+engine/ollama.go Ollama.Generate cognitive=25 cyclomatic=19 halstead=32.3 lines=107
+engine/session.go Session.Generate cognitive=20 cyclomatic=22 halstead=37.8 lines=106
+engine/session.go parseStreamJSON cognitive=44 cyclomatic=24 halstead=34.3 lines=80
+examples/frontmatter/main.go main cognitive=16 cyclomatic=16 lines=91
+frontmatter/frontmatter.go ExtractMetadata cognitive=31 cyclomatic=21 halstead=36.2 lines=98
+frontmatter/generate.go GenerateWithOptions cyclomatic=12 halstead=33.7 lines=168
+frontmatter/generate.go ProcessFile cognitive=19 cyclomatic=17 lines=91
+internal/atomicfile/atomicfile.go WriteSet cognitive=16 halstead=32
+internal/c2pa/c2pa.go parseReport cognitive=16 cyclomatic=13
+internal/pdf/pdf.go ExtractWith cognitive=20 cyclomatic=17 lines=69
+internal/pdf/pdf.go SplitSections cognitive=16 halstead=35.6
+internal/pdf/tex.go stripTeXComments cognitive=17 halstead=30.6
+internal/tui/tui.go (file) filelines=529
+internal/tui/tui.go Model.Update cyclomatic=21 halstead=30.8
+internal/tui/tui.go Model.handleKey cognitive=36 cyclomatic=25 halstead=39 lines=94
+internal/tui/tui.go Model.trimTail halstead=45.3
+internal/tui/view.go (file) filelines=531
+internal/tui/view.go Model.renderEngineSelectView cognitive=19 cyclomatic=12 lines=67
+pipeline/enginechain.go Runner.generateOn cognitive=28 cyclomatic=16 halstead=35 lines=67
+pipeline/grounding.go (file) filelines=507
+pipeline/grounding.go Runner.extractClaims cognitive=38 cyclomatic=23 halstead=54.5 lines=141
+pipeline/grounding.go Runner.extractOne cyclomatic=12
+pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
+pipeline/pipeline.go (file) filelines=623
+pipeline/review.go Runner.review cyclomatic=14 lines=115
+pipeline/review.go applySurgicalEdits halstead=37.2
+pipeline/saving.go Runner.save cognitive=20 cyclomatic=14 halstead=31.5 lines=83
+prompt/prompt.go WritingWithStyle lines=70
+provenance/provenance.go (file) filelines=550
+provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 lines=79
+provenance/provenance.go sentences cognitive=29 cyclomatic=21 halstead=49.4
+rules/rules.go InflectLike cyclomatic=14
+validate/banned.go bannedScanner.findAll halstead=30.8
+validate/validate.go ErrorsWithStyle cognitive=27 cyclomatic=20 halstead=34.7 lines=82

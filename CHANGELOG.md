@@ -6,6 +6,28 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- A complexity gate. `make complexity` (and the `complexity` CI job) holds
+  every non-test function to cyclomatic 10, cognitive 15, Halstead difficulty
+  30 and 60 lines, and every file to 500 lines. The 52 functions and files
+  already over a ceiling are recorded in `complexity-baseline.txt` and may
+  not get worse; an improvement must be recorded with
+  `make complexity-baseline`, which refuses over a regression, so the
+  baseline only shrinks. The tool lives in its own module,
+  `tools/complexity`, so its dependencies stay out of draft's.
+
+### Changed
+
+- A write retry now logs each rule the previous draft broke, as
+  `write retry 1: article is 3104 words; maximum is 3000`, instead of only
+  how many it broke. A run that needed retries can now say why.
+  `Runner.validateWithRetry` is split to bring it under the cognitive
+  ceiling.
+- `main.run`, the worst offender in the new baseline (cyclomatic 28,
+  cognitive 37, 172 lines), is split into flag parsing, the early-exit modes,
+  configuration checks and job dispatch. No behaviour change.
+
 ## [0.0.42] - 2026-10-24
 
 ### Fixed

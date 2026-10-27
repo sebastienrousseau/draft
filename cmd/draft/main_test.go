@@ -613,3 +613,20 @@ func TestUnknownReaderIsRejected(t *testing.T) {
 		t.Errorf("stderr should name the reader: %s", errb.String())
 	}
 }
+
+// --verify with --json goes to the JSON report, the one --verify path run
+// itself did not exercise.
+func TestRunVerifyJSONViaRun(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing-final.md")
+	var wantOut, wantErr, out, errb strings.Builder
+	want := runVerifyJSON(missing, &wantOut, &wantErr)
+	if code := run([]string{"--verify", missing, "--json"}, &out, &errb); code != want {
+		t.Errorf("--verify --json exit = %d, want %d", code, want)
+	}
+	if out.String() != wantOut.String() || errb.String() != wantErr.String() {
+		t.Errorf("--verify --json output differs from runVerifyJSON:\n%q\n%q", out.String(), wantOut.String())
+	}
+	if want != 1 || errb.Len() == 0 {
+		t.Errorf("a missing set must exit 1 with a reason on stderr: %d %q", want, errb.String())
+	}
+}
