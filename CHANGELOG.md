@@ -28,6 +28,18 @@ series until `0.0.999`.
   cognitive 37, 172 lines), is split into flag parsing, the early-exit modes,
   configuration checks and job dispatch. No behaviour change.
 
+### Security
+
+- `golang.org/x/text` is raised from v0.3.8 to v0.41.0, past GO-2026-5970
+  (fixed in v0.39.0) and GO-2026-6629 (fixed in v0.41.0). Neither was
+  reachable, since only `x/text/transform` is compiled and only on Windows,
+  but no affected version can now resolve. v0.41.0 is the newest release
+  that still allows Go 1.25. `tools/complexity` moves to
+  `golang.org/x/tools` v0.49.0 for the same reason. Older `x/mod`, `x/net`
+  and `goldmark` versions still appear in both module graphs, listed by the
+  `go.mod` files of `x/text` and `x/tools`, but none is compiled and
+  `go mod tidy` drops any requirement that would raise them.
+
 ## [0.0.42] - 2026-10-24
 
 ### Fixed
