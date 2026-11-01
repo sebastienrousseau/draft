@@ -107,6 +107,9 @@ pinned by a test.
    tool-granting flags.
 6. **A draft is written as a set or not at all.** Body, frontmatter and final
    document share a stem claimed with `O_EXCL`, so the three can never desync.
+   All three are staged and flushed before any is renamed into place, and a
+   failed save removes the whole set, claim included.
+   `TestFailedSaveLeavesNoPartialSet`.
 
 ## The two seams
 

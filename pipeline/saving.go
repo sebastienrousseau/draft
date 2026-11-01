@@ -16,6 +16,7 @@ import (
 	"github.com/sebastienrousseau/draft/claims"
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/frontmatter"
+	"github.com/sebastienrousseau/draft/internal/atomicfile"
 	"github.com/sebastienrousseau/draft/internal/pdf"
 	"github.com/sebastienrousseau/draft/prompt"
 	"github.com/sebastienrousseau/draft/provenance"
@@ -52,81 +53,102 @@ func (r *Runner) save(ctx context.Context, outputDir, markdown string, records [
 	title := extractTitle(body)
 	now := time.Now()
 	dateStr := now.Format("2006-01-02")
-	base := dateStr + "-" + slugify(title)
 
-	srcDir := filepath.Join(outputDir, "source")
-	yamlDir := filepath.Join(outputDir, "yaml")
-	finalDir := filepath.Join(outputDir, "final")
-	for _, d := range []string{srcDir, yamlDir, finalDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			return "", 0, err
-		}
-	}
-
-	// Uniquify the trio as a set: a leftover in any one folder bumps all three
-	// names together, so the files can never desync.
-	//
-	// The body file is claimed with O_EXCL rather than a bare existence check,
-	// so two runs racing on the same title cannot both pick the same stem
-	// between the check and the write. The loop is bounded: an unbounded
-	// search would spin forever against an undeletable path.
-	var stem, bodyPath, fmPath, finalPath string
-	var bodyFile *os.File
-	for i := 1; ; i++ {
-		if i > maxStemAttempts {
-			return "", 0, fmt.Errorf("could not find a free filename for %q after %d attempts", base, maxStemAttempts)
-		}
-		stem = base
-		if i > 1 {
-			stem = fmt.Sprintf("%s-%d", base, i)
-		}
-		bodyPath = filepath.Join(srcDir, stem+"-body.md")
-		fmPath = filepath.Join(yamlDir, stem+"-frontmatter.yaml")
-		finalPath = filepath.Join(finalDir, stem+"-final.md")
-		if fileExists(fmPath) || fileExists(finalPath) {
-			continue
-		}
-		f, err := os.OpenFile(bodyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err != nil {
-			if errors.Is(err, os.ErrExist) {
-				continue
-			}
-			return "", 0, err
-		}
-		bodyFile = f
-		break
-	}
-
-	if _, err := bodyFile.WriteString(body + "\n"); err != nil {
-		_ = bodyFile.Close()
-		return "", 0, err
-	}
-	if err := bodyFile.Close(); err != nil {
+	set, err := claimSet(outputDir, dateStr+"-"+slugify(title))
+	if err != nil {
 		return "", 0, err
 	}
 	site := frontmatter.SiteFromEnv()
 	fmYAML := frontmatter.GenerateWithOptions(body, frontmatter.Options{
 		Date:    now,
-		Slug:    strings.TrimPrefix(stem, dateStr+"-"),
+		Slug:    strings.TrimPrefix(set.stem, dateStr+"-"),
 		Site:    &site,
 		Engine:  r.writerName(),
 		Model:   r.writerModel(),
 		Version: r.cfg.Version,
 	})
-	if err := os.WriteFile(fmPath, []byte(fmYAML+"\n"), 0o644); err != nil {
-		return "", 0, err
-	}
-	finalMD := frontmatter.Combine(fmYAML, body)
-	if err := os.WriteFile(finalPath, []byte(finalMD+"\n"), 0o644); err != nil {
+	if err := set.write(body, fmYAML); err != nil {
 		return "", 0, err
 	}
 
-	r.log("saved body: " + shortPath(r.cfg, bodyPath))
-	r.log("saved frontmatter: " + shortPath(r.cfg, fmPath))
-	r.saveProvenance(outputDir, stem, title, body+"\n", records, now)
-	r.signManifest(ctx, outputDir, stem, bodyPath)
+	r.log("saved body: " + shortPath(r.cfg, set.body))
+	r.log("saved frontmatter: " + shortPath(r.cfg, set.frontmatter))
+	r.saveProvenance(outputDir, set.stem, title, body+"\n", records, now)
+	r.signManifest(ctx, outputDir, set.stem, set.body)
 
-	return finalPath, validate.WordCount(body), nil
+	return set.final, validate.WordCount(body), nil
+}
+
+// outputSet is the three files of one saved draft, which share a stem.
+type outputSet struct {
+	stem, body, frontmatter, final string
+}
+
+// writeSet is a variable so a test can fail the publishing renames partway,
+// which no real filesystem does on demand.
+var writeSet = atomicfile.WriteSet
+
+// claimSet picks a stem free in all three folders and claims it.
+//
+// The trio is uniquified as a set: a leftover in any one folder bumps all
+// three names together, so the files can never desync. The claim is an empty
+// body file created with O_EXCL rather than a bare existence check, so two
+// runs racing on the same title cannot both take the stem between the check
+// and the write. The loop is bounded: an unbounded search would spin forever
+// against an undeletable path.
+func claimSet(outputDir, base string) (outputSet, error) {
+	srcDir := filepath.Join(outputDir, "source")
+	yamlDir := filepath.Join(outputDir, "yaml")
+	finalDir := filepath.Join(outputDir, "final")
+	for _, d := range []string{srcDir, yamlDir, finalDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return outputSet{}, err
+		}
+	}
+	for i := 1; i <= maxStemAttempts; i++ {
+		stem := base
+		if i > 1 {
+			stem = fmt.Sprintf("%s-%d", base, i)
+		}
+		set := outputSet{
+			stem:        stem,
+			body:        filepath.Join(srcDir, stem+"-body.md"),
+			frontmatter: filepath.Join(yamlDir, stem+"-frontmatter.yaml"),
+			final:       filepath.Join(finalDir, stem+"-final.md"),
+		}
+		if fileExists(set.frontmatter) || fileExists(set.final) {
+			continue
+		}
+		f, err := os.OpenFile(set.body, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return outputSet{}, err
+		}
+		return set, f.Close()
+	}
+	return outputSet{}, fmt.Errorf("could not find a free filename for %q after %d attempts", base, maxStemAttempts)
+}
+
+// write publishes the set, or on failure removes all of it, claim included.
+//
+// Every file is staged and flushed before any is renamed into place, so most
+// failures leave nothing to undo. A failure between renames would leave a
+// partial set, so the whole set is removed: none of its names can belong to
+// anyone else, since a run takes a stem only by claiming its body first.
+func (s outputSet) write(body, fmYAML string) error {
+	err := writeSet(map[string][]byte{
+		s.body:        []byte(body + "\n"),
+		s.frontmatter: []byte(fmYAML + "\n"),
+		s.final:       []byte(frontmatter.Combine(fmYAML, body) + "\n"),
+	}, 0o644)
+	if err != nil {
+		for _, path := range []string{s.body, s.frontmatter, s.final} {
+			_ = os.Remove(path)
+		}
+	}
+	return err
 }
 
 // saveProvenance writes the attribution and the C2PA manifest definition for
