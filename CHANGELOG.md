@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.43] - 2026-11-01
+
 ### Added
 
 - A complexity gate. `make complexity` (and the `complexity` CI job) holds
@@ -1316,6 +1318,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.43]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.43
 [0.0.42]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.42
 [0.0.41]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.41
 [0.0.40]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.40
