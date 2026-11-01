@@ -44,7 +44,7 @@ pipeline/grounding.go (file) filelines=507
 pipeline/grounding.go Runner.extractClaims cognitive=38 cyclomatic=23 halstead=54.5 lines=141
 pipeline/grounding.go Runner.extractOne cyclomatic=12
 pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
-pipeline/pipeline.go (file) filelines=623
+pipeline/pipeline.go (file) filelines=617
 pipeline/review.go Runner.review cyclomatic=14 lines=115
 pipeline/review.go applySurgicalEdits halstead=37.2
 pipeline/saving.go Runner.save cognitive=20 cyclomatic=14 halstead=31.5 lines=83

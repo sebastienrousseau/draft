@@ -25,6 +25,7 @@ type fakeEngine struct {
 	errOnWrite       int    // if >0, the Nth write call returns an error
 	failExtractAfter int    // if >0, extract calls beyond this count return an error
 	editResponse     string // returned for KindEdit (defaults to "[]")
+	extractResponse  string // returned for KindExtract (defaults to extractionResponse)
 	failEdit         bool   // if true, KindEdit calls return an error
 	writer           func(call int) (string, bool)
 
@@ -50,6 +51,9 @@ func (f *fakeEngine) Generate(_ context.Context, req engine.Request) (engine.Res
 		f.mu.Unlock()
 		if f.failExtractAfter > 0 && n > f.failExtractAfter {
 			return engine.Result{}, errors.New("extract call failed")
+		}
+		if f.extractResponse != "" {
+			return engine.Result{Text: f.extractResponse}, nil
 		}
 		return engine.Result{Text: extractionResponse}, nil
 	case engine.KindEdit:

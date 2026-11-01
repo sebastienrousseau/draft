@@ -24,6 +24,14 @@ series until `0.0.999`.
   how many it broke. A run that needed retries can now say why.
   `Runner.validateWithRetry` is split to bring it under the cognitive
   ceiling.
+- A run in which no claim survives verification now fails with
+  `ErrNoVerifiedClaims`, exit status 1, before the write call, instead of
+  writing and saving an article. The faithfulness checks see only numbers
+  and metric terms, so an article written from an empty ledger passed them
+  on prose grounded in nothing. This is what the resume design always
+  documented: a source that changed wholly "resumes to an empty ledger
+  that fails the write phase honestly". Two tests had been passing on the
+  old behaviour and now assert the documented one.
 - `main.run`, the worst offender in the new baseline (cyclomatic 28,
   cognitive 37, 172 lines), is split into flag parsing, the early-exit modes,
   configuration checks and job dispatch. No behaviour change.

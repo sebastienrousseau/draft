@@ -60,7 +60,7 @@ func (e *refusingEngine) Generate(_ context.Context, req engine.Request) (engine
 			}
 			return engine.Result{}, refusal(e.name)
 		}
-		return engine.Result{Text: extractionResponse}, nil
+		return engine.Result{Text: extractionFor(req.Prompt)}, nil
 	case engine.KindEdit:
 		return engine.Result{Text: "[]"}, nil
 	default:
@@ -73,6 +73,21 @@ func (e *refusingEngine) Generate(_ context.Context, req engine.Request) (engine
 		return engine.Result{Text: validArticle(".")}, nil
 	}
 }
+
+// extractionFor answers an extraction prompt with a claim quoting that
+// section, so a draft built from the sections that were answered has a
+// verified claim whichever section was declined. The Results section has its
+// own; every other section is answered as extractionResponse.
+func extractionFor(prompt string) string {
+	if strings.Contains(prompt, resultsSectionQuote) {
+		return "CLAIM: The experiments show consistent gains\n" +
+			"SOURCE_QUOTE: \"" + resultsSectionQuote + "\"\n" +
+			"TYPE: result\nSTRENGTH: demonstrated\n---"
+	}
+	return extractionResponse
+}
+
+const resultsSectionQuote = "The experiments show consistent gains across the evaluated configurations here."
 
 // Section bodies of multiSectionSource, so a test can decline one by name.
 const (
