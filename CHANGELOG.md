@@ -17,6 +17,14 @@ series until `0.0.999`.
   baseline only shrinks. The tool lives in its own module,
   `tools/complexity`, so its dependencies stay out of draft's.
 
+### Fixed
+
+- `make mutation` tested only 16 of the 127 mutants in `claims` when Go's
+  test cache was warm, and still reported 100% efficacy, so the local gate
+  could pass having tested almost nothing. It now runs with
+  `GOFLAGS=-count=1`. The nightly `deep-quality` job restores Go's cache,
+  so it was exposed too, though its last three runs tested all 127.
+
 ### Changed
 
 - A write retry now logs each rule the previous draft broke, as

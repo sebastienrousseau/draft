@@ -57,8 +57,10 @@ corpus-live: ## Measure live recall on the corpus (needs a backend; costs a call
 	DRAFT_CORPUS_LIVE=1 go test ./pipeline/ -run TestCorpusLiveRecall -v -timeout 20m
 
 .PHONY: mutation
+# A cached test result makes gremlins see a fraction of the mutants and still
+# report 100%, so the gate would pass having tested almost nothing.
 mutation: ## Mutation-test the security-critical grounding gate
-	go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash ./claims \
+	GOFLAGS=-count=1 go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash ./claims \
 	  --workers 4 --test-cpu 1 --threshold-efficacy 100 --threshold-mcover 100
 
 .PHONY: api
