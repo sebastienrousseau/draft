@@ -5,6 +5,8 @@
 #
 # 1. `gomod` — the Go module. Weekly (Monday 06:00 UTC). Grouped so a
 #    charmbracelet bump arrives as one PR, not five.
+#    `/tools/complexity` is the complexity gate's own module, kept apart so
+#    its analysis libraries stay out of draft's dependency graph.
 # 2. `github-actions` — every workflow under `.github/workflows/`.
 #    Weekly. Keeps action pins current alongside version tags.
 #
@@ -33,6 +35,21 @@ updates:
       golang-x:
         patterns:
           - "golang.org/x/*"
+
+  - package-ecosystem: gomod
+    directory: /tools/complexity
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(go)"
+      include: scope
+    labels:
+      - dependencies
+      - go
 
   - package-ecosystem: github-actions
     directory: /

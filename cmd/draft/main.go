@@ -75,108 +75,164 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 // run is the testable core of the command: it parses argv, plans jobs, and
 // dispatches to the headless runner or the TUI, returning a process exit code.
 func run(argv []string, stdout, stderr io.Writer) int {
-	flags := config.Flags{}
-	var showVersion, headless bool
-	var jsonOut, dryRun bool
-	var clearCache, doctor, manPage bool
-	var reviewPath, frontmatterPath, completionShell, verifyPath string
-
-	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() { usage(stderr) }
-	fs.StringVar(&flags.Engine, "engine", "", "backend: auto (default), ollama, a provider name, or api:<provider>")
-	fs.StringVar(&flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
-	fs.StringVar(&flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
-	fs.StringVar(&flags.Reader, "reader", "", "document reader: pdftotext (default) or docling")
-	fs.StringVar(&flags.Style, "style", "", "JSON house-style file: word band, banned vocabulary, language")
-	fs.StringVar(&flags.Model, "model", "", "session-provider model override (e.g. opus)")
-	fs.StringVar(&flags.Model, "claude-model", "", "deprecated alias for --model")
-	fs.IntVar(&flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
-	fs.IntVar(&flags.PredictLength, "num-predict", 0, "Ollama max output tokens (default 6000)")
-	fs.StringVar(&flags.DraftsDir, "out", "", "directory to write drafts into (default ~/Drop/Drafts)")
-	fs.StringVar(&flags.SourcesDir, "sources-dir", "", "directory bare filenames resolve against (default ~/Drop/Drafts/Sources)")
-	fs.BoolVar(&flags.ForceNew, "force-new", false, "draft even if today's folder already has one")
-	fs.BoolVar(&flags.Merge, "merge", false, "combine all sources into one draft instead of queueing")
-	fs.BoolVar(&flags.Resume, "resume", false, "reuse a verified claim ledger from an earlier attempt")
-	fs.BoolVar(&flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
-	fs.BoolVar(&flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
-	fs.BoolVar(&flags.StrictNumbers, "strict-numbers", false, "fail a draft that contains a number found in no verified claim")
-	fs.BoolVar(&flags.SecondGate, "second-gate", false, "run an opt-in semantic second pass; drop verified claims a local model finds unsupported by their quote")
-	fs.BoolVar(&flags.NoCache, "no-cache", false, "ignore cached claim extractions and re-extract everything")
-	fs.BoolVar(&clearCache, "clear-cache", false, "delete every cached claim extraction and exit")
-	fs.StringVar(&reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
-	fs.StringVar(&frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
-	fs.StringVar(&frontmatterPath, "combine", "", "alias for --frontmatter")
-	fs.BoolVar(&headless, "print", false, "run without the TUI; print draft paths to stdout")
-	fs.BoolVar(&jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
-	fs.StringVar(&verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
-	fs.StringVar(&completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
-	fs.BoolVar(&dryRun, "dry-run", false, "report what a run would do, without calling a model")
-	fs.BoolVar(&doctor, "doctor", false, "check that this machine can run draft, and exit")
-	fs.BoolVar(&manPage, "man", false, "print a roff manual page on stdout and exit")
-	fs.BoolVar(&showVersion, "version", false, "print version and exit")
-
+	var o options
+	fs := newFlagSet(&o, stderr)
 	if err := fs.Parse(argv); err != nil {
 		return 2
 	}
-	if showVersion {
-		fmt.Fprintln(stdout, "draft "+version)
-		return 0
+	o.args = fs.Args()
+	if code, done := runInfo(o, stdout, stderr); done {
+		return code
 	}
-	if manPage {
+	if code, done := runOnFile(o, stdout, stderr); done {
+		return code
+	}
+
+	cfg := config.Load(o.flags)
+	cfg.Version = version
+	if o.clearCache {
+		return runClearCache(stdout, stderr)
+	}
+	if code := checkConfig(cfg, stderr); code != 0 {
+		return code
+	}
+	if o.doctor {
+		return runDoctor(cfg, defaultProbes(), stdout)
+	}
+	if len(o.args) == 0 {
+		usage(stderr)
+		return 2
+	}
+
+	jobs, err := buildJobs(cfg, o.args, o.reviewPath)
+	if err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
+		return 1
+	}
+	return runJobs(o, cfg, jobs, stdout, stderr)
+}
+
+// options is everything the command line sets: the configuration flags, the
+// mode switches, and the source arguments left after them.
+type options struct {
+	flags                                                    config.Flags
+	showVersion, headless, jsonOut, dryRun                   bool
+	clearCache, doctor, manPage                              bool
+	reviewPath, frontmatterPath, completionShell, verifyPath string
+	args                                                     []string
+}
+
+// newFlagSet declares every flag, storing each into o.
+func newFlagSet(o *options, stderr io.Writer) *flag.FlagSet {
+	fs := flag.NewFlagSet("draft", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() { usage(stderr) }
+	fs.StringVar(&o.flags.Engine, "engine", "", "backend: auto (default), ollama, a provider name, or api:<provider>")
+	fs.StringVar(&o.flags.ExtractEngine, "extract-engine", "", "backend for claim extraction (default: --engine)")
+	fs.StringVar(&o.flags.WriteEngine, "write-engine", "", "backend for writing the article (default: --engine)")
+	fs.StringVar(&o.flags.Reader, "reader", "", "document reader: pdftotext (default) or docling")
+	fs.StringVar(&o.flags.Style, "style", "", "JSON house-style file: word band, banned vocabulary, language")
+	fs.StringVar(&o.flags.Model, "model", "", "session-provider model override (e.g. opus)")
+	fs.StringVar(&o.flags.Model, "claude-model", "", "deprecated alias for --model")
+	fs.IntVar(&o.flags.ContextLength, "num-ctx", 0, "Ollama context window (default 8192)")
+	fs.IntVar(&o.flags.PredictLength, "num-predict", 0, "Ollama max output tokens (default 6000)")
+	fs.StringVar(&o.flags.DraftsDir, "out", "", "directory to write drafts into (default ~/Drop/Drafts)")
+	fs.StringVar(&o.flags.SourcesDir, "sources-dir", "", "directory bare filenames resolve against (default ~/Drop/Drafts/Sources)")
+	fs.BoolVar(&o.flags.ForceNew, "force-new", false, "draft even if today's folder already has one")
+	fs.BoolVar(&o.flags.Merge, "merge", false, "combine all sources into one draft instead of queueing")
+	fs.BoolVar(&o.flags.Resume, "resume", false, "reuse a verified claim ledger from an earlier attempt")
+	fs.BoolVar(&o.flags.KeepArtifacts, "keep-artifacts", false, "keep prompt/ledger files beside a successful draft")
+	fs.BoolVar(&o.flags.Experimental, "experimental", false, "let auto mode use experimental (unverified) providers")
+	fs.BoolVar(&o.flags.StrictNumbers, "strict-numbers", false, "fail a draft that contains a number found in no verified claim")
+	fs.BoolVar(&o.flags.SecondGate, "second-gate", false, "run an opt-in semantic second pass; drop verified claims a local model finds unsupported by their quote")
+	fs.BoolVar(&o.flags.NoCache, "no-cache", false, "ignore cached claim extractions and re-extract everything")
+	fs.BoolVar(&o.clearCache, "clear-cache", false, "delete every cached claim extraction and exit")
+	fs.StringVar(&o.reviewPath, "review", "", "enhance an existing draft with surgical edits grounded in the sources")
+	fs.StringVar(&o.frontmatterPath, "frontmatter", "", "generate/regenerate frontmatter and combined final article from a Markdown draft")
+	fs.StringVar(&o.frontmatterPath, "combine", "", "alias for --frontmatter")
+	fs.BoolVar(&o.headless, "print", false, "run without the TUI; print draft paths to stdout")
+	fs.BoolVar(&o.jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
+	fs.StringVar(&o.verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
+	fs.StringVar(&o.completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
+	fs.BoolVar(&o.dryRun, "dry-run", false, "report what a run would do, without calling a model")
+	fs.BoolVar(&o.doctor, "doctor", false, "check that this machine can run draft, and exit")
+	fs.BoolVar(&o.manPage, "man", false, "print a roff manual page on stdout and exit")
+	fs.BoolVar(&o.showVersion, "version", false, "print version and exit")
+	return fs
+}
+
+// runInfo handles the modes that print something about draft itself and
+// exit: --version, --man and --completion.
+func runInfo(o options, stdout, stderr io.Writer) (code int, done bool) {
+	switch {
+	case o.showVersion:
+		fmt.Fprintln(stdout, "draft "+version)
+		return 0, true
+	case o.manPage:
 		if err := writeManPage(stdout, version, time.Now()); err != nil {
 			fmt.Fprintln(stderr, "draft:", err)
-			return 1
+			return 1, true
 		}
-		return 0
-	}
-	if completionShell != "" {
-		if !writeCompletion(stdout, completionShell, engine.ProviderNames()) {
-			fmt.Fprintf(stderr, "draft: unknown shell %q (want bash, zsh, or fish)\n", completionShell)
-			return 2
+		return 0, true
+	case o.completionShell != "":
+		if !writeCompletion(stdout, o.completionShell, engine.ProviderNames()) {
+			fmt.Fprintf(stderr, "draft: unknown shell %q (want bash, zsh, or fish)\n", o.completionShell)
+			return 2, true
 		}
-		return 0
+		return 0, true
 	}
+	return 0, false
+}
 
-	if verifyPath != "" {
-		if jsonOut {
-			return runVerifyJSON(verifyPath, stdout, stderr)
-		}
-		return runVerify(verifyPath, stdout, stderr)
+// runOnFile handles the modes that work on an existing article and need no
+// configuration: --verify and --frontmatter.
+func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
+	switch {
+	case o.verifyPath != "" && o.jsonOut:
+		return runVerifyJSON(o.verifyPath, stdout, stderr), true
+	case o.verifyPath != "":
+		return runVerify(o.verifyPath, stdout, stderr), true
+	case o.frontmatterPath != "":
+		return runFrontmatter(o, stdout, stderr), true
 	}
-	if frontmatterPath != "" {
-		if reviewPath != "" {
-			fmt.Fprintln(stderr, "draft: --frontmatter cannot be combined with --review")
-			return 2
-		}
-		if len(fs.Args()) > 0 {
-			fmt.Fprintln(stderr, "draft: --frontmatter takes no source arguments")
-			return 2
-		}
-		bodyPath, fmPath, finalPath, err := frontmatter.ProcessFile(frontmatterPath, time.Now())
-		if err != nil {
-			fmt.Fprintln(stderr, "draft:", err)
-			return 1
-		}
-		fmt.Fprintln(stdout, "Frontmatter regenerated successfully:")
-		fmt.Fprintln(stdout, "  Body file:       ", bodyPath)
-		fmt.Fprintln(stdout, "  Frontmatter file:", fmPath)
-		fmt.Fprintln(stdout, "  Final article:   ", finalPath)
-		return 0
-	}
+	return 0, false
+}
 
-	cfg := config.Load(flags)
-	cfg.Version = version
-	if clearCache {
-		// Read the configured location before --no-cache can blank it, so
-		// `--clear-cache --no-cache` still clears the right directory.
-		if err := clearExtractCache(config.Load(config.Flags{}).CacheDir); err != nil {
-			fmt.Fprintln(stderr, "draft:", err)
-			return 1
-		}
-		fmt.Fprintln(stdout, "cleared the claim-extraction cache")
-		return 0
+func runFrontmatter(o options, stdout, stderr io.Writer) int {
+	if o.reviewPath != "" {
+		fmt.Fprintln(stderr, "draft: --frontmatter cannot be combined with --review")
+		return 2
 	}
+	if len(o.args) > 0 {
+		fmt.Fprintln(stderr, "draft: --frontmatter takes no source arguments")
+		return 2
+	}
+	bodyPath, fmPath, finalPath, err := frontmatter.ProcessFile(o.frontmatterPath, time.Now())
+	if err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, "Frontmatter regenerated successfully:")
+	fmt.Fprintln(stdout, "  Body file:       ", bodyPath)
+	fmt.Fprintln(stdout, "  Frontmatter file:", fmPath)
+	fmt.Fprintln(stdout, "  Final article:   ", finalPath)
+	return 0
+}
+
+func runClearCache(stdout, stderr io.Writer) int {
+	// Read the configured location before --no-cache can blank it, so
+	// `--clear-cache --no-cache` still clears the right directory.
+	if err := clearExtractCache(config.Load(config.Flags{}).CacheDir); err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, "cleared the claim-extraction cache")
+	return 0
+}
+
+// checkConfig reports what config.Load recovered from and rejects what it
+// cannot run with, returning a non-zero exit code to stop on.
+func checkConfig(cfg config.Config, stderr io.Writer) int {
 	// Resolution problems that were recovered from — an unreadable home
 	// directory, an out-of-range tunable, a non-loopback Ollama host — are
 	// reported rather than applied in silence.
@@ -193,23 +249,12 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "draft:", err)
 		return 2
 	}
+	return 0
+}
 
-	if doctor {
-		return runDoctor(cfg, defaultProbes(), stdout)
-	}
-
-	args := fs.Args()
-	if len(args) == 0 {
-		usage(stderr)
-		return 2
-	}
-
-	jobs, err := buildJobs(cfg, args, reviewPath)
-	if err != nil {
-		fmt.Fprintln(stderr, "draft:", err)
-		return 1
-	}
-
+// runJobs runs the queue in the mode the flags chose: a dry run, JSON or
+// plain headless output, or the TUI.
+func runJobs(o options, cfg config.Config, jobs []pipeline.Job, stdout, stderr io.Writer) int {
 	// A signal-aware context so Ctrl+C (headless) and quitting the TUI abort any
 	// in-flight session subprocess or Ollama request instead of orphaning it.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -220,28 +265,21 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	runner := pipeline.NewRoutedRunner(cfg, nil)
 	defer func() { _ = runner.Close() }()
 
-	if dryRun {
-		if runDryRun(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
+	var failures int
+	switch {
+	case o.dryRun:
+		failures = runDryRun(ctx, cfg, runner, jobs, stdout, stderr)
+	case o.jsonOut:
+		failures = runHeadlessJSON(ctx, cfg, runner, jobs, stdout, stderr)
+	case o.headless:
+		failures = runHeadless(ctx, cfg, runner, jobs, stdout, stderr)
+	default:
+		if err := runTUI(ctx, stop, cfg, runner, jobs, o.flags.Engine == ""); err != nil {
+			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		return 0
 	}
-	if jsonOut {
-		if runHeadlessJSON(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
-			return 1
-		}
-		return 0
-	}
-	if headless {
-		if runHeadless(ctx, cfg, runner, jobs, stdout, stderr) > 0 {
-			return 1
-		}
-		return 0
-	}
-
-	selectEngine := (flags.Engine == "")
-	if err := runTUI(ctx, stop, cfg, runner, jobs, selectEngine); err != nil {
-		fmt.Fprintln(stderr, err)
+	if failures > 0 {
 		return 1
 	}
 	return 0

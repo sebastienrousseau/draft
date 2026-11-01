@@ -319,6 +319,11 @@ func TestRetrySucceedsSecondAttempt(t *testing.T) {
 	if done.OutputPath == "" || !hasLog(logs, "write retry") {
 		t.Errorf("expected a retry log and a saved article, logs=%v", logs)
 	}
+	// The log names the rule that sent the draft back, not only how many
+	// failed: without it a run that needs retries cannot say why.
+	if !hasLog(logs, "write retry 1: article is ") {
+		t.Errorf("expected the retry log to name the violation, logs=%v", logs)
+	}
 }
 
 func hasLog(logs []string, sub string) bool {

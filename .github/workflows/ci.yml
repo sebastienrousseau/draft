@@ -98,6 +98,22 @@ jobs:
           # Skip the remote JSON-schema fetch (flaky CDN); config is verified locally.
           verify: false
 
+  # Every function is held to cyclomatic 10, cognitive 15, Halstead
+  # difficulty 30 and 60 lines (500 per file). What was already over one is in
+  # complexity-baseline.txt and may not get worse; the tool fails an
+  # unrecorded improvement too, so the baseline can only shrink.
+  complexity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "stable"
+          cache: true
+          cache-dependency-path: tools/complexity/go.sum
+      - name: Complexity ceilings against the baseline
+        run: make complexity
+
   # The install contract is a promise to packagers, so it is checked the way a
   # packager would use it: a staged tree on a clean runner, compared against
   # the exact file list docs/packaging.md tells them to expect.

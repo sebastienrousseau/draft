@@ -22,7 +22,7 @@ make a test pass. If a test is in your way, the test is probably right.
 The repository has gates, and "it compiles" is not one of them:
 
 ```console
-make check          # fmt, vet, test, docs-lint
+make check          # fmt, vet, test, complexity, docs-lint
 make cover          # the 98% coverage gate CI applies
 golangci-lint run   # must be zero issues
 ```

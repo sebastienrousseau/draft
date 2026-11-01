@@ -146,32 +146,17 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 	var errs []string
 	for attempt := 0; attempt <= r.cfg.WriteRetries; attempt++ {
 		if attempt > 0 {
-			r.warn(fmt.Sprintf("write retry %d: %d violation(s)", attempt, len(errs)))
-			retryPrompt := basePrompt + "\n\n## FIX THESE PROBLEMS FROM YOUR PREVIOUS DRAFT\nRewrite the whole article so none of these remain. Change only what is needed.\n- " + strings.Join(errs, "\n- ") + "\n"
-			res, err := r.generate(ctx, engine.Request{
-				Kind:        engine.KindWrite,
-				Prompt:      retryPrompt,
-				Temperature: writeTemperature,
-				NumPredict:  r.writeTokens,
-				OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
-			})
+			// One line per rule, so a run that needed retries says why.
+			for _, e := range errs {
+				r.warn(fmt.Sprintf("write retry %d: %s", attempt, e))
+			}
+			next, err := r.rewrite(ctx, basePrompt, errs)
 			if err != nil {
-				return markdown, fmt.Errorf("generation failed: %w", err)
+				return markdown, err
 			}
-			markdown = r.finalize(res.Text)
-			if looksTruncated(res, markdown) {
-				markdown = r.continueGeneration(ctx, markdown)
-			}
+			markdown = next
 		}
-		// Repair what a deterministic edit can settle before spending another
-		// generation on it. A rewrite is the most expensive call in the run.
-		if repaired, removed := repairDuplicatesWithMin(markdown, style.MinWords); removed > 0 {
-			if len(validate.ErrorsWithStyle(repaired, style)) <= len(validate.ErrorsWithStyle(markdown, style)) {
-				markdown = repaired
-				r.log(fmt.Sprintf("removed %d near-duplicate paragraph(s) without regenerating", removed))
-			}
-		}
-
+		markdown = r.dedupe(markdown, style)
 		styleErrs := validate.ErrorsWithStyle(markdown, style)
 		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
 		errs = append(append([]string{}, styleErrs...), factErrs...)
@@ -183,6 +168,38 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 		}
 	}
 	return markdown, fmt.Errorf("article failed the rules after %d retr(y/ies):\n- %s", r.cfg.WriteRetries, strings.Join(errs, "\n- "))
+}
+
+// rewrite asks for the whole article again with the previous draft's
+// violations listed.
+func (r *Runner) rewrite(ctx context.Context, basePrompt string, errs []string) (string, error) {
+	retryPrompt := basePrompt + "\n\n## FIX THESE PROBLEMS FROM YOUR PREVIOUS DRAFT\nRewrite the whole article so none of these remain. Change only what is needed.\n- " + strings.Join(errs, "\n- ") + "\n"
+	res, err := r.generate(ctx, engine.Request{
+		Kind:        engine.KindWrite,
+		Prompt:      retryPrompt,
+		Temperature: writeTemperature,
+		NumPredict:  r.writeTokens,
+		OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
+	})
+	if err != nil {
+		return "", fmt.Errorf("generation failed: %w", err)
+	}
+	markdown := r.finalize(res.Text)
+	if looksTruncated(res, markdown) {
+		markdown = r.continueGeneration(ctx, markdown)
+	}
+	return markdown, nil
+}
+
+// dedupe repairs what a deterministic edit can settle before spending another
+// generation on it. A rewrite is the most expensive call in the run.
+func (r *Runner) dedupe(markdown string, style rules.Style) string {
+	repaired, removed := repairDuplicatesWithMin(markdown, style.MinWords)
+	if removed == 0 || len(validate.ErrorsWithStyle(repaired, style)) > len(validate.ErrorsWithStyle(markdown, style)) {
+		return markdown
+	}
+	r.log(fmt.Sprintf("removed %d near-duplicate paragraph(s) without regenerating", removed))
+	return repaired
 }
 
 // promptBudget is the range the write prompt asks for. It ends a tenth below
