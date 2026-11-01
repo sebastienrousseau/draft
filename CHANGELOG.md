@@ -24,6 +24,14 @@ series until `0.0.999`.
   could pass having tested almost nothing. It now runs with
   `GOFLAGS=-count=1`. The nightly `deep-quality` job restores Go's cache,
   so it was exposed too, though its last three runs tested all 127.
+- A draft that failed to save could leave part of its set behind: the body
+  was written in place and the frontmatter and final document with plain
+  writes, so a save that failed on `final/` left a body and frontmatter
+  with no final document. That broke the "written as a set or not at all"
+  invariant, and the test said to pin it only checked that names were
+  unique. The three files are now staged and flushed through
+  `atomicfile.WriteSet` before any is renamed into place, and a failed save
+  removes the whole set, including the empty file that claims its name.
 
 ### Changed
 
