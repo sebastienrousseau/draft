@@ -68,7 +68,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		return err
 	}
 	r.log(fmt.Sprintf("verified %d claim(s), dropped %d", len(records), dropped))
-	ledger := claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars)
+	ledger := promptLedger(records)
 	r.phase(PhaseClaims, "done")
 
 	var research strings.Builder

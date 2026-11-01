@@ -56,7 +56,9 @@ func writeNumPredict(maxWords, ceiling int) int {
 }
 
 // write runs the initial generation and continues past any length-limit stop.
-func (r *Runner) write(ctx context.Context, writePrompt string) (string, error) {
+// ledger is the compact ledger the write prompt carries; a continuation is
+// grounded in it too.
+func (r *Runner) write(ctx context.Context, writePrompt, ledger string) (string, error) {
 	res, err := r.generate(ctx, engine.Request{
 		Kind:        engine.KindWrite,
 		Prompt:      writePrompt,
@@ -69,7 +71,7 @@ func (r *Runner) write(ctx context.Context, writePrompt string) (string, error) 
 	}
 	text := r.finalize(res.Text)
 	if looksTruncated(res, text) {
-		text = r.continueGeneration(ctx, text)
+		text = r.continueGeneration(ctx, text, ledger)
 	}
 	return text, nil
 }
@@ -104,7 +106,7 @@ const continuePredictTokens = 512
 // is trimmed to the last complete sentence. That keeps the draft from being
 // rejected as truncated — which would trigger a far more expensive full rewrite —
 // while never adding ungrounded text of our own.
-func (r *Runner) continueGeneration(ctx context.Context, partial string) string {
+func (r *Runner) continueGeneration(ctx context.Context, partial, ledger string) string {
 	for i := 0; i < r.cfg.MaxContinue; i++ {
 		if validate.EndsSentence(strings.TrimRight(partial, " \t\r\n")) {
 			return partial
@@ -112,7 +114,7 @@ func (r *Runner) continueGeneration(ctx context.Context, partial string) string 
 		r.log(fmt.Sprintf("output hit length limit; concluding (%d/%d)", i+1, r.cfg.MaxContinue))
 		res, err := r.generate(ctx, engine.Request{
 			Kind:        engine.KindWrite,
-			Prompt:      prompt.ContinueWriting(partial),
+			Prompt:      prompt.ContinueWriting(partial, ledger),
 			Temperature: writeTemperature,
 			NumPredict:  continuePredictTokens,
 			OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
@@ -143,6 +145,7 @@ func (r *Runner) continueGeneration(ctx context.Context, partial string) string 
 // writer to fix the named problems, up to the configured retry budget.
 func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown string, records []claims.Record, style rules.Style) (string, error) {
 	style = style.OrDefault()
+	ledger := promptLedger(records)
 	var errs []string
 	for attempt := 0; attempt <= r.cfg.WriteRetries; attempt++ {
 		if attempt > 0 {
@@ -150,7 +153,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 			for _, e := range errs {
 				r.warn(fmt.Sprintf("write retry %d: %s", attempt, e))
 			}
-			next, err := r.rewrite(ctx, basePrompt, errs)
+			next, err := r.rewrite(ctx, basePrompt, ledger, errs)
 			if err != nil {
 				return markdown, err
 			}
@@ -172,7 +175,7 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 
 // rewrite asks for the whole article again with the previous draft's
 // violations listed.
-func (r *Runner) rewrite(ctx context.Context, basePrompt string, errs []string) (string, error) {
+func (r *Runner) rewrite(ctx context.Context, basePrompt, ledger string, errs []string) (string, error) {
 	retryPrompt := basePrompt + "\n\n## FIX THESE PROBLEMS FROM YOUR PREVIOUS DRAFT\nRewrite the whole article so none of these remain. Change only what is needed.\n- " + strings.Join(errs, "\n- ") + "\n"
 	res, err := r.generate(ctx, engine.Request{
 		Kind:        engine.KindWrite,
@@ -186,7 +189,7 @@ func (r *Runner) rewrite(ctx context.Context, basePrompt string, errs []string) 
 	}
 	markdown := r.finalize(res.Text)
 	if looksTruncated(res, markdown) {
-		markdown = r.continueGeneration(ctx, markdown)
+		markdown = r.continueGeneration(ctx, markdown, ledger)
 	}
 	return markdown, nil
 }

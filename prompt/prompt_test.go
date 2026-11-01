@@ -79,12 +79,29 @@ func TestWritingPromptUsesProvidedTemplates(t *testing.T) {
 
 func TestContinueWritingClipsTail(t *testing.T) {
 	long := strings.Repeat("x", 9000)
-	c := ContinueWriting(long)
-	if len(c) > 5600 || strings.Contains(c, strings.Repeat("x", 4001)) {
-		t.Errorf("continuation prompt should clip the tail to 4000 chars, len=%d", len(c))
+	c := ContinueWriting(long, "")
+	if tail := len(c) - len(ContinueWriting("", "")); tail > 4000 || strings.Contains(c, strings.Repeat("x", 4001)) {
+		t.Errorf("continuation prompt should clip the tail to 4000 chars, tail=%d", tail)
 	}
 	if !strings.Contains(c, "Continue the Markdown article") {
 		t.Error("missing continuation instruction")
+	}
+}
+
+// A continuation is new article text, so it gets the claims and the same
+// grounding rules as the first draft, and the tail comes last: it is what the
+// model continues from.
+func TestContinueWritingCarriesTheClaims(t *testing.T) {
+	c := ContinueWriting("TAIL-MARKER", "LEDGER-MARKER")
+	if !strings.Contains(c, groundingRules) {
+		t.Error("continuation prompt is missing the grounding rules")
+	}
+	ledger, tail := strings.Index(c, "LEDGER-MARKER"), strings.Index(c, "TAIL-MARKER")
+	if ledger < 0 || tail < 0 || ledger > tail {
+		t.Errorf("want the claims before the tail; ledger at %d, tail at %d", ledger, tail)
+	}
+	if w := Writing("", "L", 500, 800); !strings.Contains(w, groundingRules) {
+		t.Error("the writing prompt no longer carries the shared grounding rules")
 	}
 }
 
@@ -112,7 +129,7 @@ func TestPromptsStayValidUTF8WhenClipped(t *testing.T) {
 	for pad := 0; pad < 3; pad++ {
 		body := strings.Repeat("x", pad) + strings.Repeat("字", 4000)
 
-		if out := ContinueWriting(body); !utf8.ValidString(out) {
+		if out := ContinueWriting(body, "ledger"); !utf8.ValidString(out) {
 			t.Errorf("ContinueWriting(pad=%d) produced invalid UTF-8", pad)
 		}
 		if out := Review(body, "draft", "ledger"); !utf8.ValidString(out) {

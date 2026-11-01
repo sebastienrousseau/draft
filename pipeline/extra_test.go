@@ -359,7 +359,7 @@ func TestContinueGenerationEdgeCases(t *testing.T) {
 	t.Run("continuation error warns and returns trimmed", func(t *testing.T) {
 		errEng := &fakeEngine{name: "fake", failAll: errors.New("engine error")}
 		r := NewRunner(cfg, []engine.Engine{errEng}, nil)
-		res := r.continueGeneration(context.Background(), "# Title\n\nA sentence. Incomplete part")
+		res := r.continueGeneration(context.Background(), "# Title\n\nA sentence. Incomplete part", "")
 		if !strings.Contains(res, "A sentence.") || strings.Contains(res, "Incomplete part") {
 			t.Errorf("unexpected trimmed result: %q", res)
 		}
@@ -368,7 +368,7 @@ func TestContinueGenerationEdgeCases(t *testing.T) {
 	t.Run("empty continuation breaks", func(t *testing.T) {
 		emptyEng := &fakeEngine{name: "fake", writer: func(int) (string, bool) { return "", false }}
 		r := NewRunner(cfg, []engine.Engine{emptyEng}, nil)
-		res := r.continueGeneration(context.Background(), "# Title\n\nA sentence. Incomplete part")
+		res := r.continueGeneration(context.Background(), "# Title\n\nA sentence. Incomplete part", "")
 		if !strings.Contains(res, "A sentence.") {
 			t.Errorf("unexpected result: %q", res)
 		}
@@ -377,7 +377,7 @@ func TestContinueGenerationEdgeCases(t *testing.T) {
 	t.Run("no sentence found falls back to partial", func(t *testing.T) {
 		errEng := &fakeEngine{name: "fake", failAll: errors.New("engine error")}
 		r := NewRunner(cfg, []engine.Engine{errEng}, nil)
-		res := r.continueGeneration(context.Background(), "no punctuation anywhere in this whole text")
+		res := r.continueGeneration(context.Background(), "no punctuation anywhere in this whole text", "")
 		if res != "no punctuation anywhere in this whole text" {
 			t.Errorf("expected original partial, got: %q", res)
 		}
@@ -388,7 +388,7 @@ func TestWriteGenerationFailure(t *testing.T) {
 	cfg := testConfig(t)
 	errEng := &fakeEngine{name: "fake", failAll: errors.New("write failed")}
 	r := NewRunner(cfg, []engine.Engine{errEng}, nil)
-	_, err := r.write(context.Background(), "prompt")
+	_, err := r.write(context.Background(), "prompt", "")
 	if err == nil || !strings.Contains(err.Error(), "generation failed") {
 		t.Errorf("expected generation failed error, got: %v", err)
 	}

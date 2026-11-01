@@ -64,7 +64,7 @@ STRENGTH: demonstrated
 	fmt.Println("placeholder consumed:", !strings.Contains(writing, prompt.LedgerPlaceholder))
 
 	// 4. If the backend stops on a length limit, ask it to finish.
-	fmt.Println("continue prompt:", len(prompt.ContinueWriting("...half an article")) > 0)
+	fmt.Println("continue prompt:", len(prompt.ContinueWriting("...half an article", ledger)) > 0)
 }
 ```
 
@@ -74,7 +74,7 @@ STRENGTH: demonstrated
 | --------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `Claim`                                 | `func(source string) string`                                    | Extraction prompt for a single source section                     |
 | `Writing`                               | `func(templates, ledger string, minWords, maxWords int) string` | Article prompt; `templates` may be empty, `ledger` is required    |
-| `ContinueWriting`                       | `func(partial string) string`                                   | Nudges a backend that stopped on a length limit to finish cleanly |
+| `ContinueWriting`                       | `func(partial, ledger string) string`                           | Finishes a truncated article, grounded in the same claims         |
 | `Review`                                | `func(research, draft, ledger string) string`                   | Surgical find/replace edit prompt                                 |
 | `EffectiveStyle`                        | `func(templates string) string`                                 | The style-calibration text the writing prompt will actually use   |
 | `LedgerPlaceholder`                     | `const` `"{{VERIFIED_CLAIM_LEDGER}}"`                           | Substituted with the compact ledger                               |

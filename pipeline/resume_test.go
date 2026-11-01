@@ -138,8 +138,10 @@ func TestResumeRejectsALedgerTheSourcesNoLongerSupport(t *testing.T) {
 	cfg.Resume = true
 	second := okEngine("fake")
 	_, errText, logs := drain(t, cfg, []engine.Engine{second}, job)
-	if errText != "" {
-		t.Fatalf("resumed run failed: %s", errText)
+	// The fresh extraction grounds nothing in the unrelated paper, so the run
+	// must fail rather than write an article from an empty ledger.
+	if !strings.Contains(errText, ErrNoVerifiedClaims.Error()) {
+		t.Fatalf("resumed run against an unrelated paper: err = %q, want %q", errText, ErrNoVerifiedClaims)
 	}
 	if second.extractCalls == 0 {
 		t.Error("a ledger that no longer verifies must trigger a fresh extraction")

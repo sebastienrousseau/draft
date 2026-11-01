@@ -79,7 +79,10 @@ func TestEveryPromptFencesItsUntrustedInput(t *testing.T) {
 	}{
 		{"Claim", Claim("SOURCE-MARKER"), []string{"BEGIN UNTRUSTED SOURCE DOCUMENT", "SOURCE-MARKER"}},
 		{"Writing", Writing("", "LEDGER-MARKER", 500, 800), []string{"BEGIN UNTRUSTED VERIFIED CLAIMS", "LEDGER-MARKER"}},
-		{"ContinueWriting", ContinueWriting("PARTIAL-DRAFT-MARKER"), []string{"BEGIN UNTRUSTED PARTIAL DRAFT", "PARTIAL-DRAFT-MARKER"}},
+		{"ContinueWriting", ContinueWriting("PARTIAL-DRAFT-MARKER", "LEDGER-MARKER"), []string{
+			"BEGIN UNTRUSTED VERIFIED CLAIMS", "LEDGER-MARKER",
+			"BEGIN UNTRUSTED PARTIAL DRAFT", "PARTIAL-DRAFT-MARKER",
+		}},
 		{"Entailment", Entailment("CLAIM-MARKER", "QUOTE-MARKER"), []string{
 			"BEGIN UNTRUSTED CLAIM", "CLAIM-MARKER",
 			"BEGIN UNTRUSTED SOURCE QUOTE", "QUOTE-MARKER",

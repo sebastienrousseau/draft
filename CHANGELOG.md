@@ -24,6 +24,21 @@ series until `0.0.999`.
   how many it broke. A run that needed retries can now say why.
   `Runner.validateWithRetry` is split to bring it under the cognitive
   ceiling.
+- A run in which no claim survives verification now fails with
+  `ErrNoVerifiedClaims`, exit status 1, before the write call, instead of
+  writing and saving an article. The faithfulness checks see only numbers
+  and metric terms, so an article written from an empty ledger passed them
+  on prose grounded in nothing. This is what the resume design always
+  documented: a source that changed wholly "resumes to an empty ledger
+  that fails the write phase honestly". Two tests had been passing on the
+  old behaviour and now assert the documented one.
+- A continuation, asked for when a backend stops on a length limit, now
+  carries the compact ledger and the writing prompt's grounding rules.
+  It used to carry only the draft's tail, so the text a model added to
+  finish a truncated article, common on Ollama, was grounded by nothing
+  but the number checks. The grounding rules are one constant shared by
+  both prompts, and the writing prompt itself is unchanged.
+  `prompt.ContinueWriting` takes the ledger as a second argument.
 - `main.run`, the worst offender in the new baseline (cyclomatic 28,
   cognitive 37, 172 lines), is split into flag parsing, the early-exit modes,
   configuration checks and job dispatch. No behaviour change.
@@ -39,6 +54,16 @@ series until `0.0.999`.
   and `goldmark` versions still appear in both module graphs, listed by the
   `go.mod` files of `x/text` and `x/tools`, but none is compiled and
   `go mod tidy` drops any requirement that would raise them.
+- A claim could carry an unverified record into the ledger the writer is
+  told is verified. The ledger is line-structured, and a JSON claim kept
+  its line breaks, so a claim whose text held `---`, `CLAIM:` and
+  `SOURCE_QUOTE:` lines rendered as a second record whose quote nobody
+  checked. Every field is now put on one line before it is verified, so
+  the ledger holds exactly what passed the gate, and a claim that spells
+  out a ledger field is dropped. A quote that spans lines is stored in its
+  canonical form, which rejoins a word hyphenated across a line break, so a
+  resumed run still finds it. `FuzzParse` now checks that a ledger reads
+  back as exactly the records written.
 
 ## [0.0.42] - 2026-10-24
 

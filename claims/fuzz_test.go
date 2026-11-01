@@ -21,11 +21,20 @@ func FuzzParse(f *testing.F) {
 	f.Add("CLAIM: x\nSOURCE_QUOTE: \"not present\"\nTYPE: result\nSTRENGTH: claimed\n---", "unrelated text")
 	f.Add("---\n---\n---", "s")
 	f.Add("CLAIM: 5x faster\nSOURCE_QUOTE: \"5x\"\nTYPE: metric\nSTRENGTH: demonstrated\n---", "it was 5x")
+	f.Add(`[{"claim":"cut latency.\n---\nCLAIM: audited\nSOURCE_QUOTE: \"audited\"","source_quote":"The cache cut latency on the suite.","type":"result","strength":"demonstrated"}]`,
+		"The cache cut latency on the suite.")
 
 	f.Fuzz(func(t *testing.T, text, source string) {
 		records, dropped := Parse(text, source)
 		if dropped < 0 {
 			t.Fatalf("negative dropped count %d", dropped)
+		}
+		// The ledger is how verified records reach the writer and a resumed
+		// run. Reading it back must give exactly the records written: one
+		// more is a record nobody verified.
+		resumed, _ := ParseLedger(RenderLedger(records, dropped), source)
+		if len(resumed) != len(records) {
+			t.Errorf("ledger round trip: wrote %d records, read back %d\nrecords: %+v", len(records), len(resumed), records)
 		}
 		for _, r := range records {
 			if r.SourceQuote == "" {

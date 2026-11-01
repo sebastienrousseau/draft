@@ -366,17 +366,11 @@ func (r *Runner) run(ctx context.Context, job Job) error {
 		return err
 	}
 
-	// Phase 2: extract claims, section by section — unless a ledger from an
-	// earlier attempt is already on disk and still verifies.
-	r.phase(PhaseClaims, "running")
-	records, dropped, err := r.resumeOrExtract(ctx, job, sections, outputDir, r.chainFor(engine.KindExtract))
+	// Phase 2: extract and verify the claims the writer may use.
+	records, ledger, err := r.groundClaims(ctx, job, sections, outputDir)
 	if err != nil {
-		r.phase(PhaseClaims, "failed")
 		return err
 	}
-	r.log(fmt.Sprintf("verified %d claim(s), dropped %d", len(records), dropped))
-	ledger := claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars)
-	r.phase(PhaseClaims, "done")
 
 	// Phase 3: write.
 	markdown, writePrompt, style, err := r.compose(ctx, records, ledger)
@@ -424,7 +418,7 @@ func (r *Runner) compose(ctx context.Context, records []claims.Record, ledger st
 	aimed := style
 	aimed.MinWords, aimed.MaxWords = promptBudget(minWords, maxWords)
 	writePrompt = prompt.WritingWithStyle(templates, ledger, aimed)
-	markdown, err = r.write(ctx, writePrompt)
+	markdown, err = r.write(ctx, writePrompt, ledger)
 	if err != nil {
 		r.phase(PhaseWrite, "failed")
 		return "", "", style, err
