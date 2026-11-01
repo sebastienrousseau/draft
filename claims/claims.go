@@ -61,7 +61,15 @@ func Parse(text, source string) (records []Record, dropped int) {
 // verifyOrRepair checks rec against source, attempting one quote-extension
 // repair when the initial check fails and re-verifying the repaired record to
 // the same standard.
+//
+// The record is put on one line per field first, so what is verified is
+// exactly what the ledger will hold, and a claim that spells out a ledger field
+// is refused outright: see singleLine.
 func verifyOrRepair(rec Record, source string) (Record, bool) {
+	rec = singleLine(rec)
+	if spellsField(rec.Claim) {
+		return Record{}, false
+	}
 	if ok, _ := Verify(rec, source); ok {
 		return rec, true
 	}

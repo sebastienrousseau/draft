@@ -47,11 +47,62 @@ func RenderPromptLedger(records []Record, maxClaims, maxChars int) string {
 }
 
 func writeRecord(b *strings.Builder, rec Record) {
+	rec = singleLine(rec)
 	b.WriteString("CLAIM: " + rec.Claim + "\n")
 	b.WriteString("SOURCE_QUOTE: \"" + rec.SourceQuote + "\"\n")
 	b.WriteString("TYPE: " + rec.Type + "\n")
 	b.WriteString("STRENGTH: " + rec.Strength + "\n")
 	b.WriteString("---\n")
+}
+
+// singleLine puts every field of rec on one line.
+//
+// The ledger is line-structured: a line opening with a field name starts that
+// field, and a "---" line ends the record. So a field that carried its own line
+// breaks could close its record and open a forged one, whose quote nobody
+// checked, inside the block the writer is told is verified. With every field
+// on one line, a rendered ledger has exactly one record per record written.
+//
+// A quote that spans lines is stored canonicalised rather than merely joined:
+// canonical rejoins a word the extractor hyphenated across a line break, which
+// a plain join would leave as "evalu- ation", a quote no longer in the source.
+func singleLine(rec Record) Record {
+	rec.Claim = joinFields(rec.Claim)
+	rec.Type = joinFields(rec.Type)
+	rec.Strength = joinFields(rec.Strength)
+	if strings.ContainsFunc(rec.SourceQuote, isLineBreak) {
+		rec.SourceQuote = canonical(rec.SourceQuote)
+	}
+	return rec
+}
+
+func joinFields(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// isLineBreak reports the characters any reader of the ledger might take as
+// the end of a line. Each is also a space to strings.Fields, so canonical
+// removes all of them.
+func isLineBreak(r rune) bool {
+	switch r {
+	case '\n', '\r', '\v', '\f', '\u0085', ' ', ' ':
+		return true
+	}
+	return false
+}
+
+// spellsField reports whether a claim contains a ledger field name. A claim is
+// the model's own sentence, so one that writes "SOURCE_QUOTE:" is formatting a
+// record, not stating a fact, and the writer would read it as one even on a
+// single line. Quotes are not refused this way: a quote is the source's words,
+// held to the source by Verify.
+func spellsField(claim string) bool {
+	for _, name := range []string{"CLAIM:", "SOURCE_QUOTE:", "TYPE:", "STRENGTH:"} {
+		if strings.Contains(claim, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func fieldValue(block, field string) string {

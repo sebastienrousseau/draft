@@ -39,6 +39,16 @@ series until `0.0.999`.
   and `goldmark` versions still appear in both module graphs, listed by the
   `go.mod` files of `x/text` and `x/tools`, but none is compiled and
   `go mod tidy` drops any requirement that would raise them.
+- A claim could carry an unverified record into the ledger the writer is
+  told is verified. The ledger is line-structured, and a JSON claim kept
+  its line breaks, so a claim whose text held `---`, `CLAIM:` and
+  `SOURCE_QUOTE:` lines rendered as a second record whose quote nobody
+  checked. Every field is now put on one line before it is verified, so
+  the ledger holds exactly what passed the gate, and a claim that spells
+  out a ledger field is dropped. A quote that spans lines is stored in its
+  canonical form, which rejoins a word hyphenated across a line break, so a
+  resumed run still finds it. `FuzzParse` now checks that a ledger reads
+  back as exactly the records written.
 
 ## [0.0.42] - 2026-10-24
 
