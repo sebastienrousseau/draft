@@ -37,5 +37,11 @@ func (r *Runner) groundClaims(ctx context.Context, job Job, sections []pdf.Secti
 			"try --reader docling for tables or scanned pages, or another --extract-engine", ErrNoVerifiedClaims, dropped)
 	}
 	r.phase(PhaseClaims, "done")
-	return records, claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars), nil
+	return records, promptLedger(records), nil
+}
+
+// promptLedger renders the compact ledger every writing prompt carries: the
+// first draft, its continuations, a retry and a review all see the same claims.
+func promptLedger(records []claims.Record) string {
+	return claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars)
 }

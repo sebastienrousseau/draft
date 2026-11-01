@@ -418,7 +418,7 @@ func (r *Runner) compose(ctx context.Context, records []claims.Record, ledger st
 	aimed := style
 	aimed.MinWords, aimed.MaxWords = promptBudget(minWords, maxWords)
 	writePrompt = prompt.WritingWithStyle(templates, ledger, aimed)
-	markdown, err = r.write(ctx, writePrompt)
+	markdown, err = r.write(ctx, writePrompt, ledger)
 	if err != nil {
 		r.phase(PhaseWrite, "failed")
 		return "", "", style, err

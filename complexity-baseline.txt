@@ -48,7 +48,7 @@ pipeline/pipeline.go (file) filelines=617
 pipeline/review.go Runner.review cyclomatic=14 lines=115
 pipeline/review.go applySurgicalEdits halstead=37.2
 pipeline/saving.go Runner.save cognitive=20 cyclomatic=14 halstead=31.5 lines=83
-prompt/prompt.go WritingWithStyle lines=70
+prompt/prompt.go WritingWithStyle lines=63
 provenance/provenance.go (file) filelines=550
 provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 lines=79
 provenance/provenance.go sentences cognitive=29 cyclomatic=21 halstead=49.4

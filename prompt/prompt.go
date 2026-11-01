@@ -129,15 +129,7 @@ The template examples below are style evidence ONLY. They contain unrelated subj
 </style_calibration_sample>
 
 ## GROUNDING
-- Every number, name, mechanism, metric, and result in your article MUST come from a CLAIM. Do not introduce any fact not in the list. If you feel a gap, leave it; do not fill it.
-- Do not invent significance, cause, or implication. Transitions and framing sentences must not smuggle in new claims unless a CLAIM states it.
-- Never rename or convert a metric. Write a metric only with the exact name a CLAIM uses. val_bpb is bits per byte; it is not perplexity, loss, or accuracy.
-- Describe a group, level, or component only with properties a CLAIM states. Do not infer what a group or level generates, applies, or contains.
-- Do not call a result "consistent," "reliable," or "stable" if a CLAIM reports high variance, a wide standard deviation, or an underperforming repeat.
-- Match each claim's STRENGTH exactly:
-  demonstrated -> state it plainly as a result.
-  hedged -> use hedged verbs: suggests, appears to, may, is associated with. Never as settled fact.
-  speculation-or-future-work -> frame as proposed or future. Never as achieved.
+%s
 
 ## STYLE
 - Output only the Markdown article. No commentary, no planning notes, no code fences.
@@ -169,6 +161,7 @@ Write a %d-%d word article for technical readers and founders titled around the 
 ## CLAIMS
 %s`,
 		style,
+		groundingRules,
 		english,
 		minWords, maxWords, minWords,
 		joinSorted(st.BannedWords), joinSorted(st.BannedPhrases),
@@ -179,17 +172,38 @@ Write a %d-%d word article for technical readers and founders titled around the 
 	)
 }
 
+// groundingRules binds the writer to the claims. Every prompt that asks for
+// article text carries it, the first draft and its continuation alike, so text
+// a model adds after a length limit is held to the same facts as the rest.
+const groundingRules = `- Every number, name, mechanism, metric, and result in your article MUST come from a CLAIM. Do not introduce any fact not in the list. If you feel a gap, leave it; do not fill it.
+- Do not invent significance, cause, or implication. Transitions and framing sentences must not smuggle in new claims unless a CLAIM states it.
+- Never rename or convert a metric. Write a metric only with the exact name a CLAIM uses. val_bpb is bits per byte; it is not perplexity, loss, or accuracy.
+- Describe a group, level, or component only with properties a CLAIM states. Do not infer what a group or level generates, applies, or contains.
+- Do not call a result "consistent," "reliable," or "stable" if a CLAIM reports high variance, a wide standard deviation, or an underperforming repeat.
+- Match each claim's STRENGTH exactly:
+  demonstrated -> state it plainly as a result.
+  hedged -> use hedged verbs: suggests, appears to, may, is associated with. Never as settled fact.
+  speculation-or-future-work -> frame as proposed or future. Never as achieved.`
+
 // ContinueWriting nudges a backend that stopped on a length limit to finish the
-// article seamlessly from where it left off.
-func ContinueWriting(partial string) string {
+// article seamlessly from where it left off. It carries the compact ledger and
+// the grounding rules, because the continuation is new article text: given only
+// the draft's tail, a model has nothing to ground what it adds.
+func ContinueWriting(partial, ledger string) string {
 	// Cut on a rune boundary: a half rune normalises to U+FFFD, and
 	// claims.Verify rejects any quote containing one, so a carelessly cut
 	// continuation costs verified claims later in the run.
 	tail := runes.CutTail(partial, maxContinueTailChars)
-	return fmt.Sprintf(`Continue the Markdown article below exactly where it stops. Do not repeat any text already written, do not add a preamble, and do not restart. Output only the continuation, finishing the current sentence and completing the article so it ends on a clear final thought.
+	return fmt.Sprintf(`Continue the Markdown article below exactly where it stops. Do not repeat any text already written, do not add a preamble, and do not restart. Output only the continuation, finishing the current sentence and completing the article so it ends on a clear final thought. The CLAIMS list below is the ONLY source of facts you may use.
+
+## GROUNDING
+%s
+
+## CLAIMS
+%s
 
 ## ARTICLE SO FAR (tail)
-%s`, Untrusted("UNTRUSTED PARTIAL DRAFT", tail))
+%s`, groundingRules, Untrusted("UNTRUSTED VERIFIED CLAIMS", ledger), Untrusted("UNTRUSTED PARTIAL DRAFT", tail))
 }
 
 // Review builds the surgical-edit prompt for enhancing an existing draft: the

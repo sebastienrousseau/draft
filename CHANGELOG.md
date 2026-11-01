@@ -32,6 +32,13 @@ series until `0.0.999`.
   documented: a source that changed wholly "resumes to an empty ledger
   that fails the write phase honestly". Two tests had been passing on the
   old behaviour and now assert the documented one.
+- A continuation, asked for when a backend stops on a length limit, now
+  carries the compact ledger and the writing prompt's grounding rules.
+  It used to carry only the draft's tail, so the text a model added to
+  finish a truncated article, common on Ollama, was grounded by nothing
+  but the number checks. The grounding rules are one constant shared by
+  both prompts, and the writing prompt itself is unchanged.
+  `prompt.ContinueWriting` takes the ledger as a second argument.
 - `main.run`, the worst offender in the new baseline (cyclomatic 28,
   cognitive 37, 172 lines), is split into flag parsing, the early-exit modes,
   configuration checks and job dispatch. No behaviour change.
