@@ -59,6 +59,12 @@ type Request struct {
 // the section as having no claims.
 var ErrRefused = errors.New("the model declined to answer this prompt")
 
+// ErrToolUse reports that an agent ran a tool during a call. draft grants
+// none, and declines every permission request, but an agent can still run a
+// tool its own configuration auto-approves. Its answer is discarded rather
+// than trusted: a tool that read the disk could have put anything in it.
+var ErrToolUse = errors.New("the agent ran a tool, which draft does not allow; its answer was discarded")
+
 // Usage is what a generation call cost, as far as the backend reports it. A
 // local model reports tokens and no price; a session provider may report both
 // or neither. Zero means "not reported", never "free" — the pipeline sums what

@@ -6,6 +6,39 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Security
+
+- `claude` and `codex` now run with no tools. draft never passed a
+  tool-granting flag, but a CLI left to its defaults still loaded the
+  user's own built-in tools, hooks, plugins and MCP servers: asked to,
+  `claude` started with draft's flags read a file outside its working
+  directory and printed it, so a crafted PDF could have had it paraphrase
+  `~/.ssh` into a claim. `claude` now gets `--tools ""`,
+  `--strict-mcp-config` and `--safe-mode`. `codex` gets its shell and other
+  built-in tools disabled, the user's config, rules and project
+  instructions ignored, and a permissions profile that denies reads outside
+  its working directory; its read-only sandbox alone still allowed the
+  read. Both were checked against a canary file, and both still answer
+  ordinary prompts. A `codex` run no longer picks up settings from the
+  user's `config.toml`, such as a default model; pass `--model` instead.
+- An agent driven over ACP that runs a tool now fails the call with
+  `engine.ErrToolUse`: the turn is cancelled and its answer discarded.
+  draft already refused every permission request, but a tool the agent's
+  own configuration approves runs without asking, and its update used to
+  be ignored. `copilot` tried to use a tool when asked to read the canary
+  file, and now also starts without its built-in MCP servers or custom
+  instructions.
+- `TestNoProviderGrantsTools` now catches `--flag=value` spellings and flags
+  whose danger is in their value (`--permission-mode bypassPermissions`,
+  `--sandbox danger-full-access`), and `TestProvidersKeepTheirRestrictions`
+  pins the restrictions above.
+- ADR 0004, `SECURITY.md`, `AGENTS.md` and the README said the agent "has
+  no tools" and that its environment was "filtered". They now say what
+  each provider is actually allowed, and that only `DRAFT_*` is removed
+  from the environment. The provider table in `engine/README.md`, which
+  still listed `copilot --allow-all-tools` and `cursor-agent --force`, is
+  replaced by a link to the README's.
+
 ## [0.0.43] - 2026-11-01
 
 ### Added

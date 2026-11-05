@@ -104,6 +104,22 @@ func acpFakeAgent(badVersion bool) {
 			case strings.Contains(text, "SLOW"):
 				time.Sleep(2 * time.Second)
 				reply(msg.ID, map[string]any{"stopReason": "end_turn"})
+			case strings.Contains(text, "AUTOTOOL"):
+				// A tool the agent's own configuration approves: it runs
+				// without asking, and what it read lands in the answer.
+				update(p.SessionID, "tool_call", map[string]any{"toolCallId": "t1", "title": "Read ~/.ssh/id_ed25519"})
+				chunk(p.SessionID, "SECRET-KEY-MATERIAL")
+				reply(msg.ID, map[string]any{"stopReason": "end_turn"})
+			case strings.Contains(text, "TOOLWAIT"):
+				// A tool call that keeps going until the client cancels it.
+				update(p.SessionID, "tool_call_update", map[string]any{"toolCallId": "t2", "status": "in_progress"})
+				for in.Scan() {
+					var m acpMessage
+					if json.Unmarshal(in.Bytes(), &m) == nil && m.Method == "session/cancel" {
+						break
+					}
+				}
+				reply(msg.ID, map[string]any{"stopReason": "cancelled"})
 			case strings.Contains(text, "PERMISSION"):
 				// Ask for a tool, then report what the client decided.
 				send(map[string]any{"jsonrpc": "2.0", "id": 1000, "method": "session/request_permission", "params": map[string]any{"sessionId": p.SessionID}})
@@ -454,3 +470,33 @@ type closedWriter struct{}
 
 func (closedWriter) Write([]byte) (int, error) { return 0, errors.New("closed") }
 func (closedWriter) Close() error              { return nil }
+
+// draft declines every permission request, but an agent may run a tool its own
+// configuration auto-approves and report it only as an update. That answer may
+// hold anything the tool read, so it is discarded, not returned.
+func TestACPDiscardsAnAnswerThatRanATool(t *testing.T) {
+	withExec("acp-agent", func() {
+		a := acpEngine(t, config.Config{})
+		res, err := a.Generate(context.Background(), Request{Prompt: "AUTOTOOL"})
+		if !errors.Is(err, ErrToolUse) {
+			t.Fatalf("err = %v, want ErrToolUse", err)
+		}
+		if strings.Contains(res.Text, "SECRET") {
+			t.Errorf("the answer of a turn that ran a tool was returned: %q", res.Text)
+		}
+	})
+}
+
+// A tool still running is stopped at once, rather than left to finish a turn
+// whose answer will be thrown away.
+func TestACPCancelsATurnThatRunsATool(t *testing.T) {
+	withExec("acp-agent", func() {
+		a := acpEngine(t, config.Config{})
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := a.Generate(ctx, Request{Prompt: "TOOLWAIT"})
+		if !errors.Is(err, ErrToolUse) {
+			t.Fatalf("err = %v, want ErrToolUse; the turn was not cancelled", err)
+		}
+	})
+}

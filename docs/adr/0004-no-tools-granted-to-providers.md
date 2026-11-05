@@ -60,3 +60,44 @@ Bound the blast radius rather than trying to win an adversarial text game:
   reduces privilege, but both need re-verifying end to end.
 - The ledger is fenced too, because a `SOURCE_QUOTE` is verbatim source by
   construction — whoever controls the PDF controls what reaches the writer.
+
+## Amendment, 2026-11: "no tools" was a claim about flags
+
+The consequence above, that the agent "has no tools", did not hold. Not
+passing a tool-granting flag only meant draft granted nothing extra: a CLI
+left to its defaults still loaded the user's own built-in tools, hooks,
+plugins and MCP servers. Asked to, `claude` started with draft's flags read a
+file outside its working directory and printed it, so a crafted PDF could have
+had it paraphrase `~/.ssh` into a claim. Claim text is not checked against the
+source apart from its numbers, so that text could reach the article or the
+failed-output file.
+
+What is now guaranteed, and how it was checked (by asking each CLI to read a
+canary file outside its working directory):
+
+- **`claude`** runs with `--tools ""`, `--strict-mcp-config` and
+  `--safe-mode`: no built-in tools, no MCP servers, no hooks, plugins or
+  `CLAUDE.md`. `--bare` would be stricter but reads only `ANTHROPIC_API_KEY`
+  and would break the logged-in session.
+- **`codex`** runs with its shell and every other built-in tool disabled, the
+  user's `config.toml`, rules and project instructions ignored, and a
+  permissions profile that denies reads outside the working directory. A
+  read-only sandbox alone is not enough: it stops writes, not reads.
+- **Every ACP agent** (`copilot`, `claude-acp`, `gemini-acp`, `codex-acp`)
+  fails closed: a tool call reported by the agent cancels the turn and
+  discards the answer (`ErrToolUse`), because a tool that runs despite draft
+  declining every permission request was approved by the agent's own
+  configuration. `copilot` also starts without its built-in MCP servers or
+  custom instructions; it does try to use tools when asked to, which is why
+  the check matters.
+- **Every other provider** (`agy`, `cursor-agent`, `grok` and the
+  experimental ones) still only gets no tool-granting flag. It runs with
+  whatever its own configuration allows.
+
+`TestProvidersKeepTheirRestrictions` pins the restrictions above, and
+`TestNoProviderGrantsTools` now also catches `--flag=value` spellings and
+flags such as `--permission-mode` whose danger lies in their value.
+
+The child environment is still filtered only of `DRAFT_*`, so tokens and keys
+for other services reach the provider. A tool-less provider cannot read them,
+but the remaining providers can.

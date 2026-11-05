@@ -126,7 +126,11 @@ func (a *ACP) Generate(ctx context.Context, req Request) (Result, error) {
 		"sessionId": created.SessionID,
 		"prompt":    []map[string]any{{"type": "text", "text": req.Prompt}},
 	}
-	if err := conn.call(ctx, "session/prompt", params, &turn); err != nil {
+	err = conn.call(ctx, "session/prompt", params, &turn)
+	if sess.usedTools() {
+		return Result{}, fmt.Errorf("%s: %w", a.provider.Name, ErrToolUse)
+	}
+	if err != nil {
 		if ctx.Err() != nil {
 			// Tell the agent to stop spending on a turn nobody will read.
 			conn.notify("session/cancel", map[string]any{"sessionId": created.SessionID})
@@ -135,8 +139,13 @@ func (a *ACP) Generate(ctx context.Context, req Request) (Result, error) {
 		return Result{}, fmt.Errorf("%s: session/prompt: %w", a.provider.Name, err)
 	}
 
-	text := sess.text()
-	switch strings.ToLower(strings.TrimSpace(turn.StopReason)) {
+	return a.result(ctx, turn.StopReason, sess.text())
+}
+
+// result turns a finished turn's stop reason and collected text into the
+// call's outcome.
+func (a *ACP) result(ctx context.Context, stopReason, text string) (Result, error) {
+	switch strings.ToLower(strings.TrimSpace(stopReason)) {
 	case "refusal":
 		return Result{}, fmt.Errorf("%s: %w", a.provider.Name, ErrRefused)
 	case "cancelled":
@@ -201,31 +210,6 @@ type acpMessage struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
 	Error   *acpError       `json:"error,omitempty"`
-}
-
-// acpSession collects one session's streamed text. Chunks are appended by the
-// reader goroutine as they arrive, so the collected text is complete by the
-// time the prompt's response is delivered: the agent sends its updates before
-// it answers the request.
-type acpSession struct {
-	mu      sync.Mutex
-	buf     strings.Builder
-	onChunk func(string)
-}
-
-func (s *acpSession) add(chunk string) {
-	s.mu.Lock()
-	s.buf.WriteString(chunk)
-	s.mu.Unlock()
-	if s.onChunk != nil && chunk != "" {
-		s.onChunk(chunk)
-	}
-}
-
-func (s *acpSession) text() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.buf.String()
 }
 
 // acpConn is one agent process and the JSON-RPC plumbing over its stdio.
@@ -377,8 +361,10 @@ func (c *acpConn) answerRequest(msg acpMessage) {
 }
 
 // handleNotification streams agent_message_chunk updates into their session.
-// Every other update kind (plans, tool calls, available commands) is
-// irrelevant to a text-only client and dropped.
+// A tool call fails the turn: draft declines every permission request, so a
+// tool that runs anyway was auto-approved by the agent's own configuration,
+// and the turn is cancelled at once. Every other update kind (plans,
+// available commands) is irrelevant to a text-only client and dropped.
 func (c *acpConn) handleNotification(msg acpMessage) {
 	if msg.Method != "session/update" {
 		return
@@ -396,13 +382,18 @@ func (c *acpConn) handleNotification(msg acpMessage) {
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		return
 	}
-	if params.Update.Kind != "agent_message_chunk" || params.Update.Content.Type != "text" {
-		return
-	}
 	c.mu.Lock()
 	sess := c.sessions[params.SessionID]
 	c.mu.Unlock()
-	if sess != nil {
+	if sess == nil {
+		return
+	}
+	switch {
+	case params.Update.Kind == "tool_call" || params.Update.Kind == "tool_call_update":
+		if sess.toolUsed() {
+			c.notify("session/cancel", map[string]any{"sessionId": params.SessionID})
+		}
+	case params.Update.Kind == "agent_message_chunk" && params.Update.Content.Type == "text":
 		sess.add(params.Update.Content.Text)
 	}
 }
