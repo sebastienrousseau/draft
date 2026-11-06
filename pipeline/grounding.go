@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/sebastienrousseau/draft/claims"
@@ -214,52 +213,11 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 		r.log(fmt.Sprintf("extracting %d section(s) with %d workers via %s", len(sections)-1, conc, pinned.Name()))
 	}
 
-	var mu sync.Mutex
 	var failed []int
 	if conc > 1 {
-		sem := make(chan struct{}, conc)
-		var wg sync.WaitGroup
-		for i := 1; i < len(sections); i++ {
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(i int) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				text, err := r.extractOne(ctx, sections[i].Body, pinned, xchain)
-				if errors.Is(err, engine.ErrRefused) {
-					// Workers bypass the chain, so the chain's own routing
-					// for a refusal never runs here. Offer the section to
-					// the engines behind the pinned one ourselves; the
-					// cursor stays put either way.
-					text, err = r.extractAlternates(ctx, sections[i].Body, err, xchain)
-				}
-				mu.Lock()
-				defer mu.Unlock()
-				if err != nil {
-					if !refused(i, err) {
-						failed = append(failed, i)
-					}
-					return
-				}
-				raw[i] = text
-			}(i)
-		}
-		wg.Wait()
-	} else {
-		// Sequential extraction is where a run actually spends its time, so it
-		// is where an estimate is worth having: without one there is no way to
-		// tell a two-minute run from a twenty-minute one until it ends.
-		eta := newETA(len(sections), time.Since(r.started))
-		for i := 1; i < len(sections); i++ {
-			r.log(fmt.Sprintf("claim section %d/%d%s", i+1, len(sections), eta.remaining(i)))
-			started := time.Now()
-			text, err := extract(sections[i].Body)
-			if err != nil && !refused(i, err) {
-				return nil, 0, fmt.Errorf("claim extraction failed: %w", err)
-			}
-			eta.observe(time.Since(started))
-			raw[i] = text
-		}
+		failed = r.extractParallel(ctx, sections, raw, pinned, conc, xchain, refused)
+	} else if err := r.extractSequential(sections, raw, extract, refused); err != nil {
+		return nil, 0, err
 	}
 
 	// Retry any parallel failures through the chain (handles a provider drop).
@@ -277,25 +235,7 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 		r.log(fmt.Sprintf("reused %d cached extraction(s); use --no-cache to force a fresh run", hits))
 	}
 
-	var records []claims.Record
-	dropped := 0
-	tableClaims := 0
-	for i, sec := range sections {
-		secRecords, secDropped := claims.Parse(raw[i], sec.Body)
-		records = append(records, secRecords...)
-		dropped += secDropped
-		// A layout reader (Docling) preserves tables as Markdown, where the
-		// prose extraction cannot quote a cell. Mine those cells directly: the
-		// value is read from the parsed cell and re-verified against the source
-		// like any other claim, so this only ever adds grounded facts. Plain
-		// text sources carry no Markdown tables, so this is a no-op for them.
-		cells := claims.TableClaims(sec.Body)
-		records = append(records, cells...)
-		tableClaims += len(cells)
-	}
-	if tableClaims > 0 {
-		r.log(fmt.Sprintf("mined %d claim(s) from tables", tableClaims))
-	}
+	records, dropped := r.assembleRecords(sections, raw)
 	if deduped := claims.Dedupe(records); len(deduped) != len(records) {
 		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
 		records = deduped

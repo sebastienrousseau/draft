@@ -40,8 +40,7 @@ internal/tui/tui.go Model.trimTail halstead=45.3
 internal/tui/view.go (file) filelines=531
 internal/tui/view.go Model.renderEngineSelectView cognitive=19 cyclomatic=12 lines=67
 pipeline/enginechain.go Runner.generateOn cognitive=28 cyclomatic=16 halstead=35 lines=67
-pipeline/grounding.go (file) filelines=507
-pipeline/grounding.go Runner.extractClaims cognitive=38 cyclomatic=23 halstead=54.5 lines=141
+pipeline/grounding.go Runner.extractClaims cognitive=17 cyclomatic=15 halstead=33.4 lines=82
 pipeline/grounding.go Runner.extractOne cyclomatic=12
 pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
 pipeline/pipeline.go (file) filelines=617
