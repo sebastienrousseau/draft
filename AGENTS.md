@@ -92,7 +92,7 @@ running on their machine with their credentials.
 | Why is it like this?               | [`docs/adr/`](docs/adr/)                                 |
 | How do I run the gates?            | [DEVELOPMENT.md](DEVELOPMENT.md)                         |
 | What is deliberately out of scope? | [When not to use draft](README.md#when-not-to-use-draft) |
-| What is already known to be wrong? | [`docs/AUDIT-2026-09.md`](docs/AUDIT-2026-09.md)         |
+| What is already known to be wrong? | [`docs/AUDIT-2026-11.md`](docs/AUDIT-2026-11.md)         |
 
 ## If you are unsure
 
