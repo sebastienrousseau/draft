@@ -26,28 +26,6 @@ var execCommand = exec.CommandContext
 // mkTempDir is os.MkdirTemp, as a variable so the failure path is testable.
 var mkTempDir = os.MkdirTemp
 
-// sessionEnv is the environment handed to a provider subprocess.
-//
-// draft's own configuration is removed: DRAFT_* names steer draft, and letting
-// them reach an agent that reads its own environment lets one tool's settings
-// silently redirect another's. Everything else is passed through, deliberately.
-// A tight allowlist reads as the safer choice and is not: every provider finds
-// its credentials somewhere different in the environment, so a list that is
-// wrong breaks authentication and the failure surfaces as a confusing provider
-// error rather than as a security decision. The isolation that actually bounds
-// the blast radius is the empty working directory and the absence of tool
-// grants, not the variable list.
-func sessionEnv(environ []string) []string {
-	out := make([]string, 0, len(environ))
-	for _, kv := range environ {
-		if strings.HasPrefix(kv, "DRAFT_") {
-			continue
-		}
-		out = append(out, kv)
-	}
-	return out
-}
-
 // Session generates text by driving a token-free agent CLI (Claude, Codex,
 // Gemini, Copilot, Cursor, Amp, Crush, Goose, Grok, Qwen, ...) in headless
 // mode. Authentication comes entirely from the CLI's own logged-in session.
@@ -128,7 +106,7 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	if cmd.Env == nil {
 		cmd.Env = os.Environ()
 	}
-	cmd.Env = sessionEnv(cmd.Env)
+	cmd.Env = sessionEnv(cmd.Env, s.provider.Credentials)
 	switch {
 	case s.provider.StreamJSONInput:
 		cmd.Stdin = strings.NewReader(agyUserEvent(req.Prompt))

@@ -34,10 +34,18 @@ series until `0.0.999`.
   pins the restrictions above.
 - ADR 0004, `SECURITY.md`, `AGENTS.md` and the README said the agent "has
   no tools" and that its environment was "filtered". They now say what
-  each provider is actually allowed, and that only `DRAFT_*` is removed
-  from the environment. The provider table in `engine/README.md`, which
+  each provider is actually allowed, and what is removed from its
+  environment. The provider table in `engine/README.md`, which
   still listed `copilot --allow-all-tools` and `cursor-agent --force`, is
   replaced by a link to the README's.
+- A provider no longer sees other tools' credentials. Its environment used
+  to lose only `DRAFT_*`, so every token in the shell reached every
+  provider. Variables named like credentials (`*_TOKEN`, `*_API_KEY`,
+  `*_SECRET`, `*_PASSWORD`, `AWS_*`, `GH_*`, `SSH_AUTH_SOCK`, …) are now
+  withheld unless the provider signs in with them: `copilot` keeps
+  `GH_TOKEN`, `claude` keeps `ANTHROPIC_*` and `AWS_*` for Bedrock, and
+  `crush`, `goose` and `qwen` keep every `*_API_KEY`. A provider that
+  signed in through some other variable must now be added to its list.
 
 ## [0.0.43] - 2026-11-01
 

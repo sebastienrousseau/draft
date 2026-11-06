@@ -231,8 +231,8 @@ type acpConn struct {
 }
 
 // startACP launches the agent, wires the reader, and performs the initialize
-// handshake. The process runs in an empty directory of its own with draft's
-// configuration removed from its environment, exactly like a one-shot Session.
+// handshake. Like a one-shot Session, it runs in an empty directory with an
+// environment stripped of draft's configuration and other tools' credentials.
 func startACP(ctx context.Context, p Provider) (*acpConn, error) {
 	dir, err := mkTempDir("", "draft-acp-")
 	if err != nil {
@@ -246,7 +246,7 @@ func startACP(ctx context.Context, p Provider) (*acpConn, error) {
 	if cmd.Env == nil {
 		cmd.Env = os.Environ()
 	}
-	cmd.Env = sessionEnv(cmd.Env)
+	cmd.Env = sessionEnv(cmd.Env, p.Credentials)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		_ = os.RemoveAll(dir)
