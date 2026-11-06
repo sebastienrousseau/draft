@@ -68,7 +68,8 @@ running on their machine with their credentials.
   pins the flags that take them away, and an ACP turn that runs a tool fails
   with `ErrToolUse`.
 - **Never remove the sandbox.** Providers run in an empty temporary directory,
-  with `DRAFT_*` removed from their environment. See
+  with `DRAFT_*` and every credential but their own removed from their
+  environment. Give a provider only the `Credentials` it signs in with. See
   [ADR 0004](docs/adr/0004-no-tools-granted-to-providers.md).
 - **Untrusted text stays fenced.** Source documents, the ledger and the draft
   under review go through `prompt.Untrusted`.

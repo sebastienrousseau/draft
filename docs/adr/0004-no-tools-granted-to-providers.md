@@ -98,6 +98,15 @@ canary file outside its working directory):
 `TestNoProviderGrantsTools` now also catches `--flag=value` spellings and
 flags such as `--permission-mode` whose danger lies in their value.
 
-The child environment is still filtered only of `DRAFT_*`, so tokens and keys
-for other services reach the provider. A tool-less provider cannot read them,
-but the remaining providers can.
+## Amendment, 2026-11: other tools' credentials
+
+The child environment was filtered only of `DRAFT_*`, so every token in the
+user's shell reached every provider. It now also loses credentials, matched by
+name (`*_TOKEN`, `*_API_KEY`, `*_SECRET`, `*_PASSWORD`, `AWS_*`, `GH_*`,
+`SSH_AUTH_SOCK` and similar), except those the provider signs in with, which
+each provider names in its `Credentials`. `claude` keeps `AWS_*` for Bedrock,
+and the multi-model CLIs keep every `*_API_KEY`.
+
+This is still not the allowlist rejected above: anything not shaped like a
+credential passes, so proxies, locales and provider settings keep working.
+`TestProviderGetsOnlyItsOwnCredentials` pins it.

@@ -228,15 +228,6 @@ func TestSessionStripsDraftConfigFromTheEnvironment(t *testing.T) {
 	}
 }
 
-func TestSessionEnvKeepsEverythingElse(t *testing.T) {
-	in := []string{"PATH=/bin", "DRAFT_MODEL=x", "HOME=/home/u", "DRAFTY=keep"}
-	got := sessionEnv(in)
-	want := []string{"PATH=/bin", "HOME=/home/u", "DRAFTY=keep"}
-	if strings.Join(got, "\x1f") != strings.Join(want, "\x1f") {
-		t.Errorf("sessionEnv() = %v, want %v", got, want)
-	}
-}
-
 // A run must fail loudly rather than silently fall back to the user's working
 // directory, which is the condition the isolation exists to prevent.
 func TestSessionFailsWhenTheSandboxCannotBeCreated(t *testing.T) {

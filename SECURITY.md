@@ -58,8 +58,12 @@ asks it only for text. What that agent can do depends on the provider:
 - Any other provider is given no tool-granting flag, but otherwise runs with
   whatever its own configuration allows.
 
-Each runs in an empty temporary directory. Its environment has only `draft`'s
-own `DRAFT_*` settings removed, so it can see your other tokens and keys.
+Each runs in an empty temporary directory. Its environment loses `draft`'s own
+`DRAFT_*` settings and every credential but its own: variables ending
+`_TOKEN`, `_API_KEY`, `_SECRET`, `_PASSWORD` and the like, `AWS_*`, `GH_*` and
+`SSH_AUTH_SOCK` are withheld unless the provider signs in with them. That list
+is matched by name, so a secret under a name it does not cover still gets
+through.
 [ADR 0004](docs/adr/0004-no-tools-granted-to-providers.md) records what is
 guaranteed and how it was checked. Treat sources as you would any untrusted
 input, and prefer the offline Ollama backend (`--engine ollama`) for material

@@ -61,6 +61,10 @@ type Provider struct {
 	// Like PromptViaStdin it keeps the prompt out of argv, but the provider's
 	// stream drives the turn rather than reading a raw prompt.
 	StreamJSONInput bool
+	// Credentials are the environment variables the provider may sign in
+	// with, in the pattern syntax of credentialPatterns. Every other token in
+	// the user's environment is withheld from it.
+	Credentials []string
 }
 
 // defaultProviders is the built-in registry of supported session CLIs, in
@@ -92,33 +96,43 @@ type Provider struct {
 // crush (no provider configured) — their documentation suggests stdin support,
 // but guessing here would break a working provider, so they keep argument
 // delivery until someone can run them.
+// Each provider keeps the credentials it signs in with. claude also keeps
+// the cloud credentials behind its Bedrock and Vertex modes; the multi-model
+// CLIs keep every model API key, since any one may be the one configured.
+var (
+	claudeCredentials   = []string{"ANTHROPIC_*", "CLAUDE_CODE_*", "AWS_*", "GOOGLE_APPLICATION_CREDENTIALS"}
+	codexCredentials    = []string{"OPENAI_*", "CODEX_*"}
+	googleCredentials   = []string{"GEMINI_*", "GOOGLE_*"}
+	anyModelCredentials = []string{"*_API_KEY"}
+)
+
 func defaultProviders() []Provider {
 	return []Provider{
-		{Name: "claude", Bin: "claude", Args: append([]string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, claudeHermetic...), ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
+		{Name: "claude", Bin: "claude", Args: append([]string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, claudeHermetic...), ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true, Credentials: claudeCredentials},
 		// copilot is driven over the Agent Client Protocol, not `copilot -p`:
 		// the -p path takes the prompt as a positional argument, which puts the
 		// verbatim source text into the process listing. ACP delivers it in a
 		// JSON-RPC frame on stdin, and reports a typed stop reason.
-		{Name: "copilot", Bin: "copilot", Args: []string{"--acp", "--disable-builtin-mcps", "--no-custom-instructions"}, ACP: true},
-		{Name: "codex", Bin: "codex", Args: append([]string{"exec"}, codexHermetic...), ModelFlag: "--model", PromptViaStdin: true},
+		{Name: "copilot", Bin: "copilot", Args: []string{"--acp", "--disable-builtin-mcps", "--no-custom-instructions"}, ACP: true, Credentials: []string{"COPILOT_*", "GH_*", "GITHUB_*"}},
+		{Name: "codex", Bin: "codex", Args: append([]string{"exec"}, codexHermetic...), ModelFlag: "--model", PromptViaStdin: true, Credentials: codexCredentials},
 		// agy is driven over its stream-json turn protocol, not `agy -p`: the -p
 		// path takes the prompt as a positional argument, exposing the source
 		// text in the process listing. The prompt goes on stdin as one NDJSON
 		// user event, and the NDJSON result event is parsed back.
-		{Name: "agy", Bin: "agy", Args: []string{"--input-format", "stream-json", "--output-format", "stream-json"}, ModelFlag: "--model", StreamJSONInput: true},
-		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true},
-		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true},
-		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true},
-		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true},
-		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file"},
-		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true},
+		{Name: "agy", Bin: "agy", Args: []string{"--input-format", "stream-json", "--output-format", "stream-json"}, ModelFlag: "--model", StreamJSONInput: true, Credentials: googleCredentials},
+		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true, Credentials: []string{"CURSOR_*"}},
+		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true, Credentials: []string{"AMP_*"}},
+		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true, Credentials: append([]string{"CRUSH_*"}, anyModelCredentials...)},
+		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true, Credentials: append([]string{"GOOSE_*"}, anyModelCredentials...)},
+		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file", Credentials: []string{"XAI_*", "GROK_*"}},
+		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true, Credentials: append([]string{"QWEN_*", "DASHSCOPE_*", "BAILIAN_*"}, anyModelCredentials...)},
 		// Agent Client Protocol transports. claude-acp is verified end to end
 		// against @zed-industries/claude-code-acp 0.16; the others speak the
 		// same protocol per their documentation but their output has not
 		// been checked for a full article.
-		{Name: "claude-acp", Bin: "claude-code-acp", DefaultModel: "sonnet", ACP: true},
-		{Name: "gemini-acp", Bin: "gemini", Args: []string{"--experimental-acp"}, ACP: true, Experimental: true},
-		{Name: "codex-acp", Bin: "codex-acp", ACP: true, Experimental: true},
+		{Name: "claude-acp", Bin: "claude-code-acp", DefaultModel: "sonnet", ACP: true, Credentials: claudeCredentials},
+		{Name: "gemini-acp", Bin: "gemini", Args: []string{"--experimental-acp"}, ACP: true, Experimental: true, Credentials: googleCredentials},
+		{Name: "codex-acp", Bin: "codex-acp", ACP: true, Experimental: true, Credentials: codexCredentials},
 	}
 }
 

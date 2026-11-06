@@ -1222,7 +1222,8 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
   working directory, removed when it returns, so a source document cannot reach
   an agent that has loaded the `CLAUDE.md`, `AGENTS.md`, `.mcp.json` or project
   settings sitting in whatever directory you launched `draft` from. `DRAFT_*`
-  is stripped from the child environment.
+  and every credential except the provider's own are stripped from the child
+  environment.
 - **Untrusted text is fenced.** Source documents, the claim ledger and the
   draft under review are wrapped in a nonce-delimited block carrying an
   explicit instruction that the contents are data, never directions. The nonce
