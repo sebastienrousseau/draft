@@ -29,8 +29,11 @@ within 7 days of confirmation.
 `draft` is a local CLI that orchestrates other tools. Its posture:
 
 - **No tokens on disk.** Session backends shell out to an already-authenticated
-  agent CLI (`claude`, `copilot`, …); `draft` never reads, stores, or logs an
-  API key.
+  agent CLI (`claude`, `copilot`, …) and never read, store or log an API key.
+  The opt-in `--engine api:<provider>` escape hatch is the one exception: it
+  reads the provider's own key from the environment ([ADR
+  0011](docs/adr/0011-direct-api-escape-hatch.md)), and is never chosen
+  automatically.
 - **No shell interpolation.** External tools (`pdftotext`, `textutil`, the
   provider CLIs, Ollama) are invoked with argument vectors via `os/exec` and
   `net/http`, never through a shell, and always under a cancellable context with
@@ -44,9 +47,20 @@ within 7 days of confirmation.
 
 ## Agent Trust Surface
 
-Online, `draft` drives an AI coding-agent CLI in its non-interactive mode, some
-of which auto-approve tool use (for example `copilot --allow-all-tools`). `draft`
-asks only for text and treats your sources as untrusted, but you are still
-handing a research document to an agent that *can* act on your machine. Treat
-sources as you would any untrusted input, and prefer the offline Ollama backend
-(`--engine ollama`) for material you do not trust.
+Online, `draft` drives an AI coding-agent CLI in its non-interactive mode and
+asks it only for text. What that agent can do depends on the provider:
+
+- `claude` and `codex` are started with no tools at all, and none of your own
+  hooks, plugins or MCP servers.
+- An agent driven over ACP (`copilot`, `claude-acp`, …) is refused every
+  permission it asks for, and a turn in which it runs a tool anyway is
+  cancelled and its answer thrown away.
+- Any other provider is given no tool-granting flag, but otherwise runs with
+  whatever its own configuration allows.
+
+Each runs in an empty temporary directory. Its environment has only `draft`'s
+own `DRAFT_*` settings removed, so it can see your other tokens and keys.
+[ADR 0004](docs/adr/0004-no-tools-granted-to-providers.md) records what is
+guaranteed and how it was checked. Treat sources as you would any untrusted
+input, and prefer the offline Ollama backend (`--engine ollama`) for material
+you do not trust.

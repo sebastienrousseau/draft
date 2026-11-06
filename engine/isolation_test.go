@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,7 +17,8 @@ import (
 )
 
 // toolGrantingFlags are invocations that hand an agent the ability to act on
-// the machine: run commands, write files, fetch URLs, auto-approve MCP servers.
+// the machine: run commands, write files, fetch URLs, auto-approve MCP servers,
+// or widen the directories it may touch.
 //
 // draft only ever asks a provider for text, and every prompt it sends carries
 // verbatim content from a third-party document. An invocation that grants tools
@@ -26,21 +28,134 @@ var toolGrantingFlags = []string{
 	"--allow-all-tools", "--allow-all", "--allow-all-paths", "--allow-all-urls",
 	"--allow-all-mcp-server-instructions", "--approve-mcps",
 	"--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
-	"--force", "--yolo", "--full-auto", "--auto-approve", "--no-sandbox",
+	"--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust",
+	"--force", "--yolo", "-y", "--full-auto", "--auto-approve", "--no-sandbox",
+	"--allow-tool", "--allowedTools", "--allowed-tools", "--add-dir",
+}
+
+// toolGrantingValues are flags that are harmless with one value and grant
+// tools with another, so a list of flag names alone cannot catch them.
+var toolGrantingValues = map[string][]string{
+	"--permission-mode": {"bypassPermissions", "acceptEdits", "auto", "dontAsk"},
+	"--sandbox":         {"danger-full-access", "workspace-write"},
+	"-s":                {"danger-full-access", "workspace-write"},
+	"--approval-mode":   {"yolo", "auto_edit"},
+}
+
+// flagName is the flag an argument sets, so "--yolo=true" is caught as
+// "--yolo". Comparing whole arguments missed every --flag=value spelling.
+func flagName(arg string) string {
+	name, _, _ := strings.Cut(arg, "=")
+	return name
+}
+
+// flagValue is the value an argument sets for its flag, whether written
+// "--flag=value" or as the next argument.
+func flagValue(args []string, i int) string {
+	if _, v, ok := strings.Cut(args[i], "="); ok {
+		return v
+	}
+	if i+1 < len(args) {
+		return args[i+1]
+	}
+	return ""
+}
+
+func grantsTools(args []string, i int) bool {
+	name := flagName(args[i])
+	if slices.Contains(toolGrantingFlags, name) {
+		return true
+	}
+	return slices.Contains(toolGrantingValues[name], flagValue(args, i))
 }
 
 func TestNoProviderGrantsTools(t *testing.T) {
 	for _, p := range Providers() {
-		for _, arg := range p.Args {
-			for _, bad := range toolGrantingFlags {
-				if arg == bad {
-					t.Errorf("provider %q is invoked with %s, which grants the agent tools; "+
-						"draft feeds it untrusted document text and only ever needs text back",
-						p.Name, bad)
-				}
+		for i, arg := range p.Args {
+			if grantsTools(p.Args, i) {
+				t.Errorf("provider %q is invoked with %s, which grants the agent tools; "+
+					"draft feeds it untrusted document text and only ever needs text back",
+					p.Name, arg)
 			}
 		}
 	}
+}
+
+// The denylist must catch the spellings it used to miss.
+func TestGrantsToolsCatchesEverySpelling(t *testing.T) {
+	for _, args := range [][]string{
+		{"--yolo=true"},
+		{"--allow-all-tools=1"},
+		{"--permission-mode", "bypassPermissions"},
+		{"--permission-mode=acceptEdits"},
+		{"--sandbox", "danger-full-access"},
+		{"-s", "workspace-write"},
+		{"--approval-mode=yolo"},
+		{"--add-dir", "/"},
+	} {
+		if !grantsTools(args, 0) {
+			t.Errorf("grantsTools(%q) = false", args)
+		}
+	}
+	for _, args := range [][]string{
+		{"--permission-mode", "plan"},
+		{"--sandbox", "read-only"},
+		{"--tools", ""},
+	} {
+		if grantsTools(args, 0) {
+			t.Errorf("grantsTools(%q) = true for a restricting flag", args)
+		}
+	}
+}
+
+// Passing no tool-granting flag is not the same as granting no tools: a CLI
+// left to its defaults loads the user's own tools, hooks and MCP servers. For
+// each provider that can be told otherwise, these are the restrictions its
+// invocation must keep. Each was checked against the CLI by asking it to read a
+// canary file outside its working directory.
+var requiredRestrictions = map[string][][]string{
+	"claude": {
+		{"--tools", ""}, // no built-in tools at all
+		{"--strict-mcp-config"},
+		{"--safe-mode"}, // no hooks, plugins, MCP servers or CLAUDE.md
+	},
+	"codex": {
+		{"--ignore-user-config"},
+		{"--disable", "shell_tool"},
+		{"--disable", "unified_exec"},
+		{"-c", `web_search="disabled"`},
+		{"-c", `default_permissions="draft"`},
+	},
+	"copilot": {
+		{"--disable-builtin-mcps"},
+		{"--no-custom-instructions"},
+	},
+}
+
+func TestProvidersKeepTheirRestrictions(t *testing.T) {
+	for name, wants := range requiredRestrictions {
+		p, ok := LookupProvider(name)
+		if !ok {
+			t.Errorf("provider %q is not registered", name)
+			continue
+		}
+		for _, want := range wants {
+			if !containsRun(p.Args, want) {
+				t.Errorf("provider %q has lost %q from its invocation: %q", name, want, p.Args)
+			}
+		}
+	}
+}
+
+// containsRun reports whether want appears in args as consecutive arguments,
+// so a flag is matched with its own value and not one from elsewhere.
+func containsRun(args, want []string) bool {
+	for i := 0; i+len(want) <= len(args); i++ {
+		if slices.Equal(args[i:i+len(want)], want) {
+			return true
+		}
+	}
+	return false
 }
 
 // captureExec records the command Session.Generate built, then runs the helper

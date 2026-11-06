@@ -94,13 +94,13 @@ type Provider struct {
 // delivery until someone can run them.
 func defaultProviders() []Provider {
 	return []Provider{
-		{Name: "claude", Bin: "claude", Args: []string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
+		{Name: "claude", Bin: "claude", Args: append([]string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, claudeHermetic...), ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true},
 		// copilot is driven over the Agent Client Protocol, not `copilot -p`:
 		// the -p path takes the prompt as a positional argument, which puts the
 		// verbatim source text into the process listing. ACP delivers it in a
 		// JSON-RPC frame on stdin, and reports a typed stop reason.
-		{Name: "copilot", Bin: "copilot", Args: []string{"--acp"}, ACP: true},
-		{Name: "codex", Bin: "codex", Args: []string{"exec"}, ModelFlag: "--model", PromptViaStdin: true},
+		{Name: "copilot", Bin: "copilot", Args: []string{"--acp", "--disable-builtin-mcps", "--no-custom-instructions"}, ACP: true},
+		{Name: "codex", Bin: "codex", Args: append([]string{"exec"}, codexHermetic...), ModelFlag: "--model", PromptViaStdin: true},
 		// agy is driven over its stream-json turn protocol, not `agy -p`: the -p
 		// path takes the prompt as a positional argument, exposing the source
 		// text in the process listing. The prompt goes on stdin as one NDJSON
@@ -120,6 +120,42 @@ func defaultProviders() []Provider {
 		{Name: "gemini-acp", Bin: "gemini", Args: []string{"--experimental-acp"}, ACP: true, Experimental: true},
 		{Name: "codex-acp", Bin: "codex-acp", ACP: true, Experimental: true},
 	}
+}
+
+// Not passing a tool-granting flag is not the same as granting no tools. An
+// agent CLI started with no flags loads the user's own configuration, and with
+// it built-in tools, hooks, plugins and MCP servers: run with draft's old
+// flags, claude read a file outside its sandbox directory on request and
+// printed it, so a crafted PDF could have it paraphrase ~/.ssh into a claim.
+// Where a CLI can be told to take no tools, it is; each list below was checked
+// by asking the CLI to read a canary file outside its working directory.
+
+// claudeHermetic leaves claude no tools and none of the user's
+// customisations. --bare would be stricter but reads only ANTHROPIC_API_KEY,
+// breaking the logged-in session draft relies on; --safe-mode disables hooks,
+// plugins, MCP servers and CLAUDE.md while keeping that session. The empty
+// --tools value is a deliberate argument, not a missing one.
+var claudeHermetic = []string{"--tools", "", "--strict-mcp-config", "--safe-mode", "--disable-slash-commands"}
+
+// codexHermetic removes codex's shell and every other built-in tool, ignores
+// the user's config.toml, rules and project instructions, and adds a
+// permissions profile that denies reads outside the working directory in case
+// a tool survives a future release. "read-only" alone is not enough: it stops
+// writes, not reads, and codex under it read the canary file. Project docs are
+// off because loading them walks up from the working directory, which the
+// profile denies, and codex would refuse to start.
+var codexHermetic = []string{
+	"--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check",
+	"-c", `approval_policy="never"`,
+	"-c", "project_doc_max_bytes=0",
+	"-c", `web_search="disabled"`,
+	"--disable", "shell_tool", "--disable", "unified_exec", "--disable", "apps",
+	"--disable", "browser_use", "--disable", "browser_use_external",
+	"--disable", "computer_use", "--disable", "hooks",
+	"--disable", "image_generation", "--disable", "plugins",
+	"-c", `default_permissions="draft"`,
+	"-c", `permissions.draft.extends=":read-only"`,
+	"-c", `permissions.draft.filesystem={":root"="deny", ":minimal"="read", ":tmpdir"="deny", ":slash_tmp"="deny", ":workspace_roots"={"."="read"}}`,
 }
 
 // registry holds the provider table behind a lock.

@@ -15,8 +15,8 @@ cmd/draft/main.go usage lines=74
 cmd/draft/manpage.go writeManPage lines=110
 cmd/draft/verify.go printVerifyReport cognitive=17 cyclomatic=12
 config/config.go Load cognitive=18 cyclomatic=17 lines=83
-engine/acp.go (file) filelines=540
-engine/acp.go ACP.Generate cognitive=16 cyclomatic=16 halstead=36.2 lines=76
+engine/acp.go (file) filelines=531
+engine/acp.go ACP.Generate cyclomatic=13 halstead=31.2 lines=67
 engine/acp.go acpConn.read cognitive=16 cyclomatic=12
 engine/agy.go parseAgyStreamJSON cognitive=29 cyclomatic=18 halstead=31 lines=72
 engine/api.go API.Generate cyclomatic=12

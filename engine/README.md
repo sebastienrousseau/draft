@@ -138,31 +138,11 @@ one call; session providers manage their own generation and ignore it.
 
 ## Providers
 
-Rows are in auto-selection preference order. Invocations were derived from each
-CLI's own `--help`.
-
-| #  | Provider       | Status       | Headless invocation                                                                  |
-| -- | -------------- | ------------ | ------------------------------------------------------------------------------------ |
-| 1  | `claude`       | stable       | `claude -p --output-format stream-json --include-partial-messages --verbose` (stdin) |
-| 2  | `copilot`      | stable       | `copilot -p --allow-all-tools`                                                       |
-| 3  | `codex`        | stable       | `codex exec` (stdin)                                                                 |
-| 4  | `agy`          | stable       | `agy -p`                                                                             |
-| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text --force` (stdin)                               |
-| 6  | `amp`          | experimental | `amp -x`                                                                             |
-| 7  | `crush`        | experimental | `crush run`                                                                          |
-| 8  | `goose`        | experimental | `goose run --no-session -t`                                                          |
-| 9  | `grok`         | stable       | `grok --output-format plain --single`                                                |
-| 10 | `qwen`         | experimental | `qwen -p`                                                                            |
-
-**Experimental** means the invocation is correct per `--help` but the output has
-not been verified for a full article, so auto-selection skips it unless
-`--experimental` is set.
-
-Rows marked **(stdin)** receive the prompt on standard input rather than as a
-command-line argument, so it does not appear in a process listing alongside the
-source text it quotes. That flag is set only where stdin delivery was confirmed
-by running the CLI: the others were either confirmed to ignore stdin, or could
-not be run to check.
+The provider table, with each CLI's headless invocation and what it is
+allowed to do, is kept once, in the repository's
+[README](../README.md#providers); `go run ./examples/providers` shows which are
+installed on your machine. The registry in `providers.go` is the source of
+truth for both.
 
 ## The fallback chain
 

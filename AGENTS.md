@@ -62,8 +62,13 @@ running on their machine with their credentials.
 - **Never add a flag that grants a provider tools.** `TestNoProviderGrantsTools`
   pins this. Not `--allow-all-tools`, not `--force`, not `--yolo`. `draft` only
   ever asks for text.
-- **Never remove the sandbox.** Providers run in an empty temporary directory
-  with a filtered environment. See
+- **Never drop a provider's restrictions.** Passing no tool-granting flag is
+  not the same as granting no tools: a CLI left to its defaults loads the
+  user's own tools, hooks and MCP servers. `TestProvidersKeepTheirRestrictions`
+  pins the flags that take them away, and an ACP turn that runs a tool fails
+  with `ErrToolUse`.
+- **Never remove the sandbox.** Providers run in an empty temporary directory,
+  with `DRAFT_*` removed from their environment. See
   [ADR 0004](docs/adr/0004-no-tools-granted-to-providers.md).
 - **Untrusted text stays fenced.** Source documents, the ledger and the draft
   under review go through `prompt.Untrusted`.
