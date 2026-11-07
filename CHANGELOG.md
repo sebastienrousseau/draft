@@ -47,6 +47,24 @@ series until `0.0.999`.
   `crush`, `goose` and `qwen` keep every `*_API_KEY`. A provider that
   signed in through some other variable must now be added to its list.
 
+### Fixed
+
+- A call timeout now ends the call. A provider CLI, `pdftotext`, `textutil`,
+  Docling or `c2patool` that left a background process behind could hold
+  draft open indefinitely: the process inherited the tool's output, and
+  draft waited for output that never closed. A three-second timeout was
+  seen still blocked after three minutes. Every subprocess now runs in a
+  process group of its own, a timeout or cancellation kills the whole
+  group, and draft stops waiting for its output five seconds later.
+  Closing an ACP agent no longer hangs the same way. A CLI that exits
+  cleanly while a background process still holds its stderr is taken at
+  its word. On Windows only the process itself is killed; the five-second
+  limit still applies.
+- A provider whose output the parser rejects partway, such as a line over
+  the 8 MiB limit, no longer sits blocked until the call timeout: the rest
+  of its output is drained so it can exit.
+- `c2patool` runs are bounded by a two-minute timeout of their own.
+
 ## [0.0.43] - 2026-11-01
 
 ### Added

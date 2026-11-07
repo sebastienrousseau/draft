@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,19 @@ func TestHelperProcess(t *testing.T) {
 		acpFakeAgent(false)
 	case "acp-agent-badversion":
 		acpFakeAgent(true)
+	case "sleep":
+		time.Sleep(30 * time.Second)
+	case "grandchild-hang":
+		spawnGrandchild(true)
+		time.Sleep(30 * time.Second)
+	case "grandchild-linger":
+		spawnGrandchild(false)
+		os.Stdout.WriteString("# Title\n\nbody text.")
+	case "stream-json-oversized":
+		// One line past the parser's 8 MiB ceiling, then more output: the
+		// parser gives up partway and the CLI is left blocked on a full pipe.
+		os.Stdout.WriteString(`{"type":"result","result":"` + strings.Repeat("x", 9<<20) + `"}` + "\n")
+		os.Stdout.WriteString(strings.Repeat("y\n", 1<<20))
 	case "stream-json-refusal":
 		// Observed from claude 2.x: a refusal result, nothing on stderr,
 		// and a non-zero exit.
@@ -85,6 +99,27 @@ func TestHelperProcess(t *testing.T) {
 		os.Stdout.WriteString("# Title\n\nbody text.")
 	}
 	os.Exit(0)
+}
+
+// spawnGrandchild starts a long-lived copy of the helper that inherits the
+// caller's stderr, and its stdout too when holdStdout is set: the stray
+// background process a CLI can leave behind. Its pid goes to HELPER_PIDFILE.
+func spawnGrandchild(holdStdout bool) {
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess")
+	cmd.Env = append(os.Environ(), "HELPER_MODE=sleep")
+	cmd.Stderr = os.Stderr
+	if os.Getenv("HELPER_DETACH") == "1" {
+		detach(cmd)
+	}
+	if holdStdout {
+		cmd.Stdout = os.Stdout
+	}
+	if err := cmd.Start(); err != nil {
+		os.Exit(9)
+	}
+	if f := os.Getenv("HELPER_PIDFILE"); f != "" {
+		_ = os.WriteFile(f, []byte(strconv.Itoa(cmd.Process.Pid)), 0o600)
+	}
 }
 
 // fakeExec returns an *exec.Cmd that re-runs this test binary as the helper
@@ -439,4 +474,20 @@ func TestParseAgyStreamJSONReportsUsage(t *testing.T) {
 	if usage.InputTokens != 100 || usage.OutputTokens != 30 {
 		t.Errorf("agy in/out usage = %+v", usage)
 	}
+}
+
+// A parser that gives up partway must not leave the CLI blocked on a full
+// pipe until the call timeout kills it (P-H1).
+func TestSessionReturnsPromptlyAfterAStreamError(t *testing.T) {
+	withExec("stream-json-oversized", func() {
+		s, _ := NewSession("claude", config.Config{CallTimeout: 20 * time.Second})
+		start := time.Now()
+		_, err := s.Generate(context.Background(), Request{Prompt: "x"})
+		if err == nil || !strings.Contains(err.Error(), "too long") {
+			t.Errorf("expected the parser's error, got %v", err)
+		}
+		if d := time.Since(start); d > 10*time.Second {
+			t.Errorf("returned after %s: the CLI was left blocked on its output", d)
+		}
+	})
 }

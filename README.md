@@ -1246,7 +1246,9 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 - **Bounded external calls.** Extraction shells out only to `pdftotext` and
   `textutil`, with context timeouts, absolute paths (so a filename beginning
   with `-` cannot be read as a flag), capped output, and no shell
-  interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`.
+  interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`. Every
+  subprocess runs in a process group of its own, so a timeout also ends
+  anything it started (on Windows, only the process itself).
 - **Verifiable releases.** macOS binaries and the universal installer package
   are Developer ID signed and Apple notarized; the package carries a stapled
   ticket for offline Gatekeeper verification. Every release is also signed with
