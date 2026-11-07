@@ -26,6 +26,9 @@ import (
 // every test.
 func acpFakeAgent(badVersion bool) {
 	newFails := os.Getenv("HELPER_ACP_NEWFAIL") == "1"
+	if os.Getenv("HELPER_ACP_GRANDCHILD") == "1" {
+		spawnGrandchild(true)
+	}
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	sessions := 0

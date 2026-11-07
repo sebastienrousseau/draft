@@ -17,11 +17,29 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/internal/proc"
 )
 
 // execCommand builds the command used to invoke a provider CLI. It is a package
 // variable so tests can substitute a fake command without spawning processes.
 var execCommand = exec.CommandContext
+
+// providerCommand builds the command that runs p in dir: its environment
+// stripped of draft's configuration and every credential but p's own, and its
+// lifetime bounded by ctx together with anything it starts.
+func providerCommand(ctx context.Context, p Provider, dir string, args ...string) *exec.Cmd {
+	cmd := execCommand(ctx, p.Bin, args...)
+	cmd.Dir = dir
+	// Filter whatever environment the command already carries, rather than
+	// replacing it: exec.CommandContext leaves Env nil to mean "inherit", but
+	// a caller that has set one deliberately must keep it.
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	cmd.Env = sessionEnv(cmd.Env, p.Credentials)
+	proc.Bound(cmd)
+	return cmd
+}
 
 // mkTempDir is os.MkdirTemp, as a variable so the failure path is testable.
 var mkTempDir = os.MkdirTemp
@@ -98,15 +116,7 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		args = append(args, s.provider.PromptFileFlag, promptFile)
 	}
 
-	cmd := execCommand(ctx, s.provider.Bin, args...)
-	cmd.Dir = dir
-	// Filter whatever environment the command already carries, rather than
-	// replacing it: exec.CommandContext leaves Env nil to mean "inherit", but
-	// a caller that has set one deliberately must keep it.
-	if cmd.Env == nil {
-		cmd.Env = os.Environ()
-	}
-	cmd.Env = sessionEnv(cmd.Env, s.provider.Credentials)
+	cmd := providerCommand(ctx, s.provider, dir, args...)
 	switch {
 	case s.provider.StreamJSONInput:
 		cmd.Stdin = strings.NewReader(agyUserEvent(req.Prompt))
@@ -119,6 +129,14 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		cmd.Args = append(cmd.Args, req.Prompt)
 	}
 
+	return s.collect(ctx, cmd, req.OnChunk)
+}
+
+// collect starts cmd and gathers its answer. proc.Bound has already capped
+// the reads as well as the process: WaitDelay after ctx is done, the output is
+// closed under the parser, so even a stray process that left the process
+// group cannot keep the call waiting on output it holds open.
+func (s *Session) collect(ctx context.Context, cmd *exec.Cmd, onChunk func(string)) (Result, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return Result{}, err
@@ -129,20 +147,16 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
-	var out string
-	var truncated bool
-	var usage Usage
-	var streamErr error
-	switch {
-	case s.provider.StreamJSONInput:
-		out, usage, streamErr = parseAgyStreamJSON(stdout, req.OnChunk)
-	case s.provider.StreamJSON:
-		out, truncated, usage, streamErr = parseStreamJSON(stdout, req.OnChunk)
-	default:
-		out, streamErr = streamAll(stdout, req.OnChunk)
-	}
-
+	res, streamErr := s.parse(stdout, onChunk)
+	// A parser that gave up partway leaves the CLI blocked on a full pipe,
+	// where it would sit until the call timeout. Drain it so the CLI can exit.
+	_, _ = io.Copy(io.Discard, stdout)
 	waitErr := cmd.Wait()
+	// The CLI exited cleanly and its output is complete; a background process
+	// it left behind still holding stderr does not make the answer wrong.
+	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
+		waitErr = nil
+	}
 	// A refusal is reported in the stream, not on stderr: the CLI writes a
 	// result whose stop_reason is "refusal", then exits non-zero with nothing
 	// else to say. Read the stream's verdict before the exit status, or the
@@ -161,7 +175,21 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	if streamErr != nil {
 		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(streamErr.Error()))
 	}
-	return Result{Text: strings.TrimSpace(out), Truncated: truncated, Usage: usage}, nil
+	return res, nil
+}
+
+// parse reads the CLI's answer in whichever output format it speaks.
+func (s *Session) parse(r io.Reader, onChunk func(string)) (res Result, err error) {
+	switch {
+	case s.provider.StreamJSONInput:
+		res.Text, res.Usage, err = parseAgyStreamJSON(r, onChunk)
+	case s.provider.StreamJSON:
+		res.Text, res.Truncated, res.Usage, err = parseStreamJSON(r, onChunk)
+	default:
+		res.Text, err = streamAll(r, onChunk)
+	}
+	res.Text = strings.TrimSpace(res.Text)
+	return res, err
 }
 
 // parseStreamJSON reads the Claude Code stream-json event stream, forwarding
