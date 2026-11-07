@@ -57,6 +57,7 @@ nav:
       - Development: DEVELOPMENT.md
       - Architecture: docs/ARCHITECTURE.md
       - Routing and resume: docs/SPEC-routing-and-resume.md
+      - Audit 2026-11: docs/AUDIT-2026-11.md
       - Audit 2026-09: docs/AUDIT-2026-09.md
   - Decisions:
       - Overview: docs/adr/README.md

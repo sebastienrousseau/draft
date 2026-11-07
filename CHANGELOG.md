@@ -47,6 +47,13 @@ series until `0.0.999`.
   `crush`, `goose` and `qwen` keep every `*_API_KEY`. A provider that
   signed in through some other variable must now be added to its list.
 
+### Documentation
+
+- `docs/AUDIT-2026-11.md` publishes the November audit, held back until the
+  grounding gaps it found were fixed. It updates every September finding,
+  adds new ones and a roadmap, and records which findings are fixed, with
+  the change and the test that pins each. `AGENTS.md` now points to it.
+
 ## [0.0.43] - 2026-11-01
 
 ### Added
