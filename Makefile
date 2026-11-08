@@ -79,7 +79,18 @@ complexity: ## Hold every function to the complexity ceilings (same check as CI)
 
 .PHONY: complexity-baseline
 complexity-baseline: ## Record complexity improvements; refuses over a regression
-	cd tools/complexity && go run . -root ../.. -baseline ../../complexity-baseline.txt -write
+	cd tools/complexity && go run . -root ../.. -baseline ../../complexity-baseline.txt -write $(RENAME)
+
+# The check above holds the code to the branch's own baseline, which cannot
+# notice the baseline itself being loosened. This holds the baseline to the
+# one on COMPLEXITY_BASE (CI passes the pull request's base commit).
+COMPLEXITY_BASE ?= origin/main
+
+.PHONY: complexity-ratchet
+complexity-ratchet: ## Fail if complexity-baseline.txt adds or raises anything over COMPLEXITY_BASE's
+	@base=$$(mktemp) && trap 'rm -f "$$base"' EXIT && \
+	  git show "$(COMPLEXITY_BASE):complexity-baseline.txt" > "$$base" && \
+	  cd tools/complexity && go run . -compare-baseline "$$base" -baseline ../../complexity-baseline.txt
 
 .PHONY: vet
 vet: ## Run go vet

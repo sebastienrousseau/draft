@@ -105,6 +105,18 @@ series until `0.0.999`.
   the 8 MiB limit, no longer sits blocked until the call timeout: the rest
   of its output is drained so it can exit.
 - `c2patool` runs are bounded by a two-minute timeout of their own.
+- The complexity baseline can no longer be loosened. CI held the code to
+  the pull request's own `complexity-baseline.txt`, so raising a value in
+  it, or deleting it and rerunning `make complexity-baseline`, passed. A
+  new CI step, `make complexity-ratchet`, now holds it to the base commit's
+  baseline: an entry may only disappear or go down. Renaming or moving an
+  offender is recorded with `make complexity-baseline RENAME="-rename
+  old.go:Old=new.go:New"`, which carries its allowance over once, instead
+  of a hand edit that looked exactly like loosening it.
+- Function literals assigned to package-level variables are now held to
+  the complexity ceilings, under the variable's name; logic written as
+  `var f = func(...) {...}` escaped them. A second `init` in a file is
+  measured as `init#2` instead of overwriting the first.
 
 ## [0.0.43] - 2026-11-01
 

@@ -32,20 +32,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 	root := fl.String("root", ".", "module root to measure")
 	path := fl.String("baseline", "complexity-baseline.txt", "baseline file")
 	write := fl.Bool("write", false, "record improvements in the baseline")
+	base := fl.String("compare-baseline", "", "only compare -baseline with this one, the base branch's: fail on a new entry or a raised value")
+	renames := renameFlags{}
+	fl.Var(renames, "rename", "record `old=new` (each path:name) as an offender renamed or moved; repeatable")
 	if err := fl.Parse(args); err != nil {
 		return 2
 	}
-	measured, baseline, exists, err := load(*root, *path)
+	if *base != "" {
+		return runRatchet(*base, *path, stdout, stderr)
+	}
+	st, err := load(*root, *path)
+	if err == nil {
+		err = renames.apply(st)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "complexity:", err)
 		return 2
 	}
-	regressions, stale := compare(measured, baseline)
+	regressions, stale := compare(st.measured, st.baseline)
 	for _, r := range regressions {
 		fmt.Fprintln(stderr, r)
 	}
 	if *write {
-		return record(*path, measured, exists && len(regressions) > 0, stdout, stderr)
+		return record(*path, st, st.exists && len(regressions) > 0, stdout, stderr)
 	}
 	for _, s := range stale {
 		fmt.Fprintln(stderr, s)
@@ -57,36 +66,59 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// state is one run's measurement beside the baseline it is held to.
+type state struct {
+	measured, baseline Metrics
+	was                Renames
+	exists             bool
+}
+
 // load measures root and reads the baseline, reporting whether one exists.
-func load(root, path string) (measured, baseline Metrics, exists bool, err error) {
-	if measured, err = measure(root); err != nil {
-		return nil, nil, false, err
+func load(root, path string) (*state, error) {
+	measured, err := measure(root)
+	if err != nil {
+		return nil, err
 	}
-	data, err := os.ReadFile(path)
+	baseline, was, err := readBaseline(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return measured, Metrics{}, false, nil
+		return &state{measured: measured, baseline: Metrics{}, was: Renames{}}, nil
 	}
 	if err != nil {
-		return nil, nil, false, err
+		return nil, err
 	}
-	baseline, err = parseBaseline(bytes.NewReader(data))
-	return measured, baseline, true, err
+	return &state{measured: measured, baseline: baseline, was: was, exists: true}, nil
+}
+
+func readBaseline(path string) (Metrics, Renames, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parseBaseline(bytes.NewReader(data))
 }
 
 // record rewrites the baseline from the current measurement, but not over a
 // regression: rewriting to absorb one is the thing the baseline must never
 // do. With no baseline yet everything is recorded, which is how a repository
-// adopts the gate; that first file is reviewed like any other change.
-func record(path string, measured Metrics, regressed bool, stdout, stderr io.Writer) int {
+// adopts the gate; that first file is reviewed like any other change. A
+// was= mark is kept while its entry is still recorded, so recording an
+// improvement later in the same branch does not drop a rename.
+func record(path string, st *state, regressed bool, stdout, stderr io.Writer) int {
 	if regressed {
 		fmt.Fprintln(stderr, "complexity: not rewriting the baseline over a regression; fix the code instead")
 		return 1
 	}
-	if err := os.WriteFile(path, []byte(formatBaseline(offenders(measured))), 0o644); err != nil {
+	off, keep := offenders(st.measured), Renames{}
+	for key, from := range st.was {
+		if off[key] != nil {
+			keep[key] = from
+		}
+	}
+	if err := os.WriteFile(path, []byte(formatBaseline(off, keep)), 0o644); err != nil {
 		fmt.Fprintln(stderr, "complexity:", err)
 		return 2
 	}
-	fmt.Fprintf(stdout, "complexity: wrote %d offender(s) to %s\n", len(offenders(measured)), path)
+	fmt.Fprintf(stdout, "complexity: wrote %d offender(s) to %s\n", len(off), path)
 	return 0
 }
 
