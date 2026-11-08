@@ -172,6 +172,10 @@ func runVerify(path string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintln(stdout)
 	if report.OK() && sigOK {
+		if !report.DigestMatches {
+			fmt.Fprintln(stdout, "  "+brand.Help.Render("Verified as reviewed. "+report.Review.Reviewer+" took editorial responsibility for this text."))
+			return 0
+		}
 		fmt.Fprintln(stdout, "  "+brand.Help.Render("Verified. The article matches the provenance written beside it."))
 		return 0
 	}
@@ -256,11 +260,7 @@ func printVerifyReport(w io.Writer, path, manifestPath string, r provenance.Chec
 	if r.Grounding.Engine != "" {
 		row(note, "written with", strings.TrimSpace(r.Grounding.Engine+" "+r.Grounding.Model))
 	}
-	if r.DigestMatches {
-		row(ok, "article", "unchanged since it was written ("+shortHash(r.BodySHA256)+")")
-	} else {
-		row(bad, "article", "does NOT match the manifest — it was edited after the provenance was written")
-	}
+	printArticle(row, r)
 	if r.LedgerChecked {
 		if r.LedgerMatches {
 			row(ok, "claim ledger", "matches the verified claims")
@@ -268,6 +268,7 @@ func printVerifyReport(w io.Writer, path, manifestPath string, r provenance.Chec
 			row(bad, "claim ledger", "does not match the recorded digest")
 		}
 	}
+	printReview(w, r)
 	fmt.Fprintf(w, "\n%s\n", head("GROUNDING"))
 	g := r.Grounding
 	row(note, "claims", fmt.Sprintf("%d verified", len(g.Claims)))
@@ -292,14 +293,54 @@ func printVerifyReport(w io.Writer, path, manifestPath string, r provenance.Chec
 	}
 }
 
+// printArticle prints how the article was made and whether it is still the
+// text the provenance, or a review, accounts for.
+func printArticle(row func(status, label, detail string), r provenance.CheckReport) {
+	if provenance.AIGenerated(r.SourceType) {
+		row("--", "AI-generated", "marked as made by a trained model (IPTC trainedAlgorithmicMedia)")
+	}
+	switch {
+	case r.DigestMatches:
+		row("ok", "article", "unchanged since it was written ("+shortHash(r.BodySHA256)+")")
+	case r.ReviewMatches:
+		row("ok", "article", "edited after it was written, then reviewed as it stands ("+shortHash(r.BodySHA256)+")")
+	default:
+		row("!!", "article", "does NOT match the manifest — it was edited after the provenance was written")
+	}
+}
+
+// printReview prints the REVIEW section when a person has attested the
+// article. A review of different text is a failure only when nothing else
+// accounts for the article as it stands.
+func printReview(w io.Writer, r provenance.CheckReport) {
+	rv := r.Review
+	if rv == nil {
+		return
+	}
+	row := func(status, label, detail string) {
+		fmt.Fprintf(w, "  %-3s %-20s %s\n", status, label, brand.Help.Render(detail))
+	}
+	fmt.Fprintf(w, "\n%s\n", brand.Title.Render("REVIEW"))
+	switch {
+	case r.ReviewMatches:
+		row("ok", "reviewed by", rv.Reviewer+" at "+rv.When+", who takes editorial responsibility")
+	case r.DigestMatches:
+		row("--", "reviewed by", rv.Reviewer+" at "+rv.When+", of a different text from this one")
+	default:
+		row("!!", "reviewed by", rv.Reviewer+" at "+rv.When+", but the article has changed since")
+	}
+	if r.ReviewMatches && rv.Edited {
+		row("--", "grounding", "the figures below describe the text draft wrote, before the reviewer's edits")
+	}
+}
+
 // signatureFor validates a detached C2PA credential beside the set, if one is
 // present, and returns its state. It returns nil when no credential accompanies
 // the article. When c2patool is not installed the credential is reported as
 // present-but-unchecked rather than failed: the digest checks still stand, and
 // a verifier that can check the signature still can.
 func signatureFor(bodyPath, manifestPath string) *provenance.SignatureState {
-	sidecarPath := strings.TrimSuffix(manifestPath, ".json") + ".c2pa"
-	sc, err := os.ReadFile(sidecarPath)
+	sc, err := os.ReadFile(sidecarPath(manifestPath))
 	if err != nil {
 		return nil
 	}

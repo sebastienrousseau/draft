@@ -119,6 +119,7 @@ type options struct {
 	showVersion, headless, jsonOut, dryRun                   bool
 	clearCache, doctor, manPage, trustConfig                 bool
 	reviewPath, frontmatterPath, completionShell, verifyPath string
+	attestPath, reviewedBy                                   string
 	args                                                     []string
 }
 
@@ -153,6 +154,8 @@ func newFlagSet(o *options, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&o.headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&o.jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&o.verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
+	fs.StringVar(&o.attestPath, "attest", "", "record that --reviewed-by reviewed an article as it now stands, and exit")
+	fs.StringVar(&o.reviewedBy, "reviewed-by", "", "with --attest: the person taking editorial responsibility")
 	fs.StringVar(&o.completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "report what a run would do, without calling a model")
 	fs.BoolVar(&o.doctor, "doctor", false, "check that this machine can run draft, and exit")
@@ -194,6 +197,8 @@ func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 		return runVerifyJSON(o.verifyPath, stdout, stderr), true
 	case o.verifyPath != "":
 		return runVerify(o.verifyPath, stdout, stderr), true
+	case o.attestPath != "":
+		return runAttest(o, stdout, stderr), true
 	case o.frontmatterPath != "":
 		return runFrontmatter(o, stdout, stderr), true
 	case o.trustConfig:
@@ -398,6 +403,8 @@ var flagHelp = [][2]string{
 	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
 	{"--verify <file>", "check an article against its provenance, and exit"},
+	{"--attest <file>", "record a human review of an article as it stands, and exit"},
+	{"--reviewed-by <id>", "with --attest: who takes editorial responsibility"},
 	{"--combine <file>", "alias for --frontmatter"},
 	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 	{"--print", "run without the TUI; print draft paths to stdout"},

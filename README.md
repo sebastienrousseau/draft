@@ -396,6 +396,8 @@ draft [flags] <source> [more-sources...]
 | `--review <draft>`     | Enhance an existing draft with surgical edits             |
 | `--frontmatter <f>`    | Regenerate frontmatter + final document from an article   |
 | `--verify <f>`         | Check an article against its provenance, and exit         |
+| `--attest <f>`         | Record a human review of the article as it stands         |
+| `--reviewed-by <id>`   | With `--attest`: who takes editorial responsibility       |
 | `--combine <f>`        | Alias for `--frontmatter`                                 |
 | `--keep-artifacts`     | Keep the claim ledger beside a successful draft           |
 | `--print`              | Run without the TUI; print draft paths to stdout          |
@@ -507,6 +509,21 @@ package, so anything can consume it without the CLI.
 ```sh
 draft --verify 2026-07-29/final/2026-07-29-<slug>-final.md
 draft --verify --json 2026-07-29/final/2026-07-29-<slug>-final.md
+```
+
+**Marking and review (EU AI Act Art. 50).** Every manifest marks the article
+as made by a trained model (IPTC `trainedAlgorithmicMedia`), and `--verify`
+says so. Once a person has reviewed the article — and usually edited it —
+`draft --attest <file> --reviewed-by <id>` records who, when, and the digest
+of exactly the text they approved. `--verify` then accepts that edited text as
+"Verified as reviewed", and fails any later change the review does not cover.
+With a signing certificate configured the review is signed with the manifest;
+without one it is a recorded statement, not proof. Whether a review meets the
+Act's editorial-responsibility exemption is a legal question for you, not
+something draft can decide.
+
+```sh
+draft --attest 2026-07-29/final/2026-07-29-<slug>-final.md --reviewed-by "Ada Example"
 ```
 
 ---
