@@ -64,6 +64,7 @@ func main() {
 | `Config`                      | `struct`                   | The fully-resolved run configuration shared across packages                            |
 | `Flags`                       | `struct`                   | Raw command-line values before merging                                                 |
 | `Load`                        | `func(flags Flags) Config` | Defaults → environment → flags                                                         |
+| `TrustProjectConfig`          | `func() (string, error)`   | Trust `./draft.toml` as it now stands; returns its path                                |
 | `EngineAuto` / `EngineOllama` | `const`                    | Engine-selection sentinels; any other value names a session provider                   |
 | `Default*`                    | `const`                    | Every default in one place: models, context length, retries, concurrency, call timeout |
 | `OllamaHost`                  | `const`                    | `http://127.0.0.1:11434`                                                               |
@@ -123,6 +124,11 @@ can recover from. `Warnings` is how it stays honest about having recovered.
 when the latter is unset. `Config.Site` is the publisher identity: the `[site]`
 section of a config file, overridden by `DRAFT_SITE_*`. The key names and the
 variables are defined once, in [`frontmatter`](../frontmatter).
+
+A `draft.toml` in the working directory is read only once it is trusted:
+`TrustProjectConfig` records its SHA-256 and path beside the user config, and
+an edit lapses the trust. Until then `Load` ignores it and says so in
+`Config.Warnings`. The user config and a `DRAFT_CONFIG` file need no trust.
 
 ## License
 

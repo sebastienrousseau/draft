@@ -609,9 +609,9 @@ contents listing, and a page with no text layer at all.
 ## Configuration
 
 Flags beat environment variables, which beat a project `draft.toml`, which
-beats a user config file, which beats the built-in defaults. Nothing about an
-existing setup changes: config files only fill in what a flag or variable did
-not set.
+beats a user config file, which beats the built-in defaults. Config files only
+fill in what a flag or variable did not set, and a project file only once you
+have trusted it.
 
 <details>
 <summary><strong>Config files</strong> — <code>draft.toml</code> for a project or a user</summary>
@@ -620,6 +620,13 @@ A `draft.toml` in the working directory sets defaults for that project; a
 `~/.config/draft/config.toml` (honouring `XDG_CONFIG_HOME`) sets them for you
 everywhere. The project file wins over the user file, and both lose to
 environment variables and flags — so a file is a convenience, never a surprise.
+
+A project file arrives with whatever folder you run draft in, and it can choose
+the engine, the output folder, the house style and the signing key, so draft
+ignores it, with a warning, until you run `draft --trust-config` there. That
+records the file's SHA-256 in `~/.config/draft/trusted`; any later edit lapses
+the trust until you give it again. Your user file, and a file you name with
+`DRAFT_CONFIG`, need no trust.
 
 ```toml
 # draft.toml — flat key = value, "#" or ";" comments

@@ -124,9 +124,7 @@ The template examples below are style evidence ONLY. They contain unrelated subj
 - Your article's topic, title, numbers, and all content MUST be derived EXCLUSIVELY from the CLAIMS section below.
 
 ## STYLE CALIBRATION FROM TEMPLATES (STYLE & RHYTHM ONLY - IGNORE TOPIC & FACTS)
-<style_calibration_sample>
 %s
-</style_calibration_sample>
 
 ## GROUNDING
 %s
@@ -160,7 +158,9 @@ Write a %d-%d word article for technical readers and founders titled around the 
 
 ## CLAIMS
 %s`,
-		style,
+		// Fenced like the sources: the templates are read from a folder the
+		// configuration chose, so they are text from a file, not instructions.
+		Untrusted("UNTRUSTED STYLE SAMPLE", style),
 		groundingRules,
 		english,
 		minWords, maxWords, minWords,

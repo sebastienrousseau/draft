@@ -50,9 +50,10 @@ func (fc fileConfig) dir(warn func(string, ...any), key, home, fallback string) 
 // loadFileConfig discovers and merges draft's config files. Precedence within
 // the file layer: an explicit DRAFT_CONFIG wins outright; otherwise a project
 // draft.toml in the working directory overrides a user config under
-// $XDG_CONFIG_HOME/draft (or ~/.config/draft). DRAFT_NO_CONFIG disables the
-// layer entirely. A missing discovered file is silent; a missing DRAFT_CONFIG
-// is a warning, because the user asked for it by name.
+// $XDG_CONFIG_HOME/draft (or ~/.config/draft), but only once it is trusted
+// (see readProjectConfig). DRAFT_NO_CONFIG disables the layer entirely. A
+// missing discovered file is silent; a missing DRAFT_CONFIG is a warning,
+// because the user asked for it by name, and naming it is trust enough.
 func loadFileConfig(warn func(string, ...any)) fileConfig {
 	if envBool("DRAFT_NO_CONFIG") {
 		return nil
@@ -77,7 +78,7 @@ func loadFileConfig(warn func(string, ...any)) fileConfig {
 		merge(fc, readFileConfig(u, warn))
 	}
 	if wd, err := getwd(); err == nil && wd != "" {
-		merge(fc, readFileConfig(filepath.Join(wd, "draft.toml"), warn))
+		merge(fc, readProjectConfig(filepath.Join(wd, projectConfigName), warn))
 	}
 	if len(fc) == 0 {
 		return nil
