@@ -622,18 +622,25 @@ everywhere. The project file wins over the user file, and both lose to
 environment variables and flags — so a file is a convenience, never a surprise.
 
 ```toml
-# draft.toml — flat key = value, "#" or ";" comments, [sections] ignored
+# draft.toml — flat key = value, "#" or ";" comments
 engine        = "claude"
 extract-engine = "ollama"   # local extraction, cloud writing
 reader        = "docling"
 out           = "~/Drop/Drafts"
 style         = "~/.config/draft/house-style.json"
+
+[site]                      # who your articles are published as
+base-url      = "https://example.com"
+name          = "Ada Example"
+email         = "ada@example.com"
 ```
 
 Recognised keys mirror the settings below: `engine`, `extract-engine`,
 `write-engine`, `edit-engine`, `reader`, `model`, `write-model`,
 `extract-model`, `edit-model`, `out`, `sources-dir`, `style`, and the C2PA
-signing keys `c2pa-cert` / `c2pa-key` / `c2pa-alg`. `DRAFT_CONFIG` names an
+signing keys `c2pa-cert` / `c2pa-key` / `c2pa-alg`. Other section headers are
+ignored and their keys read as top-level ones, except `[site]`, which holds the
+publisher identity below. `DRAFT_CONFIG` names an
 explicit file to load instead of discovery; `DRAFT_NO_CONFIG=1` disables the
 file layer entirely. The parser is a dependency-free flat-key reader — no new
 module, no TOML library.
@@ -693,11 +700,15 @@ when the latter is unset.
 <details>
 <summary><strong>Publisher identity</strong> — make the frontmatter yours</summary>
 
-Generated frontmatter carries an author, URLs, social handles and an analytics
-ID. Override any part of it. Unset variables keep their defaults, and curated
-frontmatter fields still win over generated ones.
+Generated frontmatter can carry an author, URLs, social handles and an
+analytics ID. draft has no identity of its own to put there: set yours in the
+`[site]` section of a config file, under the same names in lower case
+(`base-url`, `cdn`, `name`, …), or with the variables below, which win over the
+file field by field. A field that needs an unset part of the identity is left
+out of the frontmatter, and curated frontmatter fields still win over
+generated ones. `draft --doctor` shows the identity in use.
 
-| Variable                    | Overrides                                       |
+| Variable                    | Sets                                            |
 | --------------------------- | ----------------------------------------------- |
 | `DRAFT_SITE_BASE_URL`       | Canonical site root for permalinks and URLs     |
 | `DRAFT_SITE_CDN`            | Asset host for banners, logos, images           |

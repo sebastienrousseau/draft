@@ -77,8 +77,8 @@ func TestCombineAndSplit(t *testing.T) {
 	combined := Combine(yaml, sampleArticle)
 
 	splitFM, splitBody := Split(combined)
-	if !strings.Contains(splitFM, "author:") {
-		t.Errorf("split frontmatter missing author")
+	if !strings.Contains(splitFM, "seo_title:") {
+		t.Errorf("split frontmatter missing seo_title")
 	}
 	if !strings.HasPrefix(splitBody, "# From Evidence to Truth") {
 		t.Errorf("split body missing H1 title: %s", splitBody[:50])
@@ -128,8 +128,9 @@ func TestInferCategoryScoring(t *testing.T) {
 }
 
 func TestGenerateCopyrightYear(t *testing.T) {
-	yaml := Generate("# T\n\nSome body.", time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC))
-	if !strings.Contains(yaml, `copyright: "© Copyright 2025 - 2027 - Sebastien Rousseau. All rights reserved."`) {
+	site := Site{Name: "Ada Example", CopyrightFrom: 2025}
+	yaml := GenerateWithOptions("# T\n\nSome body.", Options{Date: time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC), Site: &site})
+	if !strings.Contains(yaml, `copyright: "© Copyright 2025 - 2027 - Ada Example. All rights reserved."`) {
 		t.Error("copyright end year should follow the article date")
 	}
 }
@@ -271,6 +272,7 @@ func TestProcessFileErrors(t *testing.T) {
 	}
 
 	// No date prefix: the whole stem is the slug and a zero date means now.
+	t.Setenv("DRAFT_SITE_BASE_URL", "https://example.org")
 	dir := t.TempDir()
 	f := filepath.Join(dir, "meeting-notes.md")
 	if err := os.WriteFile(f, []byte("# Some Note Title\n\nBody prose.\n"), 0o644); err != nil {
@@ -284,7 +286,7 @@ func TestProcessFileErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(fmContent), "/meeting-notes") {
+	if !strings.Contains(string(fmContent), `-meeting-notes"`) {
 		t.Error("slug should come from the dateless filename stem")
 	}
 }
@@ -449,7 +451,7 @@ func TestProcessFileUsesFilenameSlug(t *testing.T) {
 	}
 
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
-	_, fmPath, _, err := ProcessFile(srcFile, now)
+	_, fmPath, _, err := ProcessFileWithSite(srcFile, now, Site{BaseURL: "https://example.org"})
 	if err != nil {
 		t.Fatalf("ProcessFile failed: %v", err)
 	}
@@ -460,7 +462,7 @@ func TestProcessFileUsesFilenameSlug(t *testing.T) {
 
 	// The filename is the article's publishing identity: the permalink must
 	// use its slug, not one re-derived from the title.
-	want := `permalink: "https://sebastienrousseau.com/2026-01-15-my-canonical-slug"`
+	want := `permalink: "https://example.org/2026-01-15-my-canonical-slug"`
 	if !strings.Contains(string(fmContent), want) {
 		t.Errorf("permalink should use the filename slug; frontmatter:\n%s", fmContent)
 	}
@@ -697,5 +699,119 @@ func TestProvenanceFieldsAreOptionalAndSticky(t *testing.T) {
 	}
 	if strings.Contains(kept, "draft_model:") {
 		t.Errorf("a field with no existing and no generated value must be absent:\n%s", kept)
+	}
+}
+
+// A fully set identity must produce exactly the frontmatter it did before
+// unset fields became optional. The golden was written by the code on main
+// before this change, so any byte that moves is a breaking change to
+// generated output.
+func TestFullSiteFrontmatterIsUnchanged(t *testing.T) {
+	want, err := os.ReadFile(filepath.Join("testdata", "full-site.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	site := Site{BaseURL: "https://example.org", CDN: "https://cdn.example.org", Name: "Ada Example", ShortName: "adaexample", Email: "ada@example.org", TwitterHandle: "@ada", Location: "Lyon, FR", MeasurementID: "G-EXAMPLE", CopyrightFrom: 2024}
+	got := GenerateWithOptions(sampleArticle, Options{Date: time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC), Site: &site, Engine: "claude", Model: "m", Version: "v0.0.43"})
+	if got != string(want) {
+		t.Errorf("frontmatter for a full identity changed:\n%s", got)
+	}
+}
+
+// fmKeys is the set of keys a generated frontmatter block carries.
+func fmKeys(yaml string) map[string]bool {
+	keys := map[string]bool{}
+	for _, line := range strings.Split(yaml, "\n") {
+		if k, _, ok := strings.Cut(line, ": "); ok && !strings.HasPrefix(k, "#") {
+			keys[k] = true
+		}
+	}
+	return keys
+}
+
+// identityKeys are every field derived from the publisher identity.
+var identityKeys = []string{
+	"author", "banner_alt", "banner_height", "banner_width", "banner", "cdn", "cname", "copyright",
+	"icon", "id", "image_alt", "image_height", "image_width", "image", "logo_alt", "logo_height",
+	"logo_width", "logo", "measurementID", "name", "permalink", "short_name", "url", "atom_link",
+	"item_guid", "item_link", "managing_editor", "webmaster", "twitter_creator", "twitter_image",
+	"twitter_image_alt", "twitter_site", "twitter_url", "author_website", "author_twitter", "author_location",
+}
+
+// With no identity configured, draft publishes as nobody: no field that
+// needs one is written, and no one else's name, site or analytics tag is.
+func TestNoIdentityWritesNoIdentityFields(t *testing.T) {
+	yaml := Generate(sampleArticle, time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC))
+	keys := fmKeys(yaml)
+	for _, k := range identityKeys {
+		if keys[k] {
+			t.Errorf("%s written without an identity", k)
+		}
+	}
+	for _, k := range []string{"title", "description", "date", "seo_title", "item_title"} {
+		if !keys[k] {
+			t.Errorf("%s missing: it needs no identity", k)
+		}
+	}
+	for _, leak := range []string{"sebastienrousseau", "G-169G4ET5HQ", "wwdseb", "cloudcdn"} {
+		if strings.Contains(yaml, leak) {
+			t.Errorf("the default identity leaked %q", leak)
+		}
+	}
+}
+
+// A partial identity writes what it can derive and nothing that would need
+// a missing part: a name gives an author and a copyright, but no URL.
+func TestPartialIdentityWritesOnlyWhatItCanDerive(t *testing.T) {
+	site := Site{Name: "Ada Example"}
+	yaml := GenerateWithOptions(sampleArticle, Options{Date: time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC), Site: &site})
+	keys := fmKeys(yaml)
+	for _, k := range []string{"author", "copyright", "name", "managing_editor"} {
+		if !keys[k] {
+			t.Errorf("%s missing though the name is set", k)
+		}
+	}
+	for _, k := range []string{"permalink", "url", "id", "atom_link", "banner", "logo", "logo_alt", "image", "image_alt", "twitter_image_alt", "webmaster", "cname"} {
+		if keys[k] {
+			t.Errorf("%s written though what it needs is unset", k)
+		}
+	}
+	if !strings.Contains(yaml, `author: "Ada Example"`) {
+		t.Error("an author with no email should be the name alone")
+	}
+
+	site = Site{Email: "ada@example.org"}
+	yaml = GenerateWithOptions(sampleArticle, Options{Date: time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC), Site: &site})
+	if !strings.Contains(yaml, `author: "ada@example.org"`) || strings.Contains(yaml, "copyright:") {
+		t.Errorf("an email alone should be the author, with no copyright holder:\n%s", yaml)
+	}
+
+	// A CDN without a short name has a banner but no logo or portrait.
+	site = Site{CDN: "https://cdn.example.org"}
+	keys = fmKeys(GenerateWithOptions(sampleArticle, Options{Date: time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC), Site: &site}))
+	if !keys["banner"] || !keys["banner_alt"] || keys["logo"] || keys["image"] {
+		t.Errorf("a CDN alone should give a banner and nothing needing a short name: %v", keys)
+	}
+}
+
+// A curated field survives even where the identity would generate nothing.
+func TestCuratedIdentityFieldSurvivesAnEmptySite(t *testing.T) {
+	yaml := GenerateWithOptions(sampleArticle, Options{
+		Date:     time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC),
+		Existing: map[string]string{"author": `"curated@example.org (Curated)"`},
+	})
+	if !strings.Contains(yaml, `author: "curated@example.org (Curated)"`) {
+		t.Error("a curated author was dropped")
+	}
+}
+
+func TestSiteOverride(t *testing.T) {
+	file := map[string]string{"base-url": "https://example.org", "name": " Ada ", "copyright-from": "2020", "measurement-id": ""}
+	s := Site{MeasurementID: "G-KEEP"}.Override(func(k string) string { return file[k] })
+	if s.BaseURL != "https://example.org" || s.Name != "Ada" || s.CopyrightFrom != 2020 || s.MeasurementID != "G-KEEP" {
+		t.Errorf("Override = %+v", s)
+	}
+	if !s.Identified() || (Site{Email: "a@b"}).Identified() {
+		t.Error("Identified should mean a name or a site")
 	}
 }

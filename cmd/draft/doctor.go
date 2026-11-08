@@ -145,6 +145,41 @@ func runDoctor(cfg config.Config, p probes, w io.Writer) int {
 		row(ok, "cache", cfg.CacheDir)
 	}
 
+	reportSettings(w, cfg, head, row)
+
+	fmt.Fprintln(w)
+	backendOK := installed > 0 || ollamaOK
+	if why := notReady(pdfOK, readerOK, backendOK, pathsOK); why != "" {
+		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" "+why)
+		return 1
+	}
+	fmt.Fprintln(w, "  "+dim("Ready. Run `draft --dry-run <source>` to check a specific paper."))
+	return 0
+}
+
+// notReady is what stops this machine producing a draft now, or "" when
+// nothing does. The first missing requirement is the one worth fixing first.
+func notReady(pdfOK, readerOK, backendOK, pathsOK bool) string {
+	switch {
+	case !pdfOK && !backendOK:
+		return "No source tooling and no backend."
+	case !pdfOK:
+		return "Install Poppler for pdftotext, or supply Markdown or text sources."
+	case !readerOK:
+		return "Install Docling (uv tool install docling) or drop --reader docling."
+	case !backendOK:
+		return "Install an agent CLI (" + strings.Join(engine.ProviderNames(), ", ") + ") or Ollama."
+	case !pathsOK:
+		return "A required directory is not writable."
+	}
+	return ""
+}
+
+// reportSettings lists the choices a run will make that are not about this
+// machine: which backend does what, and who the articles are published as.
+// None of them blocks a run.
+func reportSettings(w io.Writer, cfg config.Config, head func(string) string, row func(status, label, detail string)) {
+	const ok, note = "ok", "--"
 	fmt.Fprintf(w, "\n%s\n", head("ROUTING"))
 	for _, k := range []struct {
 		label string
@@ -160,24 +195,10 @@ func runDoctor(cfg config.Config, p probes, w io.Writer) int {
 		row(note, "strict numbers", "on — an ungrounded number fails the draft")
 	}
 
-	fmt.Fprintln(w)
-	switch {
-	case !pdfOK && installed == 0 && !ollamaOK:
-		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" No source tooling and no backend.")
-		return 1
-	case !pdfOK:
-		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" Install Poppler for pdftotext, or supply Markdown or text sources.")
-		return 1
-	case !readerOK:
-		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" Install Docling (uv tool install docling) or drop --reader docling.")
-		return 1
-	case installed == 0 && !ollamaOK:
-		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" Install an agent CLI ("+strings.Join(engine.ProviderNames(), ", ")+") or Ollama.")
-		return 1
-	case !pathsOK:
-		fmt.Fprintln(w, "  "+brand.Accent.Render("Not ready.")+" A required directory is not writable.")
-		return 1
+	fmt.Fprintf(w, "\n%s\n", head("PUBLISHER"))
+	if !cfg.Site.Identified() {
+		row(note, "identity", "not set — frontmatter will carry no author, URLs or analytics; add a [site] section to draft.toml")
+		return
 	}
-	fmt.Fprintln(w, "  "+dim("Ready. Run `draft --dry-run <source>` to check a specific paper."))
-	return 0
+	row(ok, "identity", strings.TrimSpace(cfg.Site.Name+" "+cfg.Site.BaseURL))
 }

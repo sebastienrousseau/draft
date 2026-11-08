@@ -14,6 +14,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/frontmatter"
 )
 
 // fakeEngine is a deterministic stand-in for a real backend, so the pipeline's
@@ -319,5 +320,31 @@ func TestMergeMultipleSources(t *testing.T) {
 	}
 	if done.OutputPath == "" {
 		t.Error("expected a merged draft")
+	}
+}
+
+// A saved article is published as the configured identity, and as nobody
+// when there is none.
+func TestRunStampsTheConfiguredSite(t *testing.T) {
+	read := func(cfg config.Config) string {
+		t.Helper()
+		done, errText, _ := drain(t, cfg, []engine.Engine{okEngine("fake")}, Job{Sources: []string{writeSource(t)}})
+		if errText != "" {
+			t.Fatalf("unexpected error: %s", errText)
+		}
+		stem := strings.TrimSuffix(filepath.Base(done.OutputPath), "-final.md")
+		fm, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(done.OutputPath)), "yaml", stem+"-frontmatter.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(fm)
+	}
+	cfg := testConfig(t)
+	cfg.Site = frontmatter.Site{BaseURL: "https://example.org", Name: "Ada Example"}
+	if fm := read(cfg); !strings.Contains(fm, `name: "Ada Example"`) || !strings.Contains(fm, `permalink: "https://example.org/`) {
+		t.Errorf("configured identity not stamped:\n%s", fm)
+	}
+	if fm := read(testConfig(t)); strings.Contains(fm, "permalink:") || strings.Contains(fm, "author:") {
+		t.Errorf("no identity should mean no identity fields:\n%s", fm)
 	}
 }

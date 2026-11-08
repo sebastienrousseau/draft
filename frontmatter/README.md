@@ -127,10 +127,18 @@ The set is three files, written side by side:
 display name, short name, email, Twitter handle, location, measurement ID and
 the first year of the copyright range.
 
-`Options.Site` of `nil` selects `DefaultSite`. `SiteFromEnv` returns
-`DefaultSite` with any `DRAFT_SITE_*` environment overrides applied, which is
-what the CLI uses. Curated frontmatter fields still win over anything generated
-from a `Site`.
+`DefaultSite` is empty, and `Options.Site` of `nil` selects it: a field that
+needs an unset part of the identity is left out rather than filled in, so an
+unconfigured run publishes as nobody instead of as someone else. A fully set
+`Site` yields exactly the frontmatter it always did.
+
+`Site.Override` fills a `Site` from any lookup by key name (`base-url`, `cdn`,
+`name`, `short-name`, `email`, `twitter`, `location`, `measurement-id`,
+`copyright-from`); `Site.WithEnv` applies the matching `DRAFT_SITE_*`
+variables, and `SiteFromEnv` is `DefaultSite.WithEnv()`. The CLI resolves the
+`[site]` section of its config file first, through `config.Config.Site`, and
+regenerates sets with `ProcessFileWithSite`. Curated frontmatter fields still
+win over anything generated from a `Site`.
 
 ## License
 

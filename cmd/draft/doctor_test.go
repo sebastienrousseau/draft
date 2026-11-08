@@ -12,6 +12,7 @@ import (
 
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/frontmatter"
 )
 
 // healthyProbes reports a machine with everything installed.
@@ -238,5 +239,27 @@ func TestDoctorReportsDocling(t *testing.T) {
 	out.Reset()
 	if code := runDoctor(cfg, missing, &out); code != 1 || !strings.Contains(out.String(), "drop --reader docling") {
 		t.Errorf("a requested but missing reader must fail; code %d:\n%s", code, out.String())
+	}
+}
+
+// With no publisher identity, the doctor says what that costs and how to set
+// one, without calling the machine unready: it is a choice, not a fault.
+func TestDoctorWarnsWithoutAPublisherIdentity(t *testing.T) {
+	var out strings.Builder
+	if code := runDoctor(doctorCfg(t), healthyProbes(), &out); code != 0 {
+		t.Fatalf("a missing identity must not fail the doctor; exit %d", code)
+	}
+	if !strings.Contains(out.String(), "PUBLISHER") || !strings.Contains(out.String(), "[site]") {
+		t.Errorf("doctor should point at the [site] section:\n%s", out.String())
+	}
+}
+
+func TestDoctorReportsThePublisherIdentity(t *testing.T) {
+	cfg := doctorCfg(t)
+	cfg.Site = frontmatter.Site{Name: "Ada Example", BaseURL: "https://example.org"}
+	var out strings.Builder
+	runDoctor(cfg, healthyProbes(), &out)
+	if !strings.Contains(out.String(), "Ada Example https://example.org") || strings.Contains(out.String(), "[site]") {
+		t.Errorf("doctor should show the identity in use:\n%s", out.String())
 	}
 }

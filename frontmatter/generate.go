@@ -25,7 +25,7 @@ type Options struct {
 	// appeared after "key: "). They always win over generated values;
 	// delete a field from the source frontmatter to have it regenerated.
 	Existing map[string]string
-	// Site is the publisher identity; nil means DefaultSite.
+	// Site is the publisher identity; nil means DefaultSite, which is empty.
 	Site *Site
 	// Engine, Model and Version record what wrote the article: the backend
 	// that produced the body, the model it used, and the draft release that
@@ -84,71 +84,62 @@ func GenerateWithOptions(markdown string, opts Options) string {
 	dateDisplay := date.Format("January 2, 2006")
 	rssDate := date.Format("Mon, 02 Jan 2006 15:04:05 +0000")
 	dateSlug := dateStr + "-" + meta.Slug
-	fullURL := site.BaseURL + "/" + dateSlug
-	rssURL := fullURL + "/rss.xml"
-	bannerURL := site.CDN + "/stocks/images/" + meta.Slug + ".webp"
+	sf := site.fields(dateSlug, meta.Slug, date.Year())
 	bannerAlt := fmt.Sprintf("An illustration representing %s.", strings.ToLower(meta.Title))
-	author := site.Email + " (" + site.Name + ")"
-	logoURL := site.CDN + "/clients/" + site.ShortName + "/v1/logos/" + site.ShortName + ".svg"
-	imageURL := site.CDN + "/stocks/images/" + site.ShortName + ".webp"
-	copyright := fmt.Sprintf("© Copyright %d - %s. All rights reserved.", date.Year(), site.Name)
-	if site.CopyrightFrom > 0 && site.CopyrightFrom < date.Year() {
-		copyright = fmt.Sprintf("© Copyright %d - %d - %s. All rights reserved.", site.CopyrightFrom, date.Year(), site.Name)
-	}
 
 	var b strings.Builder
 	b.WriteString("---\n\n")
 	b.WriteString("# Front Matter (YAML)\n\n")
-	b.WriteString(field("author", author))
-	b.WriteString(field("banner_alt", bannerAlt))
-	b.WriteString(field("banner_height", "1280"))
-	b.WriteString(field("banner_width", "1920"))
-	b.WriteString(field("banner", bannerURL))
-	b.WriteString(field("cdn", site.CDN))
+	b.WriteString(optional("author", sf.author))
+	b.WriteString(optional("banner_alt", ifSet(bannerAlt, sf.banner)))
+	b.WriteString(optional("banner_height", ifSet("1280", sf.banner)))
+	b.WriteString(optional("banner_width", ifSet("1920", sf.banner)))
+	b.WriteString(optional("banner", sf.banner))
+	b.WriteString(optional("cdn", site.CDN))
 	b.WriteString(field("charset", "UTF-8"))
-	b.WriteString(field("cname", strings.TrimPrefix(site.BaseURL, "https://")))
-	b.WriteString(field("copyright", copyright))
+	b.WriteString(optional("cname", sf.cname))
+	b.WriteString(optional("copyright", sf.copyright))
 	b.WriteString(field("date", dateDisplay))
 	b.WriteString(field("description", meta.Description))
 	b.WriteString(field("format-detection", "telephone=no"))
 	b.WriteString(field("hreflang", "en"))
-	b.WriteString(field("icon", logoURL))
-	b.WriteString(field("id", fullURL))
-	b.WriteString(field("image_alt", "Black and White Portrait of "+site.Name))
-	b.WriteString(field("image_height", "162"))
-	b.WriteString(field("image_width", "162"))
-	b.WriteString(field("image", imageURL))
+	b.WriteString(optional("icon", sf.logo))
+	b.WriteString(optional("id", sf.url))
+	b.WriteString(optional("image_alt", sf.imageAlt))
+	b.WriteString(optional("image_height", ifSet("162", sf.image)))
+	b.WriteString(optional("image_width", ifSet("162", sf.image)))
+	b.WriteString(optional("image", sf.image))
 	b.WriteString(field("keywords", meta.Keywords))
 	b.WriteString(field("language", "en-GB"))
 	b.WriteString(field("last_reviewed", dateStr))
 	b.WriteString(field("layout", "report"))
 	b.WriteString(field("locale", "en_GB"))
-	b.WriteString(field("logo_alt", "Logo for "+site.Name))
-	b.WriteString(field("logo_height", "44"))
-	b.WriteString(field("logo_width", "44"))
-	b.WriteString(field("logo", logoURL))
+	b.WriteString(optional("logo_alt", sf.logoAlt))
+	b.WriteString(optional("logo_height", ifSet("44", sf.logo)))
+	b.WriteString(optional("logo_width", ifSet("44", sf.logo)))
+	b.WriteString(optional("logo", sf.logo))
 	b.WriteString(field("menu", ""))
-	b.WriteString(field("measurementID", site.MeasurementID))
-	b.WriteString(field("name", site.Name))
-	b.WriteString(field("permalink", fullURL))
+	b.WriteString(optional("measurementID", site.MeasurementID))
+	b.WriteString(optional("name", site.Name))
+	b.WriteString(optional("permalink", sf.url))
 	b.WriteString(field("rating", "general"))
 	b.WriteString(field("referrer", "no-referrer"))
 	b.WriteString(field("robots", "index, follow"))
 	b.WriteString(field("schema", "FAQPage, Article"))
 	b.WriteString(field("seo_title", meta.Title))
-	b.WriteString(field("short_name", site.ShortName))
+	b.WriteString(optional("short_name", site.ShortName))
 	if _, ok := opts.Existing["subtitle"]; ok || meta.Subtitle != "" {
 		b.WriteString(field("subtitle", meta.Subtitle))
 	}
 	b.WriteString(field("tags", meta.Tags))
 	b.WriteString(field("theme-color", "0, 83, 191"))
 	b.WriteString(field("title", meta.Title))
-	b.WriteString(field("url", fullURL))
+	b.WriteString(optional("url", sf.url))
 	b.WriteString(field("viewport", "width=device-width, initial-scale=1, shrink-to-fit=no"))
 	b.WriteString("\n")
 
 	b.WriteString("# RSS - The RSS feed front matter (YAML).\n")
-	b.WriteString(field("atom_link", rssURL))
+	b.WriteString(optional("atom_link", sf.rss))
 	b.WriteString(field("category", meta.Category))
 	if v, ok := opts.Existing["docs"]; ok {
 		b.WriteString("docs: " + v + "\n")
@@ -160,16 +151,16 @@ func GenerateWithOptions(markdown string, opts Options) string {
 	b.WriteString(optional("draft_model", opts.Model))
 	b.WriteString(optional("draft_version", opts.Version))
 	b.WriteString(field("item_description", meta.Description))
-	b.WriteString(field("item_guid", rssURL))
-	b.WriteString(field("item_link", rssURL))
+	b.WriteString(optional("item_guid", sf.rss))
+	b.WriteString(optional("item_link", sf.rss))
 	b.WriteString(field("item_pub_date", rssDate))
 	b.WriteString(field("item_title", meta.Title))
 	b.WriteString(field("last_build_date", rssDate))
-	b.WriteString(field("managing_editor", author))
+	b.WriteString(optional("managing_editor", sf.author))
 	b.WriteString(field("pub_date", rssDate))
 	b.WriteString(field("ttl", "60"))
 	b.WriteString(field("type", "article"))
-	b.WriteString(field("webmaster", site.Email))
+	b.WriteString(optional("webmaster", site.Email))
 	b.WriteString("\n")
 
 	b.WriteString("# Apple - The Apple front matter (YAML).\n")
@@ -188,22 +179,22 @@ func GenerateWithOptions(markdown string, opts Options) string {
 
 	b.WriteString("# Twitter Card - The Twitter Card front matter (YAML).\n\n")
 	b.WriteString(field("twitter_card", "summary_large_image"))
-	b.WriteString(field("twitter_creator", site.TwitterHandle))
+	b.WriteString(optional("twitter_creator", site.TwitterHandle))
 	b.WriteString(field("twitter_description", meta.Description))
-	b.WriteString(field("twitter_image", logoURL))
-	b.WriteString(field("twitter_image_alt", "Logo of "+site.Name))
-	b.WriteString(field("twitter_site", site.TwitterHandle))
+	b.WriteString(optional("twitter_image", sf.logo))
+	b.WriteString(optional("twitter_image_alt", sf.twitterImageAlt))
+	b.WriteString(optional("twitter_site", site.TwitterHandle))
 	b.WriteString(field("twitter_title", meta.Title))
-	b.WriteString(field("twitter_url", fullURL))
+	b.WriteString(optional("twitter_url", sf.url))
 	b.WriteString("\n")
 
 	b.WriteString(field("excerpt", meta.Excerpt))
 	b.WriteString("\n")
 
 	b.WriteString("# Humans.txt - The Humans.txt front matter (YAML).\n")
-	b.WriteString(field("author_website", site.BaseURL))
-	b.WriteString(field("author_twitter", site.TwitterHandle))
-	b.WriteString(field("author_location", site.Location))
+	b.WriteString(optional("author_website", site.BaseURL))
+	b.WriteString(optional("author_twitter", site.TwitterHandle))
+	b.WriteString(optional("author_location", site.Location))
 	b.WriteString(field("thanks", "Thanks for reading!"))
 	b.WriteString(field("site_last_updated", dateStr))
 	b.WriteString(field("site_standards", "HTML5, CSS3, RSS, Atom, JSON, XML, YAML, Markdown, TOML"))
@@ -221,36 +212,67 @@ func GenerateWithOptions(markdown string, opts Options) string {
 // article's permalink. Existing frontmatter — from the input itself or from the
 // adjacent -frontmatter.yaml — is preserved field by field; only missing fields
 // are generated from the body.
+//
+// The publisher identity comes from SiteFromEnv; ProcessFileWithSite takes
+// one explicitly.
 func ProcessFile(inputPath string, date time.Time) (bodyPath, frontmatterPath, finalPath string, err error) {
-	base := filepath.Base(inputPath)
-	ext := filepath.Ext(base)
+	return ProcessFileWithSite(inputPath, date, SiteFromEnv())
+}
+
+// ProcessFileWithSite is ProcessFile with the publisher identity given.
+func ProcessFileWithSite(inputPath string, date time.Time, site Site) (bodyPath, frontmatterPath, finalPath string, err error) {
+	ext := filepath.Ext(inputPath)
 	if strings.EqualFold(ext, ".yaml") || strings.EqualFold(ext, ".yml") {
 		return "", "", "", fmt.Errorf("%s is a frontmatter file, not an article body", inputPath)
 	}
-
 	data, err := readCapped(inputPath, MaxArticleBytes)
 	if err != nil {
 		return "", "", "", err
 	}
-
 	fmBlock, body := Split(string(data))
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return "", "", "", fmt.Errorf("no article body found in %s", inputPath)
 	}
 
+	stem, bodyPath, frontmatterPath, finalPath := setPaths(inputPath)
+	slug, date := identityFromStem(stem, date)
+	existing := existingFields(frontmatterPath, fmBlock)
+	fmYAML := GenerateWithOptions(body, Options{Date: date, Slug: slug, Existing: existing, Site: &site})
+
+	// Write the trio as a unit. Three sequential os.WriteFile calls truncate
+	// the user's existing files one at a time, so a failure after the first
+	// left the set disagreeing with itself — breaking the guarantee that the
+	// body, frontmatter and final document are always in step.
+	set := map[string][]byte{
+		bodyPath:        []byte(body + "\n"),
+		frontmatterPath: []byte(fmYAML + "\n"),
+		finalPath:       []byte(Combine(fmYAML, body) + "\n"),
+	}
+	for p := range set {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return "", "", "", err
+		}
+	}
+	if err := atomicfile.WriteSet(set, 0o644); err != nil {
+		return "", "", "", err
+	}
+	return bodyPath, frontmatterPath, finalPath, nil
+}
+
+// setPaths returns the article's stem, stripped of any -body, -final or
+// -frontmatter suffix, and the paths of the three files in its set.
+//
+// Day-folder layout: when the input sits in a source/ or final/ directory,
+// the three outputs route to the sibling source/, yaml/ and final/
+// directories instead of piling up beside the input.
+func setPaths(inputPath string) (stem, bodyPath, frontmatterPath, finalPath string) {
+	base := filepath.Base(inputPath)
+	stem = strings.TrimSuffix(base, filepath.Ext(base))
+	for _, suffix := range []string{"-body", "-final", "-frontmatter"} {
+		stem = strings.TrimSuffix(stem, suffix)
+	}
 	dir := filepath.Dir(inputPath)
-	stem := strings.TrimSuffix(base, ext)
-
-	// Clean suffixes if processing an already generated -body or -final file.
-	stemClean := stem
-	stemClean = strings.TrimSuffix(stemClean, "-body")
-	stemClean = strings.TrimSuffix(stemClean, "-final")
-	stemClean = strings.TrimSuffix(stemClean, "-frontmatter")
-
-	// Day-folder layout: when the input sits in a source/ or final/
-	// directory, the three outputs route to the sibling source/, yaml/
-	// and final/ directories instead of piling up beside the input.
 	outSource, outYAML, outFinal := dir, dir, dir
 	if name := filepath.Base(dir); name == "source" || name == "final" {
 		parent := filepath.Dir(dir)
@@ -258,29 +280,37 @@ func ProcessFile(inputPath string, date time.Time) (bodyPath, frontmatterPath, f
 		outYAML = filepath.Join(parent, "yaml")
 		outFinal = filepath.Join(parent, "final")
 	}
-	bodyPath = filepath.Join(outSource, stemClean+"-body.md")
-	frontmatterPath = filepath.Join(outYAML, stemClean+"-frontmatter.yaml")
-	finalPath = filepath.Join(outFinal, stemClean+"-final.md")
+	return stem,
+		filepath.Join(outSource, stem+"-body.md"),
+		filepath.Join(outYAML, stem+"-frontmatter.yaml"),
+		filepath.Join(outFinal, stem+"-final.md")
+}
 
-	slugSource := stemClean
-	if m := datePrefixPat.FindStringSubmatch(stemClean); m != nil {
-		if parsed, perr := time.Parse("2006-01-02", m[1]); perr == nil {
+// identityFromStem reads the publishing date and slug from a set's stem. A
+// YYYY-MM-DD prefix wins over date, and a zero date means now.
+func identityFromStem(stem string, date time.Time) (string, time.Time) {
+	slugSource := stem
+	if m := datePrefixPat.FindStringSubmatch(stem); m != nil {
+		if parsed, err := time.Parse("2006-01-02", m[1]); err == nil {
 			date = parsed
 		}
-		slugSource = strings.TrimPrefix(stemClean, m[0])
-	}
-	slug := ""
-	if slugSource != "" {
-		slug = Slugify(slugSource)
+		slugSource = strings.TrimPrefix(stem, m[0])
 	}
 	if date.IsZero() {
 		date = time.Now()
 	}
+	if slugSource == "" {
+		return "", date
+	}
+	return Slugify(slugSource), date
+}
 
-	// Curated metadata survives regeneration: the adjacent frontmatter file
-	// seeds the existing fields, and the input's own block overrides it.
+// existingFields gathers the curated metadata that survives regeneration:
+// the adjacent frontmatter file seeds it, and the input's own block
+// overrides that.
+func existingFields(frontmatterPath, fmBlock string) map[string]string {
 	existing := make(map[string]string)
-	if adjacent, rerr := os.ReadFile(frontmatterPath); rerr == nil {
+	if adjacent, err := os.ReadFile(frontmatterPath); err == nil {
 		for k, v := range parseFields(string(adjacent)) {
 			existing[k] = v
 		}
@@ -288,27 +318,5 @@ func ProcessFile(inputPath string, date time.Time) (bodyPath, frontmatterPath, f
 	for k, v := range parseFields(fmBlock) {
 		existing[k] = v
 	}
-
-	site := SiteFromEnv()
-	fmYAML := GenerateWithOptions(body, Options{Date: date, Slug: slug, Existing: existing, Site: &site})
-	finalMD := Combine(fmYAML, body)
-
-	for _, p := range []string{bodyPath, frontmatterPath, finalPath} {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			return "", "", "", err
-		}
-	}
-	// Write the trio as a unit. Three sequential os.WriteFile calls truncate
-	// the user's existing files one at a time, so a failure after the first
-	// left the set disagreeing with itself — breaking the guarantee that the
-	// body, frontmatter and final document are always in step.
-	if err := atomicfile.WriteSet(map[string][]byte{
-		bodyPath:        []byte(body + "\n"),
-		frontmatterPath: []byte(fmYAML + "\n"),
-		finalPath:       []byte(finalMD + "\n"),
-	}, 0o644); err != nil {
-		return "", "", "", err
-	}
-
-	return bodyPath, frontmatterPath, finalPath, nil
+	return existing
 }
