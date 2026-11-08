@@ -4,7 +4,9 @@
 # Functions and files already over a complexity ceiling, with the value each
 # may not exceed. Written by `make complexity-baseline`, which refuses
 # while anything is worse than recorded, so this file only ever shrinks.
-# Format: <path> <function or (file)> <metric>=<value>...
+# Format: <path> <function or (file)> <metric>=<value>... [was=<path>:<name>]
+# was= marks an entry renamed or moved from the named one, for the check
+# against the base branch's baseline; record it with -rename, not by hand.
 claims/table.go tableBlockClaims cognitive=17 cyclomatic=11
 claims/verify.go Verify cyclomatic=15
 claims/verify.go repair cyclomatic=14
@@ -13,7 +15,7 @@ cmd/draft/completion.go writeCompletion lines=65
 cmd/draft/doctor.go runDoctor cognitive=27 cyclomatic=18 halstead=34.7 lines=97
 cmd/draft/main.go usage lines=74
 cmd/draft/manpage.go writeManPage lines=110
-cmd/draft/verify.go printVerifyReport cognitive=17 cyclomatic=12
+cmd/draft/verify.go printVerifyReport cyclomatic=11
 config/config.go Load cyclomatic=15 lines=77
 engine/acp.go (file) filelines=525
 engine/acp.go ACP.Generate cyclomatic=13 halstead=31.2 lines=67
@@ -45,7 +47,6 @@ pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
 pipeline/pipeline.go (file) filelines=617
 pipeline/review.go Runner.review cyclomatic=14 lines=115
 pipeline/review.go applySurgicalEdits halstead=37.2
-provenance/provenance.go (file) filelines=550
 provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 lines=79
 provenance/provenance.go sentences cognitive=29 cyclomatic=21 halstead=49.4
 rules/rules.go InflectLike cyclomatic=14

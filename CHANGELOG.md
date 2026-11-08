@@ -6,6 +6,31 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- `draft --attest <file> --reviewed-by <id>` records that a named person
+  reviewed an article as it now stands and takes editorial responsibility
+  for it: the reviewer, the time and the digest of exactly the text they
+  approved, in a `com.draftlib.review` assertion in the manifest. With
+  `DRAFT_C2PA_CERT` and `DRAFT_C2PA_KEY` set, the manifest is signed again
+  so the credential covers the review; without them the review is recorded
+  unsigned, and draft says so. Attesting a signed article without the
+  signing key is refused, since its credential would stop matching. This is
+  the human-review record the EU AI Act's Art. 50(4) exemption for
+  AI-generated text published under editorial responsibility turns on.
+- `--verify` now says that the article is marked as AI-generated (the
+  manifest's `trainedAlgorithmicMedia` source type, the machine-readable
+  marking of Art. 50(2)) and shows any review. `--verify --json` gains
+  `disclosure` and `review`, additive within
+  `draft.verification-record/v1`.
+
+### Changed
+
+- An article edited after it was written now verifies when a review covers
+  exactly its current text, reported as "Verified as reviewed", with a note
+  that the grounding figures describe draft's version. An edit with no
+  review, or made after the review, still fails as before.
+
 ## [0.0.44] - 2026-11-08
 
 ### Security

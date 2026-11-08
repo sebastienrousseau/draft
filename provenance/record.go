@@ -29,6 +29,26 @@ type VerificationRecord struct {
 	Sources   []SourceState   `json:"sources,omitempty"`
 	Signature *SignatureState `json:"signature,omitempty"`
 	Problems  []string        `json:"problems,omitempty"`
+	// Disclosure and Review were added within v1: a consumer that does not
+	// know them still reads every field it did.
+	Disclosure DisclosureState `json:"disclosure"`
+	Review     *ReviewState    `json:"review,omitempty"`
+}
+
+// DisclosureState is how the manifest says the article was made, the
+// machine-readable marking the EU AI Act's Art. 50(2) asks for.
+type DisclosureState struct {
+	AIGenerated       bool   `json:"ai_generated"`
+	DigitalSourceType string `json:"digital_source_type,omitempty"`
+}
+
+// ReviewState is the recorded human review and whether it covers this text.
+type ReviewState struct {
+	Reviewer string `json:"reviewer"`
+	When     string `json:"when"`
+	SHA256   string `json:"sha256"`
+	Edited   bool   `json:"edited"`
+	Matches  bool   `json:"matches"`
 }
 
 // ArticleState is the body digest and whether it still matches the manifest.
@@ -91,7 +111,11 @@ func NewVerificationRecord(r CheckReport, sig *SignatureState) VerificationRecor
 			Attributed:                r.Grounding.Attributed,
 			UngroundedNumberSentences: r.Grounding.SentencesWithUngroundedNumbers,
 		},
-		Problems: r.Problems,
+		Problems:   r.Problems,
+		Disclosure: DisclosureState{AIGenerated: AIGenerated(r.SourceType), DigitalSourceType: r.SourceType},
+	}
+	if rv := r.Review; rv != nil {
+		rec.Review = &ReviewState{Reviewer: rv.Reviewer, When: rv.When, SHA256: rv.ArticleSHA256, Edited: rv.Edited, Matches: r.ReviewMatches}
 	}
 	if r.LedgerChecked {
 		rec.Ledger = &DigestState{Checked: true, Matches: r.LedgerMatches}
