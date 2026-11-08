@@ -114,4 +114,9 @@ func TestWritingFencesTheStyleTemplates(t *testing.T) {
 	if begin < 0 || begin >= mark || mark >= end {
 		t.Errorf("template not inside its fence: begin %d, marker %d, end %d", begin, mark, end)
 	}
+	// The built-in example is draft's own text, not a file's, so it is not
+	// presented as third-party data.
+	if def := Writing("", "LEDGER-MARKER", 500, 800); strings.Contains(def, "STYLE SAMPLE") || !strings.Contains(def, defaultStyleExample) {
+		t.Error("the built-in style example should go in unfenced and whole")
+	}
 }
