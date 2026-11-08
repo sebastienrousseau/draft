@@ -120,8 +120,9 @@ can recover from. `Warnings` is how it stays honest about having recovered.
 | `OLLAMA_HOST`               | `http://127.0.0.1:11434` | Ollama server address                              |
 
 `DRAFT_CLAUDE_MODEL` is a deprecated alias for `DRAFT_MODEL_SESSION`, read only
-when the latter is unset. `DRAFT_SITE_*` (publisher identity) is read by
-[`frontmatter`](../frontmatter), not here.
+when the latter is unset. `Config.Site` is the publisher identity: the `[site]`
+section of a config file, overridden by `DRAFT_SITE_*`. The key names and the
+variables are defined once, in [`frontmatter`](../frontmatter).
 
 ## License
 

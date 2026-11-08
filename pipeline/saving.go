@@ -58,7 +58,7 @@ func (r *Runner) save(ctx context.Context, outputDir, markdown string, records [
 	if err != nil {
 		return "", 0, err
 	}
-	site := frontmatter.SiteFromEnv()
+	site := r.cfg.Site
 	fmYAML := frontmatter.GenerateWithOptions(body, frontmatter.Options{
 		Date:    now,
 		Slug:    strings.TrimPrefix(set.stem, dateStr+"-"),

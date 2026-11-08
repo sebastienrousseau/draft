@@ -185,7 +185,8 @@ func runInfo(o options, stdout, stderr io.Writer) (code int, done bool) {
 }
 
 // runOnFile handles the modes that work on an existing article and need no
-// configuration: --verify and --frontmatter.
+// run configuration: --verify, and --frontmatter, which reads only the
+// publisher identity.
 func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 	switch {
 	case o.verifyPath != "" && o.jsonOut:
@@ -207,7 +208,8 @@ func runFrontmatter(o options, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "draft: --frontmatter takes no source arguments")
 		return 2
 	}
-	bodyPath, fmPath, finalPath, err := frontmatter.ProcessFile(o.frontmatterPath, time.Now())
+	site := config.Load(o.flags).Site
+	bodyPath, fmPath, finalPath, err := frontmatter.ProcessFileWithSite(o.frontmatterPath, time.Now(), site)
 	if err != nil {
 		fmt.Fprintln(stderr, "draft:", err)
 		return 1

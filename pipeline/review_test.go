@@ -26,6 +26,7 @@ func writeDraft(t *testing.T) string {
 
 func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
 	cfg := testConfig(t)
+	cfg.Site = frontmatter.Site{BaseURL: "https://example.org"}
 	dir := t.TempDir()
 	draft := filepath.Join(dir, "2026-01-15-reviewed-final.md")
 	fmYAML := frontmatter.Generate(validArticle("."), time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
@@ -41,7 +42,7 @@ func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
 	}
 
 	// The model must see the article body, never the YAML block.
-	if strings.Contains(eng.lastEditPrompt, "measurementID") {
+	if strings.Contains(eng.lastEditPrompt, "seo_title:") {
 		t.Error("frontmatter leaked into the review prompt")
 	}
 	// The draft keeps its frontmatter and body after the review.
@@ -49,7 +50,7 @@ func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(data), "---") || !strings.Contains(string(data), "measurementID") {
+	if !strings.HasPrefix(string(data), "---") || !strings.Contains(string(data), "seo_title:") {
 		t.Error("frontmatter was not re-attached to the reviewed draft")
 	}
 	if !strings.Contains(string(data), "# The Result That Holds") {
@@ -58,6 +59,10 @@ func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
 	// Reviewing one file of a generated set resyncs its siblings.
 	if _, err := os.Stat(filepath.Join(dir, "2026-01-15-reviewed-body.md")); err != nil {
 		t.Errorf("body sibling not resynced: %v", err)
+	}
+	// The resynced set is stamped with the configured identity.
+	if fm, err := os.ReadFile(filepath.Join(dir, "2026-01-15-reviewed-frontmatter.yaml")); err != nil || !strings.Contains(string(fm), `permalink: "https://example.org/2026-01-15-reviewed"`) {
+		t.Errorf("resynced frontmatter should use the configured site (%v):\n%s", err, fm)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "2026-01-15-reviewed-frontmatter.yaml")); err != nil {
 		t.Errorf("frontmatter sibling not resynced: %v", err)
@@ -70,7 +75,7 @@ func TestReviewSplitsAndReattachesFrontmatter(t *testing.T) {
 
 func TestSaveEnhancedWriteError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no-such-dir", "draft.md")
-	if err := saveEnhanced(missing, "", "body text"); err == nil {
+	if err := saveEnhanced(missing, "", "body text", frontmatter.Site{}); err == nil {
 		t.Error("writing into a missing directory should error")
 	}
 }
@@ -78,7 +83,7 @@ func TestSaveEnhancedWriteError(t *testing.T) {
 func TestSaveEnhancedVariants(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "doc.md")
-	if err := saveEnhanced(path, "title: Hello\n", "body text"); err != nil {
+	if err := saveEnhanced(path, "title: Hello\n", "body text", frontmatter.Site{}); err != nil {
 		t.Fatalf("saveEnhanced with FM: %v", err)
 	}
 	content, err := os.ReadFile(path)

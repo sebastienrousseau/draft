@@ -45,7 +45,7 @@ func main() {
 		meta.Title, meta.Subtitle, meta.Category, meta.Slug)
 
 	// 2. Generate frontmatter with your own publisher identity. Options.Site
-	// replaces every hardcoded author/URL/handle; nil means DefaultSite.
+	// sets the author/URL/handle fields; nil means DefaultSite, which is empty.
 	site := frontmatter.Site{
 		BaseURL:       "https://blog.example.org",
 		CDN:           "https://cdn.example.org",

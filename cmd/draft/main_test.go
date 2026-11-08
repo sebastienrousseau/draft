@@ -630,3 +630,33 @@ func TestRunVerifyJSONViaRun(t *testing.T) {
 		t.Errorf("a missing set must exit 1 with a reason on stderr: %d %q", want, errb.String())
 	}
 }
+
+// --frontmatter stamps the identity from the [site] section of the config
+// file, not a built-in one.
+func TestRunFrontmatterUsesTheConfiguredSite(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "draft.toml")
+	if err := os.WriteFile(cfgFile, []byte("[site]\nbase-url = \"https://example.org\"\nname = \"Ada Example\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRAFT_CONFIG", cfgFile)
+	t.Setenv("DRAFT_SITE_BASE_URL", "")
+	t.Setenv("DRAFT_SITE_NAME", "")
+	draftPath := filepath.Join(dir, "2026-07-26-test-article.md")
+	if err := os.WriteFile(draftPath, []byte("# Test Article\n\nProse content for test.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	if code := run([]string{"--frontmatter", draftPath}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	fm, err := os.ReadFile(filepath.Join(dir, "2026-07-26-test-article-frontmatter.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`permalink: "https://example.org/2026-07-26-test-article"`, `name: "Ada Example"`} {
+		if !strings.Contains(string(fm), want) {
+			t.Errorf("frontmatter lacks %q:\n%s", want, fm)
+		}
+	}
+}

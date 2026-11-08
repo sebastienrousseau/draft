@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/sebastienrousseau/draft/frontmatter"
 )
 
 func noWarn(string, ...any) {}
@@ -196,5 +198,56 @@ func TestLoad_FilePrecedence(t *testing.T) {
 	// A flag overrides both.
 	if c := Load(Flags{Reader: "flag-reader"}); c.Reader != "flag-reader" {
 		t.Errorf("reader = %q, want flag-reader (flag beats file)", c.Reader)
+	}
+}
+
+// [site] keys are kept apart from engine settings, so a publisher's "name"
+// cannot be read as some other "name"; every other section still flattens.
+func TestParseFileConfigKeepsSiteKeysApart(t *testing.T) {
+	fc := parseFileConfig([]byte("engine = \"claude\"\n[site]\nname = \"Ada\"\nBase_URL = \"https://example.org\"\n[ Draft ]\nreader = \"docling\"\n"), noWarn)
+	want := fileConfig{"engine": "claude", "site.name": "Ada", "site.base-url": "https://example.org", "reader": "docling"}
+	if len(fc) != len(want) {
+		t.Fatalf("got %v, want %v", fc, want)
+	}
+	for k, v := range want {
+		if fc[k] != v {
+			t.Errorf("%s = %q, want %q", k, fc[k], v)
+		}
+	}
+}
+
+func TestLoad_SiteFromFileThenEnv(t *testing.T) {
+	hermeticFiles(t)
+	for _, k := range []string{"DRAFT_SITE_BASE_URL", "DRAFT_SITE_NAME", "DRAFT_SITE_COPYRIGHT_FROM", "DRAFT_SITE_MEASUREMENT_ID"} {
+		t.Setenv(k, "")
+	}
+	proj := t.TempDir()
+	toml := "[site]\nbase-url = \"https://file.example\"\nname = \"File Name\"\ncopyright-from = \"2021\"\n"
+	if err := os.WriteFile(filepath.Join(proj, "draft.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(proj)
+
+	s := Load(Flags{}).Site
+	if s.BaseURL != "https://file.example" || s.Name != "File Name" || s.CopyrightFrom != 2021 {
+		t.Errorf("file [site] not applied: %+v", s)
+	}
+	if s.MeasurementID != "" {
+		t.Errorf("an unset field must stay empty, got %q", s.MeasurementID)
+	}
+
+	t.Setenv("DRAFT_SITE_NAME", "Env Name")
+	if s := Load(Flags{}).Site; s.Name != "Env Name" || s.BaseURL != "https://file.example" {
+		t.Errorf("env should override the file field by field: %+v", s)
+	}
+}
+
+func TestLoad_NoSiteConfiguredIsAnonymous(t *testing.T) {
+	hermeticFiles(t)
+	for _, k := range []string{"DRAFT_SITE_BASE_URL", "DRAFT_SITE_CDN", "DRAFT_SITE_NAME", "DRAFT_SITE_SHORT_NAME", "DRAFT_SITE_EMAIL", "DRAFT_SITE_TWITTER", "DRAFT_SITE_LOCATION", "DRAFT_SITE_MEASUREMENT_ID", "DRAFT_SITE_COPYRIGHT_FROM"} {
+		t.Setenv(k, "")
+	}
+	if s := Load(Flags{}).Site; s != (frontmatter.Site{}) {
+		t.Errorf("with nothing configured the identity must be empty, got %+v", s)
 	}
 }

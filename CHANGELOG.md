@@ -46,6 +46,30 @@ series until `0.0.999`.
   `GH_TOKEN`, `claude` keeps `ANTHROPIC_*` and `AWS_*` for Bedrock, and
   `crush`, `goose` and `qwen` keep every `*_API_KEY`. A provider that
   signed in through some other variable must now be added to its list.
+- **BREAKING: draft no longer publishes as its maintainer.** With no
+  `DRAFT_SITE_*` set, generated frontmatter carried the maintainer's name,
+  email, site, CDN, Twitter handle and Google Analytics ID, so every article
+  a user published sent page views to someone else's analytics. The
+  built-in identity is now empty, and a field that needs an unset part of
+  it is left out instead of being filled in: with nothing configured there
+  is no `author`, `permalink`, `url`, `measurementID`, `banner`, `logo` or
+  other identity field, and the rest of the frontmatter is unchanged. A
+  fully set identity produces the same frontmatter byte for byte as before.
+  To keep your identity, set it in a `[site]` section of `draft.toml` or
+  `~/.config/draft/config.toml`, or keep using `DRAFT_SITE_*`, which wins
+  over the file field by field. `--doctor` now reports the identity in use,
+  and says how to set one when there is none.
+
+### Added
+
+- A `[site]` section in `draft.toml` sets the publisher identity, with the
+  same keys as `DRAFT_SITE_*`: `base-url`, `cdn`, `name`, `short-name`,
+  `email`, `twitter`, `location`, `measurement-id` and `copyright-from`.
+  Its keys are kept apart from every other setting, so its `name` is never
+  read as anything else.
+- `frontmatter.ProcessFileWithSite` regenerates a set with an explicit
+  identity; `Site.Override`, `Site.WithEnv` and `Site.Identified` build and
+  inspect one. `config.Config.Site` carries the resolved identity.
 
 ### Fixed
 
