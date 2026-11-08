@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sebastienrousseau/draft/internal/proc"
 	"github.com/sebastienrousseau/draft/internal/runes"
 )
 
@@ -356,6 +357,7 @@ func runTool(ctx context.Context, timeout time.Duration, name string, args ...st
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
+	proc.Bound(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &limitedWriter{w: &stdout, remaining: MaxSourceBytes}
 	cmd.Stderr = &limitedWriter{w: &stderr, remaining: 8 << 10}

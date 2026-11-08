@@ -46,6 +46,77 @@ series until `0.0.999`.
   `GH_TOKEN`, `claude` keeps `ANTHROPIC_*` and `AWS_*` for Bedrock, and
   `crush`, `goose` and `qwen` keep every `*_API_KEY`. A provider that
   signed in through some other variable must now be added to its list.
+- **BREAKING: draft no longer publishes as its maintainer.** With no
+  `DRAFT_SITE_*` set, generated frontmatter carried the maintainer's name,
+  email, site, CDN, Twitter handle and Google Analytics ID, so every article
+  a user published sent page views to someone else's analytics. The
+  built-in identity is now empty, and a field that needs an unset part of
+  it is left out instead of being filled in: with nothing configured there
+  is no `author`, `permalink`, `url`, `measurementID`, `banner`, `logo` or
+  other identity field, and the rest of the frontmatter is unchanged. A
+  fully set identity produces the same frontmatter byte for byte as before.
+  To keep your identity, set it in a `[site]` section of `draft.toml` or
+  `~/.config/draft/config.toml`, or keep using `DRAFT_SITE_*`, which wins
+  over the file field by field. `--doctor` now reports the identity in use,
+  and says how to set one when there is none.
+- **BREAKING: a `draft.toml` in the working directory is read only once you
+  trust it.** It was applied silently, so running draft in a cloned
+  repository or an unpacked archive let that folder choose the engine, the
+  model, the house style, the C2PA certificate and key, and the output
+  folder, whose `Templates` went into the writing prompt unfenced. draft now
+  ignores such a file, says so on every run, and reads it only after
+  `draft --trust-config`, which records its SHA-256 and path in
+  `~/.config/draft/trusted`. Any later edit lapses the trust until it is
+  given again. Your own `~/.config/draft/config.toml` and a file named by
+  `DRAFT_CONFIG` need no trust. If you keep settings in a project
+  `draft.toml`, run `draft --trust-config` in that folder once.
+- The style templates are now fenced in the writing prompt as untrusted
+  text, like the sources and the claims, so a template that addresses the
+  model is read as part of the sample.
+
+### Added
+
+- A `[site]` section in `draft.toml` sets the publisher identity, with the
+  same keys as `DRAFT_SITE_*`: `base-url`, `cdn`, `name`, `short-name`,
+  `email`, `twitter`, `location`, `measurement-id` and `copyright-from`.
+  Its keys are kept apart from every other setting, so its `name` is never
+  read as anything else.
+- `--trust-config` trusts the `draft.toml` in the working directory as it
+  now stands, and `config.TrustProjectConfig` does the same for a library
+  caller.
+- `frontmatter.ProcessFileWithSite` regenerates a set with an explicit
+  identity; `Site.Override`, `Site.WithEnv` and `Site.Identified` build and
+  inspect one. `config.Config.Site` carries the resolved identity.
+
+### Fixed
+
+- A call timeout now ends the call. A provider CLI, `pdftotext`, `textutil`,
+  Docling or `c2patool` that left a background process behind could hold
+  draft open indefinitely: the process inherited the tool's output, and
+  draft waited for output that never closed. A three-second timeout was
+  seen still blocked after three minutes. Every subprocess now runs in a
+  process group of its own, a timeout or cancellation kills the whole
+  group, and draft stops waiting for its output five seconds later.
+  Closing an ACP agent no longer hangs the same way. A CLI that exits
+  cleanly while a background process still holds its stderr is taken at
+  its word. On Windows only the process itself is killed; the five-second
+  limit still applies.
+- A provider whose output the parser rejects partway, such as a line over
+  the 8 MiB limit, no longer sits blocked until the call timeout: the rest
+  of its output is drained so it can exit.
+- `c2patool` runs are bounded by a two-minute timeout of their own.
+- The complexity baseline can no longer be loosened. CI held the code to
+  the pull request's own `complexity-baseline.txt`, so raising a value in
+  it, or deleting it and rerunning `make complexity-baseline`, passed. A
+  new CI step, `make complexity-ratchet`, now holds it to the base commit's
+  baseline: an entry may only disappear or go down. Renaming or moving an
+  offender is recorded with `make complexity-baseline RENAME="-rename
+  old.go:Old=new.go:New"`, which carries its allowance over once, instead
+  of a hand edit that looked exactly like loosening it.
+- Function literals assigned to package-level variables are now held to
+  the complexity ceilings, under the variable's name; logic written as
+  `var f = func(...) {...}` escaped them. A second `init` in a file is
+  measured as `init#2` instead of overwriting the first.
 
 ### Documentation
 

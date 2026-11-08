@@ -28,10 +28,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/sebastienrousseau/draft/internal/proc"
 )
 
 // tool is the c2patool binary name; a variable so a test can point at a stub.
 var tool = "c2patool"
+
+// callTimeout bounds one c2patool run. Signing and verifying a sidecar are
+// quick; the ceiling is there so a wedged tool cannot hang the run that
+// called it. A variable so a test can shorten it.
+var callTimeout = 2 * time.Minute
 
 // Signer names the signing material: PEM files for the certificate chain
 // (leaf first, up to a root) and its private key, and the signature algorithm
@@ -236,7 +244,10 @@ func run(ctx context.Context, args ...string) (string, error) {
 	if !Available() {
 		return "", errors.New("c2patool is not installed")
 	}
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, tool, args...)
+	proc.Bound(cmd)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

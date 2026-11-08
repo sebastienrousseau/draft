@@ -99,9 +99,9 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 			roff("Cached claim extractions, addressed by content. Override with "+
 				"DRAFT_CACHE_DIR; empty with --clear-cache.")+
 			"\n.TP\n.I ./draft.toml, $XDG_CONFIG_HOME/draft/config.toml\n"+
-			roff("Project and user defaults (engine, reader, out, style, models). "+
-				"Environment variables and flags override them; DRAFT_CONFIG names an "+
-				"explicit file and DRAFT_NO_CONFIG disables the layer."))
+			roff("Project and user defaults (engine, reader, out, style, models); a project "+
+				"file only once trusted with --trust-config, until it is edited. Flags and "+
+				"environment variables override them; DRAFT_CONFIG names an explicit file and DRAFT_NO_CONFIG disables the layer."))
 
 	section(b, "EXIT STATUS",
 		".TP\n.B 0\n"+roff("Every job produced a draft.")+

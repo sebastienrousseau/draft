@@ -609,9 +609,9 @@ contents listing, and a page with no text layer at all.
 ## Configuration
 
 Flags beat environment variables, which beat a project `draft.toml`, which
-beats a user config file, which beats the built-in defaults. Nothing about an
-existing setup changes: config files only fill in what a flag or variable did
-not set.
+beats a user config file, which beats the built-in defaults. Config files only
+fill in what a flag or variable did not set, and a project file only once you
+have trusted it.
 
 <details>
 <summary><strong>Config files</strong> — <code>draft.toml</code> for a project or a user</summary>
@@ -621,19 +621,33 @@ A `draft.toml` in the working directory sets defaults for that project; a
 everywhere. The project file wins over the user file, and both lose to
 environment variables and flags — so a file is a convenience, never a surprise.
 
+A project file arrives with whatever folder you run draft in, and it can choose
+the engine, the output folder, the house style and the signing key, so draft
+ignores it, with a warning, until you run `draft --trust-config` there. That
+records the file's SHA-256 in `~/.config/draft/trusted`; any later edit lapses
+the trust until you give it again. Your user file, and a file you name with
+`DRAFT_CONFIG`, need no trust.
+
 ```toml
-# draft.toml — flat key = value, "#" or ";" comments, [sections] ignored
+# draft.toml — flat key = value, "#" or ";" comments
 engine        = "claude"
 extract-engine = "ollama"   # local extraction, cloud writing
 reader        = "docling"
 out           = "~/Drop/Drafts"
 style         = "~/.config/draft/house-style.json"
+
+[site]                      # who your articles are published as
+base-url      = "https://example.com"
+name          = "Ada Example"
+email         = "ada@example.com"
 ```
 
 Recognised keys mirror the settings below: `engine`, `extract-engine`,
 `write-engine`, `edit-engine`, `reader`, `model`, `write-model`,
 `extract-model`, `edit-model`, `out`, `sources-dir`, `style`, and the C2PA
-signing keys `c2pa-cert` / `c2pa-key` / `c2pa-alg`. `DRAFT_CONFIG` names an
+signing keys `c2pa-cert` / `c2pa-key` / `c2pa-alg`. Other section headers are
+ignored and their keys read as top-level ones, except `[site]`, which holds the
+publisher identity below. `DRAFT_CONFIG` names an
 explicit file to load instead of discovery; `DRAFT_NO_CONFIG=1` disables the
 file layer entirely. The parser is a dependency-free flat-key reader — no new
 module, no TOML library.
@@ -693,11 +707,15 @@ when the latter is unset.
 <details>
 <summary><strong>Publisher identity</strong> — make the frontmatter yours</summary>
 
-Generated frontmatter carries an author, URLs, social handles and an analytics
-ID. Override any part of it. Unset variables keep their defaults, and curated
-frontmatter fields still win over generated ones.
+Generated frontmatter can carry an author, URLs, social handles and an
+analytics ID. draft has no identity of its own to put there: set yours in the
+`[site]` section of a config file, under the same names in lower case
+(`base-url`, `cdn`, `name`, …), or with the variables below, which win over the
+file field by field. A field that needs an unset part of the identity is left
+out of the frontmatter, and curated frontmatter fields still win over
+generated ones. `draft --doctor` shows the identity in use.
 
-| Variable                    | Overrides                                       |
+| Variable                    | Sets                                            |
 | --------------------------- | ----------------------------------------------- |
 | `DRAFT_SITE_BASE_URL`       | Canonical site root for permalinks and URLs     |
 | `DRAFT_SITE_CDN`            | Asset host for banners, logos, images           |
@@ -1246,7 +1264,9 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 - **Bounded external calls.** Extraction shells out only to `pdftotext` and
   `textutil`, with context timeouts, absolute paths (so a filename beginning
   with `-` cannot be read as a flag), capped output, and no shell
-  interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`.
+  interpolation. Generation calls are bounded by `DRAFT_CALL_TIMEOUT`. Every
+  subprocess runs in a process group of its own, so a timeout also ends
+  anything it started (on Windows, only the process itself).
 - **Verifiable releases.** macOS binaries and the universal installer package
   are Developer ID signed and Apple notarized; the package carries a stapled
   ticket for offline Gatekeeper verification. Every release is also signed with

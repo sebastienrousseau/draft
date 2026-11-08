@@ -22,6 +22,8 @@ path = [
   "LICENSE-MIT",
   "LICENSE-APACHE",
   "internal/pdf/testdata/*.pdf",
+  # Golden frontmatter. A comment would change the bytes it pins.
+  "frontmatter/testdata/*.golden",
   # Grounding-corpus fixtures. JSON admits no comment syntax, so the manifest
   # and the live baseline are annotated here rather than in-file.
   "claims/testdata/corpus/*.json",

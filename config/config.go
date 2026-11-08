@@ -8,7 +8,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/sebastienrousseau/draft/rules"
 	"net"
 	"net/url"
 	"os"
@@ -16,6 +15,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sebastienrousseau/draft/frontmatter"
+	"github.com/sebastienrousseau/draft/rules"
 )
 
 // Engine selection sentinels. Any other value names a specific session provider
@@ -137,6 +139,11 @@ type Config struct {
 	// disables caching entirely.
 	CacheDir string
 
+	// Site is the publisher identity stamped into generated frontmatter:
+	// the [site] section of a config file, overridden by DRAFT_SITE_*. It is
+	// empty unless one of them sets it.
+	Site frontmatter.Site
+
 	// Version is the release of draft that is running, set by the binary
 	// rather than read from the environment. It is written into every
 	// article's provenance, so a reader can tell which draft made it.
@@ -173,7 +180,6 @@ func Load(flags Flags) Config {
 		WriteEngine:        env("DRAFT_WRITE_ENGINE", fc.get("write-engine", "")),
 		EditEngine:         env("DRAFT_EDIT_ENGINE", fc.get("edit-engine", "")),
 		Reader:             env("DRAFT_READER", fc.get("reader", DefaultReader)),
-		Style:              rules.DefaultStyle(),
 		Model:              env("DRAFT_MODEL_SESSION", env("DRAFT_CLAUDE_MODEL", fc.get("model", ""))),
 		OllamaModel:        env("DRAFT_WRITE_MODEL", env("DRAFT_MODEL", fc.get("write-model", DefaultOllamaModel))),
 		ExtractModel:       env("DRAFT_EXTRACT_MODEL", env("DRAFT_MODEL", fc.get("extract-model", DefaultExtractModel))),
@@ -189,6 +195,7 @@ func Load(flags Flags) Config {
 		SourcesDir:         resolveDir(warn, "DRAFT_SOURCES_DIR", home, fc.dir(warn, "sources-dir", home, filepath.Join(home, "Drop", "Drafts", "Sources"))),
 		DraftsDir:          resolveDir(warn, "DRAFT_DRAFTS_DIR", home, fc.dir(warn, "out", home, filepath.Join(home, "Drop", "Drafts"))),
 		CacheDir:           resolveDir(warn, "DRAFT_CACHE_DIR", home, defaultCacheDir(home)),
+		Site:               fc.site().WithEnv(),
 	}
 
 	// Flags win over environment.
@@ -204,13 +211,7 @@ func Load(flags Flags) Config {
 	if flags.Reader != "" {
 		c.Reader = flags.Reader
 	}
-	if path := firstNonEmpty(flags.Style, firstNonEmpty(os.Getenv("DRAFT_STYLE"), fc.get("style", ""))); path != "" {
-		if st, err := rules.LoadStyle(expandHome(path, home)); err != nil {
-			warn("style file: %v; using the default house style", err)
-		} else {
-			c.Style, c.StylePath = st, path
-		}
-	}
+	c.Style, c.StylePath = resolveStyle(warn, firstNonEmpty(flags.Style, firstNonEmpty(os.Getenv("DRAFT_STYLE"), fc.get("style", ""))), home)
 	if flags.Model != "" {
 		c.Model = flags.Model
 	}
@@ -241,6 +242,20 @@ func Load(flags Flags) Config {
 	}
 	c.Warnings = warnings
 	return c
+}
+
+// resolveStyle loads the house-style file at path. With no path, or one that
+// cannot be loaded, it is the default house style and no path.
+func resolveStyle(warn func(string, ...any), path, home string) (rules.Style, string) {
+	if path == "" {
+		return rules.DefaultStyle(), ""
+	}
+	st, err := rules.LoadStyle(expandHome(path, home))
+	if err != nil {
+		warn("style file: %v; using the default house style", err)
+		return rules.DefaultStyle(), ""
+	}
+	return st, path
 }
 
 // resolveHome returns the directory the Sources and Drafts trees hang off.

@@ -127,7 +127,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 		r.warn("review: " + w)
 	}
 
-	if err := saveEnhanced(job.ReviewPath, draftFM, enhanced); err != nil {
+	if err := saveEnhanced(job.ReviewPath, draftFM, enhanced, r.cfg.Site); err != nil {
 		r.phase(PhaseSave, "failed")
 		return err
 	}
@@ -153,7 +153,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 // saveEnhanced writes the enhanced body back to path, re-attaching the
 // draft's original frontmatter, and resyncs the generated body/yaml/final
 // set when path belongs to one.
-func saveEnhanced(path, originalFM, body string) error {
+func saveEnhanced(path, originalFM, body string, site frontmatter.Site) error {
 	out := strings.TrimRight(body, "\n") + "\n"
 	if originalFM != "" {
 		out = frontmatter.Combine(originalFM, body)
@@ -167,7 +167,7 @@ func saveEnhanced(path, originalFM, body string) error {
 		return err
 	}
 	if frontmatter.PartOfSet(path) {
-		if _, _, _, err := frontmatter.ProcessFile(path, time.Now()); err != nil {
+		if _, _, _, err := frontmatter.ProcessFileWithSite(path, time.Now(), site); err != nil {
 			return fmt.Errorf("draft enhanced but its generated set failed to resync: %w", err)
 		}
 	}

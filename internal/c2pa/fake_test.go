@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // fakeTool installs a stub c2patool (a POSIX shell script) and points the
@@ -183,5 +184,28 @@ func TestVerifyParseReportError(t *testing.T) {
 	t.Setenv("FAKE_VERIFY_JSON", "not json")
 	if _, err := Verify(context.Background(), writeArticle(t), []byte("sidecar")); err == nil {
 		t.Error("expected error when report is not json")
+	}
+}
+
+// A wedged c2patool, or a background process it leaves holding its output,
+// must not hang the run that called it (P-H1).
+func TestRunIsBounded(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub is a POSIX shell script")
+	}
+	script := filepath.Join(t.TempDir(), "wedged-c2patool.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30 &\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	origTool, origTimeout := tool, callTimeout
+	tool, callTimeout = script, 300*time.Millisecond
+	defer func() { tool, callTimeout = origTool, origTimeout }()
+
+	start := time.Now()
+	if _, err := run(context.Background(), "x"); err == nil {
+		t.Error("a run that timed out must fail")
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("returned after %s", d)
 	}
 }

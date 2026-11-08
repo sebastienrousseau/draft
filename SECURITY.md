@@ -41,6 +41,10 @@ within 7 days of confirmation.
 - **Prompt-injection aware.** Template and source text are quoted to the model as
   untrusted evidence, and the writing prompt explicitly instructs it to ignore
   any instructions found inside them.
+- **No configuration from the folder you happen to be in.** A `draft.toml` in
+  the working directory, which could pick the engine, the output folder and the
+  signing key, is ignored until you trust it with `draft --trust-config`, and an
+  edit lapses that trust.
 - **Grounding as a control.** Every fact must trace to a verbatim-quote-verified
   claim; ungrounded numbers and silent metric conversions are flagged and
   unverifiable claims are dropped before writing.

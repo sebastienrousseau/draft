@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sebastienrousseau/draft/frontmatter"
 )
 
 // fileConfig holds the scalar defaults read from a draft config file. Keys are
@@ -29,6 +31,11 @@ func (fc fileConfig) get(key, fallback string) string {
 	return fallback
 }
 
+// site is the publisher identity the [site] section sets.
+func (fc fileConfig) site() frontmatter.Site {
+	return frontmatter.DefaultSite.Override(func(key string) string { return fc.get("site."+key, "") })
+}
+
 // dir resolves a directory-valued key: an absolute, tilde-expanded path when
 // the key is set, otherwise the caller's default. A relative path is left to
 // absDir at the call site (it resolves against the process working directory).
@@ -43,9 +50,10 @@ func (fc fileConfig) dir(warn func(string, ...any), key, home, fallback string) 
 // loadFileConfig discovers and merges draft's config files. Precedence within
 // the file layer: an explicit DRAFT_CONFIG wins outright; otherwise a project
 // draft.toml in the working directory overrides a user config under
-// $XDG_CONFIG_HOME/draft (or ~/.config/draft). DRAFT_NO_CONFIG disables the
-// layer entirely. A missing discovered file is silent; a missing DRAFT_CONFIG
-// is a warning, because the user asked for it by name.
+// $XDG_CONFIG_HOME/draft (or ~/.config/draft), but only once it is trusted
+// (see readProjectConfig). DRAFT_NO_CONFIG disables the layer entirely. A
+// missing discovered file is silent; a missing DRAFT_CONFIG is a warning,
+// because the user asked for it by name, and naming it is trust enough.
 func loadFileConfig(warn func(string, ...any)) fileConfig {
 	if envBool("DRAFT_NO_CONFIG") {
 		return nil
@@ -70,7 +78,7 @@ func loadFileConfig(warn func(string, ...any)) fileConfig {
 		merge(fc, readFileConfig(u, warn))
 	}
 	if wd, err := getwd(); err == nil && wd != "" {
-		merge(fc, readFileConfig(filepath.Join(wd, "draft.toml"), warn))
+		merge(fc, readProjectConfig(filepath.Join(wd, projectConfigName), warn))
 	}
 	if len(fc) == 0 {
 		return nil
@@ -109,17 +117,21 @@ func merge(dst, src fileConfig) {
 
 // parseFileConfig reads a deliberately small TOML subset: flat "key = value"
 // lines, "#" or ";" comments, and blank lines. Section headers ("[table]") are
-// skipped so a grouped file still yields its top-level keys. Values may be
-// double- or single-quoted; a quoted value is taken verbatim, a bare value is
-// trimmed. Keys are lower-cased and underscores folded to hyphens.
+// skipped so a grouped file still yields its top-level keys, except [site],
+// whose keys are kept apart as "site.<key>": a publisher's name is not an
+// engine setting, and "name" alone would collide with the next one that is.
+// Values may be double- or single-quoted; a quoted value is taken verbatim, a
+// bare value is trimmed. Keys are lower-cased and underscores folded to hyphens.
 func parseFileConfig(data []byte, warn func(string, ...any)) fileConfig {
 	fc := fileConfig{}
+	prefix := ""
 	for i, raw := range strings.Split(string(data), "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue
 		}
 		if strings.HasPrefix(line, "[") {
+			prefix = sectionPrefix(line)
 			continue
 		}
 		k, v, ok := strings.Cut(line, "=")
@@ -132,9 +144,18 @@ func parseFileConfig(data []byte, warn func(string, ...any)) fileConfig {
 		if key == "" || val == "" {
 			continue
 		}
-		fc[key] = val
+		fc[prefix+key] = val
 	}
 	return fc
+}
+
+// sectionPrefix is the key prefix a section header sets: "site." for [site],
+// nothing for any other section, whose keys stay top-level.
+func sectionPrefix(header string) string {
+	if strings.EqualFold(strings.TrimSpace(strings.Trim(header, "[]")), "site") {
+		return "site."
+	}
+	return ""
 }
 
 // unquoteValue strips one layer of matching surrounding quotes. An unquoted

@@ -630,3 +630,63 @@ func TestRunVerifyJSONViaRun(t *testing.T) {
 		t.Errorf("a missing set must exit 1 with a reason on stderr: %d %q", want, errb.String())
 	}
 }
+
+// --frontmatter stamps the identity from the [site] section of the config
+// file, not a built-in one.
+func TestRunFrontmatterUsesTheConfiguredSite(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, "draft.toml")
+	if err := os.WriteFile(cfgFile, []byte("[site]\nbase-url = \"https://example.org\"\nname = \"Ada Example\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DRAFT_CONFIG", cfgFile)
+	t.Setenv("DRAFT_SITE_BASE_URL", "")
+	t.Setenv("DRAFT_SITE_NAME", "")
+	draftPath := filepath.Join(dir, "2026-07-26-test-article.md")
+	if err := os.WriteFile(draftPath, []byte("# Test Article\n\nProse content for test.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	if code := run([]string{"--frontmatter", draftPath}, &out, &errb); code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	fm, err := os.ReadFile(filepath.Join(dir, "2026-07-26-test-article-frontmatter.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`permalink: "https://example.org/2026-07-26-test-article"`, `name: "Ada Example"`} {
+		if !strings.Contains(string(fm), want) {
+			t.Errorf("frontmatter lacks %q:\n%s", want, fm)
+		}
+	}
+}
+
+// --trust-config is the only way a draft.toml in the working directory takes
+// effect: before it the file is ignored, after it the file applies.
+func TestRunTrustConfigMakesTheProjectConfigApply(t *testing.T) {
+	t.Setenv("DRAFT_CONFIG", "")
+	t.Setenv("DRAFT_NO_CONFIG", "")
+	t.Setenv("DRAFT_READER", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	proj := t.TempDir()
+	t.Chdir(proj)
+
+	var out, errb strings.Builder
+	if code := run([]string{"--trust-config"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "trust config") {
+		t.Errorf("with no draft.toml: exit %d, stderr %q; want 1 and an error", code, errb.String())
+	}
+
+	if err := os.WriteFile(filepath.Join(proj, "draft.toml"), []byte("reader = \"docling\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := config.Load(config.Flags{}).Reader; r == "docling" {
+		t.Fatal("an untrusted draft.toml was applied")
+	}
+	out.Reset()
+	if code := run([]string{"--trust-config"}, &out, &errb); code != 0 || !strings.Contains(out.String(), filepath.Join(proj, "draft.toml")) {
+		t.Fatalf("exit %d, stdout %q", code, out.String())
+	}
+	if r := config.Load(config.Flags{}).Reader; r != "docling" {
+		t.Errorf("reader = %q after trusting, want docling", r)
+	}
+}

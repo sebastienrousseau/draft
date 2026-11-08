@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/internal/proc"
 	"github.com/sebastienrousseau/draft/internal/sessionpool"
 )
 
@@ -241,12 +242,7 @@ func startACP(ctx context.Context, p Provider) (*acpConn, error) {
 	// The process must outlive any single call's context: it is shared by
 	// every Generate on the engine. Cancellation of a call is expressed to
 	// the agent as session/cancel, never by killing the process.
-	cmd := execCommand(context.Background(), p.Bin, p.Args...)
-	cmd.Dir = dir
-	if cmd.Env == nil {
-		cmd.Env = os.Environ()
-	}
-	cmd.Env = sessionEnv(cmd.Env, p.Credentials)
+	cmd := providerCommand(context.Background(), p, dir, p.Args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		_ = os.RemoveAll(dir)
@@ -496,9 +492,7 @@ func (c *acpConn) close() {
 	c.closed = true
 	c.mu.Unlock()
 	_ = c.stdin.Close()
-	if c.cmd.Process != nil {
-		_ = c.cmd.Process.Kill()
-	}
+	_ = proc.Kill(c.cmd) // the whole group, or a stray child keeps stdout open
 	<-c.done
 	_ = os.RemoveAll(c.dir)
 }
