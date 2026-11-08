@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/fzipp/gocyclo"
@@ -90,12 +91,54 @@ func measureFile(m Metrics, path, rel string) error {
 		return nil
 	}
 	m[rel+" "+fileUnit] = map[string]float64{fileLines: float64(bytes.Count(src, []byte("\n")))}
-	for _, decl := range f.Decls {
-		if fn, ok := decl.(*ast.FuncDecl); ok {
-			m[rel+" "+funcName(fn)] = measureFunc(fset, src, fn)
+	seen := map[string]int{}
+	for _, fn := range units(f) {
+		// A name can repeat in one file only for init (any number are
+		// allowed); numbering by order keeps both measured, and keeps the
+		// key stable when unrelated code above them moves.
+		name := funcName(fn)
+		if seen[name]++; seen[name] > 1 {
+			name += "#" + strconv.Itoa(seen[name])
 		}
+		m[rel+" "+name] = measureFunc(fset, src, fn)
 	}
 	return nil
+}
+
+// units returns every function the file declares, in source order: each
+// FuncDecl, and each function literal assigned to a package-level variable,
+// as a FuncDecl named after the variable. Leaving the latter out let logic
+// escape the ceilings by being written as "var f = func(...) {...}".
+func units(f *ast.File) []*ast.FuncDecl {
+	var out []*ast.FuncDecl
+	for _, decl := range f.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			out = append(out, d)
+		case *ast.GenDecl:
+			out = append(out, varFuncs(d)...)
+		}
+	}
+	return out
+}
+
+// varFuncs wraps each function literal a var declaration assigns directly.
+// The wrapper's body and type are the literal's own, so every metric reads
+// exactly what the literal holds.
+func varFuncs(d *ast.GenDecl) []*ast.FuncDecl {
+	if d.Tok != token.VAR {
+		return nil
+	}
+	var out []*ast.FuncDecl
+	for _, spec := range d.Specs {
+		vs := spec.(*ast.ValueSpec)
+		for i, v := range vs.Values {
+			if lit, ok := v.(*ast.FuncLit); ok && i < len(vs.Names) {
+				out = append(out, &ast.FuncDecl{Name: vs.Names[i], Type: lit.Type, Body: lit.Body})
+			}
+		}
+	}
+	return out
 }
 
 func measureFunc(fset *token.FileSet, src []byte, fn *ast.FuncDecl) map[string]float64 {

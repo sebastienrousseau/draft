@@ -108,10 +108,19 @@ Halstead count over the function's tokens) and compares the result with
 the gate arrived.
 
 - New or changed code must be within every ceiling. A recorded offender may
-  not get worse, and renaming one makes it new, so it must then meet them.
+  not get worse.
 - When a recorded offender improves, the check fails until
   `make complexity-baseline` writes the improvement down. That target refuses
-  while anything is worse than recorded, so the baseline only ever shrinks.
+  while anything is worse than recorded.
+- `make complexity-ratchet` holds `complexity-baseline.txt` to the one on
+  `origin/main` (CI uses the pull request's base commit): an entry may only
+  disappear or go down, so the baseline only ever shrinks, even by hand.
+- Renaming or moving an offender makes it a new entry. Carry its allowance
+  over with `make complexity-baseline RENAME="-rename old/path.go:Old=new/path.go:New"`
+  (a method is `Type.Name`), which marks the entry `was=`; the ratchet
+  accepts each old entry once, and only if it is gone.
+- Function literals assigned to package-level variables are measured under
+  the variable's name, and repeated `init` functions as `init`, `init#2`, ….
 - Tests are not measured: table-driven tests are long by design.
 
 ### Benchmark regressions
