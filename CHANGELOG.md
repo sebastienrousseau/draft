@@ -118,6 +118,13 @@ series until `0.0.999`.
   `var f = func(...) {...}` escaped them. A second `init` in a file is
   measured as `init#2` instead of overwriting the first.
 
+### Documentation
+
+- `docs/AUDIT-2026-11.md` publishes the November audit, held back until the
+  grounding gaps it found were fixed. It updates every September finding,
+  adds new ones and a roadmap, and records which findings are fixed, with
+  the change and the test that pins each. `AGENTS.md` now points to it.
+
 ## [0.0.43] - 2026-11-01
 
 ### Added
