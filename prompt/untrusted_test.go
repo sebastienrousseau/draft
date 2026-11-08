@@ -102,3 +102,21 @@ func TestEveryPromptFencesItsUntrustedInput(t *testing.T) {
 		})
 	}
 }
+
+// The style templates come from a folder the configuration chose (S-M3), so
+// a template saying "ignore the claims" is text inside a fence, not an
+// instruction beside the operator's.
+func TestWritingFencesTheStyleTemplates(t *testing.T) {
+	out := Writing("TEMPLATE-MARKER", "LEDGER-MARKER", 500, 800)
+	begin := strings.Index(out, "<<<BEGIN UNTRUSTED STYLE SAMPLE ")
+	mark := strings.Index(out, "TEMPLATE-MARKER")
+	end := strings.Index(out, "<<<END UNTRUSTED STYLE SAMPLE ")
+	if begin < 0 || begin >= mark || mark >= end {
+		t.Errorf("template not inside its fence: begin %d, marker %d, end %d", begin, mark, end)
+	}
+	// The built-in example is draft's own text, not a file's, so it is not
+	// presented as third-party data.
+	if def := Writing("", "LEDGER-MARKER", 500, 800); strings.Contains(def, "STYLE SAMPLE") || !strings.Contains(def, defaultStyleExample) {
+		t.Error("the built-in style example should go in unfenced and whole")
+	}
+}

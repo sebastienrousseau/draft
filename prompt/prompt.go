@@ -85,6 +85,20 @@ func EffectiveStyle(templates string) string {
 	return templates
 }
 
+// styleBlock is the style sample as the writing prompt carries it. The
+// caller's templates are fenced like the sources: they are read from a folder
+// the configuration chose, so they are text from a file, not instructions.
+// The built-in example is draft's own text, so it goes in as it is, built
+// once rather than per prompt.
+func styleBlock(templates string) string {
+	if strings.TrimSpace(templates) == "" {
+		return defaultStyleBlock
+	}
+	return Untrusted("UNTRUSTED STYLE SAMPLE", templates)
+}
+
+var defaultStyleBlock = "<style_calibration_sample>\n" + defaultStyleExample + "\n</style_calibration_sample>"
+
 // Writing builds the article-writing prompt. templates may be empty; ledger is
 // the compact verified claim ledger the model must treat as its only facts.
 // minWords and maxWords set the target length: the pipeline scales them to the
@@ -110,7 +124,6 @@ func Writing(templates, ledger string, minWords, maxWords int) string {
 // what its validator will enforce.
 func WritingWithStyle(templates, ledger string, st rules.Style) string {
 	minWords, maxWords := st.MinWords, st.MaxWords
-	style := EffectiveStyle(templates)
 	english := "Use the publication's standard English."
 	if st.English != "" {
 		english = "Use " + st.English + "."
@@ -124,9 +137,7 @@ The template examples below are style evidence ONLY. They contain unrelated subj
 - Your article's topic, title, numbers, and all content MUST be derived EXCLUSIVELY from the CLAIMS section below.
 
 ## STYLE CALIBRATION FROM TEMPLATES (STYLE & RHYTHM ONLY - IGNORE TOPIC & FACTS)
-<style_calibration_sample>
 %s
-</style_calibration_sample>
 
 ## GROUNDING
 %s
@@ -160,7 +171,7 @@ Write a %d-%d word article for technical readers and founders titled around the 
 
 ## CLAIMS
 %s`,
-		style,
+		styleBlock(templates),
 		groundingRules,
 		english,
 		minWords, maxWords, minWords,

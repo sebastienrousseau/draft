@@ -143,6 +143,7 @@ func TestLoadFileConfig_ProjectOverridesUser(t *testing.T) {
 	proj := t.TempDir()
 	os.WriteFile(filepath.Join(proj, "draft.toml"), []byte("engine = \"project\"\n"), 0o644)
 	t.Chdir(proj)
+	trustHere(t)
 	fc := loadFileConfig(noWarn)
 	if got := fc.get("engine", ""); got != "project" {
 		t.Errorf("engine = %q, want project (project overrides user)", got)
@@ -173,6 +174,7 @@ func TestLoad_FilePrecedence(t *testing.T) {
 	os.WriteFile(filepath.Join(proj, "draft.toml"),
 		[]byte("engine = \"file-engine\"\nreader = \"file-reader\"\nmodel = \"file-model\"\nout = \""+proj+"/drafts\"\n"), 0o644)
 	t.Chdir(proj)
+	trustHere(t)
 
 	// File value is used when env and flag are unset.
 	c := Load(Flags{})
@@ -227,6 +229,7 @@ func TestLoad_SiteFromFileThenEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(proj)
+	trustHere(t)
 
 	s := Load(Flags{}).Site
 	if s.BaseURL != "https://file.example" || s.Name != "File Name" || s.CopyrightFrom != 2021 {

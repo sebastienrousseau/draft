@@ -117,7 +117,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 type options struct {
 	flags                                                    config.Flags
 	showVersion, headless, jsonOut, dryRun                   bool
-	clearCache, doctor, manPage                              bool
+	clearCache, doctor, manPage, trustConfig                 bool
 	reviewPath, frontmatterPath, completionShell, verifyPath string
 	args                                                     []string
 }
@@ -156,6 +156,7 @@ func newFlagSet(o *options, stderr io.Writer) *flag.FlagSet {
 	fs.StringVar(&o.completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
 	fs.BoolVar(&o.dryRun, "dry-run", false, "report what a run would do, without calling a model")
 	fs.BoolVar(&o.doctor, "doctor", false, "check that this machine can run draft, and exit")
+	fs.BoolVar(&o.trustConfig, "trust-config", false, "trust ./draft.toml as it now stands, and exit")
 	fs.BoolVar(&o.manPage, "man", false, "print a roff manual page on stdout and exit")
 	fs.BoolVar(&o.showVersion, "version", false, "print version and exit")
 	return fs
@@ -184,9 +185,9 @@ func runInfo(o options, stdout, stderr io.Writer) (code int, done bool) {
 	return 0, false
 }
 
-// runOnFile handles the modes that work on an existing article and need no
-// run configuration: --verify, and --frontmatter, which reads only the
-// publisher identity.
+// runOnFile handles the modes that work on an existing file and need no run
+// configuration: --verify, --trust-config, and --frontmatter, which reads
+// only the publisher identity.
 func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 	switch {
 	case o.verifyPath != "" && o.jsonOut:
@@ -195,6 +196,8 @@ func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 		return runVerify(o.verifyPath, stdout, stderr), true
 	case o.frontmatterPath != "":
 		return runFrontmatter(o, stdout, stderr), true
+	case o.trustConfig:
+		return runTrustConfig(stdout, stderr), true
 	}
 	return 0, false
 }
@@ -401,6 +404,7 @@ var flagHelp = [][2]string{
 	{"--json", "machine-readable output: one JSON object per job, or a verification record with --verify"},
 	{"--dry-run", "report what a run would do, without calling a model"},
 	{"--doctor", "check that this machine can run draft, and exit"},
+	{"--trust-config", "trust ./draft.toml as it now stands, and exit"},
 	{"--completion <sh>", "print a completion script: bash, zsh, or fish"},
 	{"--version", "print version and exit"},
 	{"-h, --help", "show this help"},
@@ -467,8 +471,8 @@ func usage(w io.Writer) {
 
 	fmt.Fprintf(w, "%s\n", head("CONFIG"))
 	fmt.Fprintf(w, "  %s\n  %s\n\n",
-		dim("A draft.toml (project) or ~/.config/draft/config.toml (user) sets defaults"),
-		dim("(engine, reader, out, style, models). Environment variables and flags override it."))
+		dim("~/.config/draft/config.toml (user), or a draft.toml (project) once trusted with"),
+		dim("--trust-config, sets defaults. Environment variables and flags override it."))
 
 	fmt.Fprintf(w, "%s\n", head("OUTPUT"))
 	fmt.Fprintf(w, "  %s\n  %s\n  %s\n\n",

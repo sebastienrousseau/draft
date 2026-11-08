@@ -660,3 +660,33 @@ func TestRunFrontmatterUsesTheConfiguredSite(t *testing.T) {
 		}
 	}
 }
+
+// --trust-config is the only way a draft.toml in the working directory takes
+// effect: before it the file is ignored, after it the file applies.
+func TestRunTrustConfigMakesTheProjectConfigApply(t *testing.T) {
+	t.Setenv("DRAFT_CONFIG", "")
+	t.Setenv("DRAFT_NO_CONFIG", "")
+	t.Setenv("DRAFT_READER", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	proj := t.TempDir()
+	t.Chdir(proj)
+
+	var out, errb strings.Builder
+	if code := run([]string{"--trust-config"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "trust config") {
+		t.Errorf("with no draft.toml: exit %d, stderr %q; want 1 and an error", code, errb.String())
+	}
+
+	if err := os.WriteFile(filepath.Join(proj, "draft.toml"), []byte("reader = \"docling\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := config.Load(config.Flags{}).Reader; r == "docling" {
+		t.Fatal("an untrusted draft.toml was applied")
+	}
+	out.Reset()
+	if code := run([]string{"--trust-config"}, &out, &errb); code != 0 || !strings.Contains(out.String(), filepath.Join(proj, "draft.toml")) {
+		t.Fatalf("exit %d, stdout %q", code, out.String())
+	}
+	if r := config.Load(config.Flags{}).Reader; r != "docling" {
+		t.Errorf("reader = %q after trusting, want docling", r)
+	}
+}

@@ -59,6 +59,20 @@ series until `0.0.999`.
   `~/.config/draft/config.toml`, or keep using `DRAFT_SITE_*`, which wins
   over the file field by field. `--doctor` now reports the identity in use,
   and says how to set one when there is none.
+- **BREAKING: a `draft.toml` in the working directory is read only once you
+  trust it.** It was applied silently, so running draft in a cloned
+  repository or an unpacked archive let that folder choose the engine, the
+  model, the house style, the C2PA certificate and key, and the output
+  folder, whose `Templates` went into the writing prompt unfenced. draft now
+  ignores such a file, says so on every run, and reads it only after
+  `draft --trust-config`, which records its SHA-256 and path in
+  `~/.config/draft/trusted`. Any later edit lapses the trust until it is
+  given again. Your own `~/.config/draft/config.toml` and a file named by
+  `DRAFT_CONFIG` need no trust. If you keep settings in a project
+  `draft.toml`, run `draft --trust-config` in that folder once.
+- The style templates are now fenced in the writing prompt as untrusted
+  text, like the sources and the claims, so a template that addresses the
+  model is read as part of the sample.
 
 ### Added
 
@@ -67,6 +81,9 @@ series until `0.0.999`.
   `email`, `twitter`, `location`, `measurement-id` and `copyright-from`.
   Its keys are kept apart from every other setting, so its `name` is never
   read as anything else.
+- `--trust-config` trusts the `draft.toml` in the working directory as it
+  now stands, and `config.TrustProjectConfig` does the same for a library
+  caller.
 - `frontmatter.ProcessFileWithSite` regenerates a set with an explicit
   identity; `Site.Override`, `Site.WithEnv` and `Site.Identified` build and
   inspect one. `config.Config.Site` carries the resolved identity.
