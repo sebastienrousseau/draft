@@ -41,6 +41,22 @@ series until `0.0.999`.
   that the grounding figures describe draft's version. An edit with no
   review, or made after the review, still fails as before.
 
+### Security
+
+- **Breaking:** `--verify` now fails a signed credential whose data hash
+  does not cover the whole article, even when `c2patool` calls it valid.
+  A C2PA data hash may exclude byte ranges, and a credential that excludes
+  the whole file signs the hash of nothing and still validates, after which
+  the article can be anything (Buchanan, October 2026). A sidecar is
+  embedded in nothing, so draft now rejects any exclusion, a missing data
+  hash, any other kind of hard binding, and a data hash `c2patool` did not
+  confirm matched. The reason is shown, and recorded as
+  `signature.uncovered` in `--verify --json`, an addition within v1.
+  Credentials draft signs have no exclusions and still verify, and signing
+  refuses to produce one that would not. The check reads `c2patool
+  --detailed`; a `c2patool` whose report lacks the assertion store fails
+  closed.
+
 ## [0.0.44] - 2026-11-08
 
 ### Security

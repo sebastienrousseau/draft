@@ -356,6 +356,7 @@ func signatureFor(bodyPath, manifestPath string) *provenance.SignatureState {
 	}
 	return &provenance.SignatureState{
 		Present: true, Checked: true, Valid: rep.SignatureValid, Trusted: rep.Trusted, State: rep.State,
+		Uncovered: rep.Uncovered,
 	}
 }
 
@@ -372,6 +373,9 @@ func printSignatureReport(w io.Writer, sig *provenance.SignatureState) bool {
 	case !sig.Checked:
 		row("--", "credential", "signed credential present; install c2patool to verify its signature")
 		return true
+	case sig.Uncovered != "":
+		row("!!", "signature", "INVALID — "+sig.Uncovered)
+		return false
 	case !sig.Valid:
 		row("!!", "signature", "INVALID — the credential does not match this article")
 		return false
