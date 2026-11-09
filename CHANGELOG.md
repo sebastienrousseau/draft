@@ -55,7 +55,8 @@ series until `0.0.999`.
   Credentials draft signs have no exclusions and still verify, and signing
   refuses to produce one that would not. The check reads `c2patool
   --detailed`; a `c2patool` whose report lacks the assertion store fails
-  closed.
+  closed. A live test builds the attack with `c2patool` itself, which signs
+  a hand-written data hash it is given, and checks draft rejects it.
 
 ## [0.0.44] - 2026-11-08
 
