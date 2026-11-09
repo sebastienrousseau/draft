@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.45] - 2026-11-09
+
 ### Added
 
 - `draft --attest <file> --reviewed-by <id>` records that a named person
@@ -1491,6 +1493,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.45]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.45
 [0.0.44]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.44
 [0.0.43]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.43
 [0.0.42]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.42
