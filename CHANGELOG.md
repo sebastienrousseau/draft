@@ -23,6 +23,16 @@ series until `0.0.999`.
   marking of Art. 50(2)) and shows any review. `--verify --json` gains
   `disclosure` and `review`, additive within
   `draft.verification-record/v1`.
+- Every manifest now carries C2PA 2.4's AI Disclosure assertion
+  (`c2pa.ai-disclosure`, §18.28) with `humanOversightLevel: prompt_guided`:
+  a person chose the sources and ran draft, but nobody has approved the
+  result yet. `--attest` raises it to `human_validated` in place, and adds
+  one to a manifest written before this release. `modelType` is the
+  generic `c2pa.types.model`, since draft cannot name the framework
+  behind a provider, and `modelName` is the configured model when one is
+  set. `--verify` shows the level, and fails a manifest that declares
+  `human_validated` with no review recorded, or whose disclosure cannot be
+  read. `--verify --json` gains `disclosure.human_oversight_level`.
 
 ### Changed
 

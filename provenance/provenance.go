@@ -396,6 +396,7 @@ func NewManifest(in ManifestInput) Manifest {
 				"softwareAgent":     map[string]string{"name": "draft", "version": in.Version},
 				"when":              when.UTC().Format(time.RFC3339),
 			}}}},
+			{Label: AIDisclosureLabel, Data: newAIDisclosure(in.Model)},
 			{Label: GroundingLabel, Data: g},
 		},
 	}

@@ -40,6 +40,9 @@ type VerificationRecord struct {
 type DisclosureState struct {
 	AIGenerated       bool   `json:"ai_generated"`
 	DigitalSourceType string `json:"digital_source_type,omitempty"`
+	// HumanOversightLevel is the C2PA AI disclosure's declared human
+	// involvement: prompt_guided, or human_validated once a review is attested.
+	HumanOversightLevel string `json:"human_oversight_level,omitempty"`
 }
 
 // ReviewState is the recorded human review and whether it covers this text.
@@ -112,7 +115,7 @@ func NewVerificationRecord(r CheckReport, sig *SignatureState) VerificationRecor
 			UngroundedNumberSentences: r.Grounding.SentencesWithUngroundedNumbers,
 		},
 		Problems:   r.Problems,
-		Disclosure: DisclosureState{AIGenerated: AIGenerated(r.SourceType), DigitalSourceType: r.SourceType},
+		Disclosure: DisclosureState{AIGenerated: AIGenerated(r.SourceType), DigitalSourceType: r.SourceType, HumanOversightLevel: r.Oversight},
 	}
 	if rv := r.Review; rv != nil {
 		rec.Review = &ReviewState{Reviewer: rv.Reviewer, When: rv.When, SHA256: rv.ArticleSHA256, Edited: rv.Edited, Matches: r.ReviewMatches}

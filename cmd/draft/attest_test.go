@@ -60,8 +60,8 @@ func TestAttestAccountsForAReviewedEdit(t *testing.T) {
 	if err := os.WriteFile(body, []byte("# Title\n\nThe sentence, as the editor left it.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, _, _ := runCLI(t, "--verify", body); code != 1 {
-		t.Fatalf("an unreviewed edit verified: exit %d", code)
+	if code, out, _ := runCLI(t, "--verify", body); code != 1 || !strings.Contains(out, "prompt_guided") {
+		t.Fatalf("an unreviewed edit verified, or its oversight is missing: exit %d\n%s", code, out)
 	}
 
 	code, out, errs := runCLI(t, "--attest", body, "--reviewed-by", "Ada Example")
@@ -70,13 +70,13 @@ func TestAttestAccountsForAReviewedEdit(t *testing.T) {
 	}
 
 	code, out, _ = runCLI(t, "--verify", body)
-	for _, want := range []string{"AI-generated", "REVIEW", "Ada Example", "before the reviewer's edits", "Verified as reviewed. Ada Example"} {
+	for _, want := range []string{"AI-generated", "REVIEW", "Ada Example", "before the reviewer's edits", "Verified as reviewed. Ada Example", "human_validated"} {
 		if code != 0 || !strings.Contains(out, want) {
 			t.Errorf("verify after review: exit %d, missing %q\n%s", code, want, out)
 		}
 	}
 	rec := verifyJSON(t, body)
-	if !rec.Verified || !rec.Disclosure.AIGenerated || rec.Review == nil || !rec.Review.Matches || !rec.Review.Edited || rec.Article.Matches {
+	if !rec.Verified || !rec.Disclosure.AIGenerated || rec.Disclosure.HumanOversightLevel != provenance.OversightHumanValidated || rec.Review == nil || !rec.Review.Matches || !rec.Review.Edited || rec.Article.Matches {
 		t.Errorf("record = %+v, review %+v", rec, rec.Review)
 	}
 

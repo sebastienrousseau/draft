@@ -512,10 +512,13 @@ draft --verify --json 2026-07-29/final/2026-07-29-<slug>-final.md
 ```
 
 **Marking and review (EU AI Act Art. 50).** Every manifest marks the article
-as made by a trained model (IPTC `trainedAlgorithmicMedia`), and `--verify`
-says so. Once a person has reviewed the article — and usually edited it —
+as made by a trained model (IPTC `trainedAlgorithmicMedia`) and carries C2PA
+2.4's AI Disclosure assertion (`c2pa.ai-disclosure`) declaring the human
+oversight: `prompt_guided` until someone reviews it, and `--verify` shows
+both. Once a person has reviewed the article — and usually edited it —
 `draft --attest <file> --reviewed-by <id>` records who, when, and the digest
-of exactly the text they approved. `--verify` then accepts that edited text as
+of exactly the text they approved, and raises the oversight to
+`human_validated`. `--verify` then accepts that edited text as
 "Verified as reviewed", and fails any later change the review does not cover.
 With a signing certificate configured the review is signed with the manifest;
 without one it is a recorded statement, not proof. Whether a review meets the

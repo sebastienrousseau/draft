@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/sebastienrousseau/draft/engine"
+	"github.com/sebastienrousseau/draft/provenance"
 )
 
 // A refusal is the model declining one prompt. It used to be indistinguishable
@@ -391,7 +392,13 @@ func TestSaveWritesTheProvenancePair(t *testing.T) {
 	if man["claim_generator_info"].([]any)[0].(map[string]any)["version"] != "0.0.34-test" {
 		t.Errorf("manifest generator = %v", man["claim_generator_info"])
 	}
-	grounding := man["assertions"].([]any)[1].(map[string]any)["data"].(map[string]any)
+	// Found by label, not position: the assertion list grows with the spec.
+	var grounding map[string]any
+	for _, a := range man["assertions"].([]any) {
+		if a := a.(map[string]any); a["label"] == provenance.GroundingLabel {
+			grounding = a["data"].(map[string]any)
+		}
+	}
 	if grounding["engine"] != "claude" || grounding["reader"] != "pdftotext" || grounding["ledger_sha256"] == "" || len(grounding["sources"].([]any)) != 1 {
 		t.Errorf("grounding assertion = %v", grounding)
 	}

@@ -74,6 +74,9 @@ type CheckReport struct {
 	// SourceType is the digitalSourceType the manifest's created action
 	// records: trainedAlgorithmicMedia for everything draft writes.
 	SourceType string
+	// Oversight is the AI disclosure's humanOversightLevel, empty in a
+	// manifest written before draft emitted one.
+	Oversight string
 	// Review is the recorded human review, if any, and ReviewMatches whether
 	// it covers the text being checked.
 	Review        *Review

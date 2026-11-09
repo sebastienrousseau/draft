@@ -299,6 +299,9 @@ func printArticle(row func(status, label, detail string), r provenance.CheckRepo
 	if provenance.AIGenerated(r.SourceType) {
 		row("--", "AI-generated", "marked as made by a trained model (IPTC trainedAlgorithmicMedia)")
 	}
+	if r.Oversight != "" {
+		row("--", "human oversight", r.Oversight+" (C2PA AI disclosure)")
+	}
 	switch {
 	case r.DigestMatches:
 		row("ok", "article", "unchanged since it was written ("+shortHash(r.BodySHA256)+")")
