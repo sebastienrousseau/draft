@@ -29,6 +29,7 @@ func fakeTool(t *testing.T) {
 case "$*" in
   *--external-manifest*)
     [ -n "$FAKE_VERIFY_FAIL" ] && exit 1
+    case "$*" in *--detailed*) ;; *) [ -n "$FAKE_REQUIRE_DETAILED" ] && exit 1 ;; esac
     printf '%s' "$FAKE_VERIFY_JSON"
     exit 0
     ;;
@@ -48,7 +49,7 @@ exit 1
 	t.Cleanup(func() { tool = orig })
 }
 
-const validJSON = `{"validation_state":"Valid","validation_results":{"activeManifest":{"success":[{"code":"claimSignature.validated"}],"failure":[{"code":"signingCredential.untrusted"}]}}}`
+const validJSON = `{"active_manifest":"m","manifests":{"m":{"assertion_store":{"c2pa.hash.data":{"alg":"sha256"}}}},"validation_state":"Valid","validation_results":{"activeManifest":{"success":[{"code":"claimSignature.validated"},{"code":"assertion.dataHash.match"}],"failure":[{"code":"signingCredential.untrusted"}]}}}`
 
 func writeArticle(t *testing.T) string {
 	t.Helper()
@@ -109,7 +110,7 @@ func TestVerifyToolError(t *testing.T) {
 
 func TestParseReportFlatStatus(t *testing.T) {
 	// Older c2patool: a flat validation_status list plus validation_state.
-	rep, err := parseReport(`{"validation_state":"Valid","validation_status":[{"code":"claimSignature.validated"},{"code":"signingCredential.untrusted"}]}`)
+	rep, err := parseReport(`{"active_manifest":"m","manifests":{"m":{"assertion_store":{"c2pa.hash.data":{"alg":"sha256"}}}},"validation_state":"Valid","validation_status":[{"code":"claimSignature.validated"},{"code":"assertion.dataHash.match"},{"code":"signingCredential.untrusted"}]}`)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -96,6 +96,10 @@ type SignatureState struct {
 	Valid   bool   `json:"valid"`
 	Trusted bool   `json:"trusted"`
 	State   string `json:"state,omitempty"`
+	// Uncovered says why the credential's data hash leaves part of the
+	// article unsigned. Such a credential is invalid even when c2patool calls
+	// it valid. Added within v1.
+	Uncovered string `json:"uncovered,omitempty"`
 }
 
 // NewVerificationRecord builds a record from a CheckReport and an optional

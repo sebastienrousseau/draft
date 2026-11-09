@@ -499,7 +499,9 @@ source no longer matches.
 When a signed `.c2pa` credential sits beside the set and `c2patool` is
 installed, `--verify` also validates its signature and trust chain: an altered
 article fails, and a development certificate is reported as valid-but-untrusted
-rather than failed. Add `--json` to emit a portable
+rather than failed. A credential whose data hash excludes any part of the
+article fails even when `c2patool` accepts it: excluding the whole file is
+how a signature over nothing still validates. Add `--json` to emit a portable
 `draft.verification-record/v1` receipt instead of the human report — the
 article digest and whether it matches, the grounding summary, the source and
 signature state, and the overall verdict — for a script, a CI gate, or an

@@ -30,7 +30,6 @@ examples/frontmatter/main.go main cognitive=16 cyclomatic=16 lines=91
 frontmatter/frontmatter.go ExtractMetadata cognitive=31 cyclomatic=21 halstead=36.2 lines=98
 frontmatter/generate.go GenerateWithOptions lines=159
 internal/atomicfile/atomicfile.go WriteSet cognitive=16 halstead=32
-internal/c2pa/c2pa.go parseReport cognitive=16 cyclomatic=13
 internal/pdf/pdf.go ExtractWith cognitive=20 cyclomatic=17 lines=69
 internal/pdf/pdf.go SplitSections cognitive=16 halstead=35.6
 internal/pdf/tex.go stripTeXComments cognitive=17 halstead=30.6

@@ -75,6 +75,10 @@ type Report struct {
 	// Failures are the validation failure codes, minus the untrusted-credential
 	// code that Trusted already conveys.
 	Failures []string
+	// Uncovered says why the credential's data hash does not cover every byte
+	// of the article, and is empty when it does. c2patool can call such a
+	// credential Valid; SignatureValid never does.
+	Uncovered string
 }
 
 // Sign turns a manifest definition into a signed sidecar credential for the
@@ -126,7 +130,7 @@ func Sign(ctx context.Context, articlePath string, manifestDef []byte, s Signer)
 		return nil, err
 	}
 	if !rep.SignatureValid {
-		return nil, fmt.Errorf("c2pa: the produced credential did not verify (state %q, failures: %s)", rep.State, strings.Join(rep.Failures, ", "))
+		return nil, fmt.Errorf("c2pa: the produced credential did not verify (state %q, failures: %s%s)", rep.State, strings.Join(rep.Failures, ", "), withReason(rep.Uncovered))
 	}
 	return data, nil
 }
@@ -145,7 +149,9 @@ func Verify(ctx context.Context, articlePath string, sidecar []byte) (Report, er
 	if err := os.WriteFile(sidecarPath, sidecar, 0o600); err != nil {
 		return Report{}, fmt.Errorf("c2pa: writing credential: %w", err)
 	}
-	out, err := run(ctx, "--external-manifest", sidecarPath, articlePath)
+	// --detailed is what shows the data hash's exclusions; the plain report
+	// leaves the hard binding out.
+	out, err := run(ctx, "--external-manifest", sidecarPath, articlePath, "--detailed")
 	if err != nil {
 		return Report{}, fmt.Errorf("c2pa: verify failed: %w; output: %s", err, strings.TrimSpace(out))
 	}
@@ -180,42 +186,27 @@ func parseReport(out string) (Report, error) {
 		} `json:"validation_results"`
 		// Older c2patool reports a flat validation_status list instead.
 		ValidationStatus []statusEntry `json:"validation_status"`
+		ActiveManifest   string        `json:"active_manifest"`
+		Manifests        map[string]struct {
+			AssertionStore map[string]json.RawMessage `json:"assertion_store"`
+		} `json:"manifests"`
 	}
 	if err := json.Unmarshal([]byte(out), &doc); err != nil {
 		return Report{}, fmt.Errorf("c2pa: could not read c2patool report: %w", err)
 	}
 
-	rep := Report{State: doc.ValidationState, Trusted: true}
-	sawValidated := false
-	note := func(code string) {
-		if code == "claimSignature.validated" {
-			sawValidated = true
-		}
-		if code == "signingCredential.untrusted" {
-			rep.Trusted = false
-		}
-	}
-	for _, s := range doc.ValidationResults.ActiveManifest.Success {
-		note(s.Code)
-	}
-	for _, s := range doc.ValidationStatus {
-		note(s.Code)
-	}
-	for _, f := range doc.ValidationResults.ActiveManifest.Failure {
-		if f.Code == "signingCredential.untrusted" {
-			rep.Trusted = false
-			continue
-		}
-		if f.Code == "" || isInformational(f.Code) {
-			continue
-		}
-		rep.Failures = append(rep.Failures, f.Code)
-	}
+	passed := codes(doc.ValidationResults.ActiveManifest.Success, doc.ValidationStatus)
+	rep := Report{State: doc.ValidationState}
+	var untrusted bool
+	rep.Failures, untrusted = failures(doc.ValidationResults.ActiveManifest.Failure)
+	rep.Trusted = !untrusted && !passed["signingCredential.untrusted"]
+	sawValidated := passed["claimSignature.validated"]
 
 	// A valid overall state is authoritative; absent that, a validated claim
 	// signature with no recorded failure is the pass condition. An explicit
 	// Invalid state always fails.
-	rep.SignatureValid = rep.State != "Invalid" &&
+	rep.Uncovered = uncovered(doc.Manifests[doc.ActiveManifest].AssertionStore, passed["assertion.dataHash.match"])
+	rep.SignatureValid = rep.State != "Invalid" && rep.Uncovered == "" &&
 		(rep.State == "Valid" || (sawValidated && len(rep.Failures) == 0))
 	return rep, nil
 }
@@ -227,6 +218,34 @@ type statusEntry struct {
 
 // isInformational reports whether a code is advisory rather than a failure of
 // the signature or its bindings.
+// codes collects the status codes c2patool reported, from the current
+// per-manifest results and the older flat list alike.
+func codes(lists ...[]statusEntry) map[string]bool {
+	seen := map[string]bool{}
+	for _, l := range lists {
+		for _, e := range l {
+			seen[e.Code] = true
+		}
+	}
+	return seen
+}
+
+// failures returns the failure codes that count against the signature, and
+// whether one of them was only the untrusted-credential code, which Trusted
+// conveys instead.
+func failures(entries []statusEntry) (codes []string, untrusted bool) {
+	for _, f := range entries {
+		switch {
+		case f.Code == "signingCredential.untrusted":
+			untrusted = true
+		case f.Code == "" || isInformational(f.Code):
+		default:
+			codes = append(codes, f.Code)
+		}
+	}
+	return codes, untrusted
+}
+
 func isInformational(code string) bool {
 	return strings.HasPrefix(code, "ingredient.")
 }

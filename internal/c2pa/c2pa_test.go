@@ -18,6 +18,8 @@ func TestParseReportValidUntrusted(t *testing.T) {
 	// The real shape c2patool emits for a dev-cert-signed asset: valid
 	// signature and hashes, credential untrusted.
 	out := `{
+      "active_manifest": "m",
+      "manifests": {"m": {"assertion_store": {"c2pa.hash.data": {"alg": "sha256"}}}},
       "validation_state": "Valid",
       "validation_results": {
         "activeManifest": {

@@ -30,6 +30,9 @@ path = [
   # Example house-style file. JSON admits no comment syntax, so it is
   # annotated here rather than in-file.
   "examples/style/*.json",
+  # c2patool reports, trimmed to the fields draft reads, and one altered to
+  # the exclusion-range attack. JSON admits no comment syntax.
+  "internal/c2pa/testdata/*.json",
   # Reader-recall fixtures: the flattened form is plain text with no comment
   # syntax, annotated here alongside the corpus fixtures.
   "claims/testdata/tables/*.txt",

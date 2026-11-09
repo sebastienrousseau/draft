@@ -555,6 +555,24 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 		}
 	})
 
+	// c2patool says Valid, but the data hash excludes the article: the
+	// exclusion-range attack. The article's own digests still match, so the
+	// signature is the only thing that can fail it.
+	t.Run("signature over an excluded article", func(t *testing.T) {
+		c2paAvail = func() bool { return true }
+		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+			return c2pa.Report{State: "Valid", Uncovered: "the credential's data hash excludes 1 byte range(s) of the article"}, nil
+		}
+		var out, errb strings.Builder
+		if code := runVerify(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), "INVALID — the credential's data hash excludes") {
+			t.Errorf("exit %d\n%s", code, out.String())
+		}
+		rec := verifyJSON(t, finalPath)
+		if rec.Verified || rec.Signature == nil || rec.Signature.Valid || !strings.Contains(rec.Signature.Uncovered, "excludes") {
+			t.Errorf("record = %+v, signature %+v", rec, rec.Signature)
+		}
+	})
+
 	t.Run("valid untrusted signature", func(t *testing.T) {
 		c2paAvail = func() bool { return true }
 		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {

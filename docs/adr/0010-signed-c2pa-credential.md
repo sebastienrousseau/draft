@@ -30,6 +30,10 @@ with no certificate the manifest stays an unsigned definition, exactly as before
 - **Trust the tool's exit status.** Rejected: `c2patool` reports a text asset
   as "unsupported file type" while still writing a valid sidecar, so signing
   confirms success by *verifying the produced credential*, not by exit code.
+- **Accept whatever `c2patool` validates.** Rejected (November 2026): a data
+  hash may exclude byte ranges, and one that excludes the whole file signs
+  nothing yet validates. A sidecar has nothing to exclude, so `--verify`
+  reads the hard binding from `c2patool --detailed` and fails any exclusion.
 - **Fail verification on an untrusted certificate.** Rejected: a development
   certificate signs a genuinely valid credential; it is reported as
   valid-but-untrusted, and only a broken signature fails.
