@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -64,12 +65,11 @@ func Attest(manifest []byte, body, reviewer string, when time.Time) ([]byte, Rev
 		ArticleSHA256: hex.EncodeToString(sum[:]),
 	}
 	rv.Edited = rv.ArticleSHA256 != g.ArticleSHA256
-	kept := withoutLabel(assertions, ReviewLabel)
-	entry, err := json.Marshal(Assertion{Label: ReviewLabel, Data: rv})
+	updated, err := withReview(assertions, rv, g.Model)
 	if err != nil {
 		return nil, Review{}, err
 	}
-	if top["assertions"], err = json.Marshal(append(kept, entry)); err != nil {
+	if top["assertions"], err = json.Marshal(updated); err != nil {
 		return nil, Review{}, err
 	}
 	out, err := json.MarshalIndent(top, "", "  ")
@@ -82,66 +82,47 @@ func (rv *Review) covers(sum string) bool {
 	return rv != nil && rv.ArticleSHA256 == sum
 }
 
+// withReview replaces any earlier review with rv and raises the AI
+// disclosure to human_validated where it stands, so the other assertions keep
+// their bytes and their order.
+func withReview(assertions []json.RawMessage, rv Review, model string) ([]json.RawMessage, error) {
+	d, err := validated(assertions, model)
+	if err != nil {
+		return nil, err
+	}
+	out := withoutLabel(assertions, ReviewLabel)
+	disclosure := entry(AIDisclosureLabel, d)
+	if i := slices.IndexFunc(out, func(a json.RawMessage) bool { return labelOf(a) == AIDisclosureLabel }); i >= 0 {
+		out[i] = disclosure
+	} else {
+		out = append(out, disclosure)
+	}
+	return append(out, entry(ReviewLabel, rv)), nil
+}
+
+// entry encodes one assertion. Its data is a struct of strings, ints and
+// bools, which encoding/json cannot fail on, so there is no error to return.
+func entry(label string, data any) json.RawMessage {
+	b, _ := json.Marshal(Assertion{Label: label, Data: data})
+	return b
+}
+
+func labelOf(a json.RawMessage) string {
+	var head struct {
+		Label string `json:"label"`
+	}
+	_ = json.Unmarshal(a, &head)
+	return head.Label
+}
+
 // withoutLabel drops every assertion under label, keeping the others as
 // they were written.
 func withoutLabel(assertions []json.RawMessage, label string) []json.RawMessage {
 	kept := assertions[:0:0]
 	for _, a := range assertions {
-		var head struct {
-			Label string `json:"label"`
+		if labelOf(a) != label {
+			kept = append(kept, a)
 		}
-		if json.Unmarshal(a, &head) == nil && head.Label == label {
-			continue
-		}
-		kept = append(kept, a)
 	}
 	return kept
-}
-
-// readDisclosure fills r's SourceType from the created action and its Review
-// from the review assertion. Either may be absent; a malformed review is an
-// error, because a review that cannot be read must not pass as no review.
-func (r *CheckReport) readDisclosure(manifest []byte) error {
-	var mf manifestFile
-	if err := json.Unmarshal(manifest, &mf); err != nil {
-		return err
-	}
-	for _, a := range mf.Assertions {
-		switch a.Label {
-		case "c2pa.actions":
-			r.SourceType = createdSourceType(a.Data)
-		case ReviewLabel:
-			var rv Review
-			if err := json.Unmarshal(a.Data, &rv); err != nil {
-				return fmt.Errorf("malformed review assertion: %w", err)
-			}
-			r.Review = &rv
-		}
-	}
-	return nil
-}
-
-// createdSourceType returns the digitalSourceType of the c2pa.created action.
-func createdSourceType(data json.RawMessage) string {
-	var actions struct {
-		Actions []struct {
-			Action            string `json:"action"`
-			DigitalSourceType string `json:"digitalSourceType"`
-		} `json:"actions"`
-	}
-	if json.Unmarshal(data, &actions) != nil {
-		return ""
-	}
-	for _, a := range actions.Actions {
-		if a.Action == "c2pa.created" {
-			return a.DigitalSourceType
-		}
-	}
-	return ""
-}
-
-// AIGenerated reports whether a digital source type says a trained model
-// made the content.
-func AIGenerated(sourceType string) bool {
-	return sourceType == digitalSourceType
 }

@@ -183,10 +183,10 @@ func TestManifestBindsEverything(t *testing.T) {
 	if m.Title != "The Result That Holds" || m.Format != "text/markdown" || m.ClaimGeneratorInfo[0].Version != "0.0.34" {
 		t.Errorf("header = %+v", m)
 	}
-	if len(m.Assertions) != 2 || m.Assertions[0].Label != "c2pa.actions" || m.Assertions[1].Label != GroundingLabel {
+	if len(m.Assertions) != 3 || m.Assertions[0].Label != "c2pa.actions" || m.Assertions[1].Label != AIDisclosureLabel || m.Assertions[2].Label != GroundingLabel {
 		t.Fatalf("assertions = %+v", m.Assertions)
 	}
-	g := m.Assertions[1].Data.(Grounding)
+	g := m.Assertions[2].Data.(Grounding)
 	if g.ArticleSHA256 != att.ArticleSHA256 || g.LedgerSHA256 != "abc" || g.Engine != "claude" || g.Reader != "pdftotext" || len(g.Claims) != 3 || g.Sentences != len(att.Sentences) || g.Attributed != att.Attributed {
 		t.Errorf("grounding = %+v", g)
 	}
@@ -197,14 +197,14 @@ func TestManifestBindsEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"c2pa.created"`, `"when":"2026-09-06T12:00:00Z"`, `"digitalSourceType":"http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"`, `"softwareAgent":{"name":"draft","version":"0.0.34"}`, `"relationship":"inputTo"`} {
+	for _, want := range []string{`"c2pa.created"`, `"when":"2026-09-06T12:00:00Z"`, `"digitalSourceType":"http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"`, `"softwareAgent":{"name":"draft","version":"0.0.34"}`, `"relationship":"inputTo"`, `{"label":"c2pa.ai-disclosure","data":{"modelType":"c2pa.types.model","modelName":"sonnet","contentProfile":{"humanOversightLevel":"prompt_guided"}}}`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("manifest JSON lacks %s:\n%s", want, b)
 		}
 	}
 	// Without an attribution the counts are zero and the time is now.
 	bare := NewManifest(ManifestInput{Body: "x"})
-	if bare.Assertions[1].Data.(Grounding).Sentences != 0 || bare.Ingredients != nil {
+	if bare.Assertions[2].Data.(Grounding).Sentences != 0 || bare.Ingredients != nil {
 		t.Errorf("bare manifest = %+v", bare)
 	}
 }
