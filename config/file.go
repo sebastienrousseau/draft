@@ -130,8 +130,8 @@ func parseFileConfig(data []byte, warn func(string, ...any)) fileConfig {
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue
 		}
-		if strings.HasPrefix(line, "[") {
-			prefix = sectionPrefix(line)
+		if header, ok := sectionHeader(line); ok {
+			prefix = sectionPrefix(header)
 			continue
 		}
 		k, v, ok := strings.Cut(line, "=")
@@ -149,6 +149,19 @@ func parseFileConfig(data []byte, warn func(string, ...any)) fileConfig {
 	return fc
 }
 
+// sectionHeader reports whether line opens a section, and returns the header
+// without the comment that may follow it: "[site]  # who publishes" is the
+// [site] section, as the README's own example writes it.
+func sectionHeader(line string) (string, bool) {
+	if !strings.HasPrefix(line, "[") {
+		return "", false
+	}
+	if end := strings.IndexByte(line, ']'); end > 0 {
+		return line[:end+1], true
+	}
+	return line, true
+}
+
 // sectionPrefix is the key prefix a section header sets: "site." for [site],
 // nothing for any other section, whose keys stay top-level.
 func sectionPrefix(header string) string {
@@ -158,14 +171,25 @@ func sectionPrefix(header string) string {
 	return ""
 }
 
-// unquoteValue strips one layer of matching surrounding quotes. An unquoted
-// value keeps a trailing inline comment only if it is genuinely part of the
-// value; the documented form is quoted, which removes the ambiguity.
+// unquoteValue strips one layer of matching quotes, and any comment after the
+// closing one. An unquoted value is kept whole, "#" and all, since a bare URL
+// may carry a fragment; the documented form is quoted, which removes the
+// ambiguity. A value whose quote never closes is kept as written.
 func unquoteValue(v string) string {
-	if len(v) >= 2 {
-		if (v[0] == '"' && v[len(v)-1] == '"') || (v[0] == '\'' && v[len(v)-1] == '\'') {
-			return v[1 : len(v)-1]
-		}
+	if v == "" || (v[0] != '"' && v[0] != '\'') {
+		return v
+	}
+	end := strings.IndexByte(v[1:], v[0]) + 1
+	if end == 0 {
+		return v
+	}
+	if after := strings.TrimSpace(v[end+1:]); after == "" || after[0] == '#' || after[0] == ';' {
+		return v[1:end]
+	}
+	// Not a comment after the first closing quote: the quotes wrap the whole
+	// value, as they always have, inner quotes and all.
+	if v[len(v)-1] == v[0] {
+		return v[1 : len(v)-1]
 	}
 	return v
 }

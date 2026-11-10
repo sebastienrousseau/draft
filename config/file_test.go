@@ -6,6 +6,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sebastienrousseau/draft/frontmatter"
@@ -252,5 +253,47 @@ func TestLoad_NoSiteConfiguredIsAnonymous(t *testing.T) {
 	}
 	if s := Load(Flags{}).Site; s != (frontmatter.Site{}) {
 		t.Errorf("with nothing configured the identity must be empty, got %+v", s)
+	}
+}
+
+// The README's config example is parsed as written, so the documented form
+// and the parser cannot drift apart: it puts comments after a section header
+// and after a quoted value, and both used to leak into what was read.
+func TestTheREADMEConfigExampleParses(t *testing.T) {
+	readme, err := os.ReadFile("../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, _ := strings.Cut(string(readme), "```toml\n# draft.toml")
+	example, _, found := strings.Cut("# draft.toml"+rest, "```")
+	if !found {
+		t.Fatal("README has no draft.toml example")
+	}
+	fc := parseFileConfig([]byte(example), noWarn)
+	for k, v := range map[string]string{
+		"engine":         "claude",
+		"extract-engine": "ollama",
+		"out":            "~/Drop/Drafts",
+		"site.name":      "Ada Example",
+		"site.base-url":  "https://example.com",
+		"site.email":     "ada@example.com",
+	} {
+		if fc[k] != v {
+			t.Errorf("%s = %q, want %q", k, fc[k], v)
+		}
+	}
+	if _, leaked := fc["name"]; leaked {
+		t.Errorf("a [site] key was read as a top-level setting: %v", fc)
+	}
+}
+
+// A comment after a quoted value is not part of it, but a "#" inside the
+// quotes, or in a bare value such as a URL fragment, is.
+func TestInlineCommentsAfterValues(t *testing.T) {
+	fc := parseFileConfig([]byte("a = \"x # y\"  # note\nb = 'z' ; note\nc = https://e.org/#top\nd = \"unclosed # here\ne = \"a\"b\"\nf = \"q\" tail\n"), noWarn)
+	for k, v := range map[string]string{"a": "x # y", "b": "z", "c": "https://e.org/#top", "d": "\"unclosed # here", "e": "a\"b", "f": "\"q\" tail"} {
+		if fc[k] != v {
+			t.Errorf("%s = %q, want %q", k, fc[k], v)
+		}
 	}
 }

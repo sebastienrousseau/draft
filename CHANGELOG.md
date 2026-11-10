@@ -6,6 +6,17 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- A config file written like the README's own example now reads as
+  written. A comment after a section header, as in
+  `[site]   # who your articles are published as`, hid the section, so the
+  publisher identity was read as top-level settings and `--doctor` said it
+  was not set. A comment after a quoted value, as in
+  `extract-engine = "ollama"   # local extraction`, became part of the
+  value. A `#` inside quotes, or in an unquoted value such as a URL
+  fragment, is still kept.
+
 ## [0.0.45] - 2026-11-09
 
 ### Added
