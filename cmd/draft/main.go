@@ -450,9 +450,9 @@ func usage(w io.Writer) {
 
     %s
 
-  claude, copilot, codex, grok, agy, and cursor-agent are verified end to end and
-  used by auto mode; the rest are experimental (invocation correct, output
-  unverified) and used by auto only with --experimental. Force any by name.
+  claude, copilot, codex, agy and claude-acp are verified and run without tools;
+  the rest are experimental (output unverified, or tools not taken away) and
+  used by auto only with --experimental. Force any by name.
 
   If a session call fails because the machine is offline, draft fails over to a
   local Ollama model and stays there for the rest of the run. A prompt the model

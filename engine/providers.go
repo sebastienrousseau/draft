@@ -71,11 +71,12 @@ type Provider struct {
 // auto-selection preference order. The first non-experimental one found on PATH becomes the
 // default online backend. Invocations were derived from each CLI's own --help.
 //
-// claude, copilot, codex, grok, agy, and cursor-agent are verified end to end
-// (they return clean Markdown through this abstraction). The rest are
-// Experimental: their invocation is correct per --help, but their output has not
-// been verified for a full article, so auto-selection skips them unless
-// --experimental is set.
+// claude, copilot, codex and agy are verified end to end (they return clean
+// Markdown through this abstraction) and run without tools. The rest are
+// Experimental: either their output has not been verified for a full article,
+// or, for cursor-agent and grok, they run with whatever tools their own
+// configuration allows, because no restriction has been checked against them.
+// Auto-selection skips them unless --experimental is set.
 //
 // The prompt is kept out of argv wherever the CLI allows it, because a
 // positional prompt is visible in a process listing — along with the verbatim
@@ -119,12 +120,15 @@ func defaultProviders() []Provider {
 		// path takes the prompt as a positional argument, exposing the source
 		// text in the process listing. The prompt goes on stdin as one NDJSON
 		// user event, and the NDJSON result event is parsed back.
-		{Name: "agy", Bin: "agy", Args: []string{"--input-format", "stream-json", "--output-format", "stream-json"}, ModelFlag: "--model", StreamJSONInput: true, Credentials: googleCredentials},
-		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true, Credentials: []string{"CURSOR_*"}},
+		{Name: "agy", Bin: "agy", Args: append([]string{"--input-format", "stream-json", "--output-format", "stream-json"}, agyHermetic...), ModelFlag: "--model", StreamJSONInput: true, Credentials: googleCredentials},
+		// cursor-agent and grok produce clean articles but keep their own tools:
+		// no restriction has been checked against either with the canary, so
+		// auto mode must not choose them for the user (S-H1).
+		{Name: "cursor-agent", Bin: "cursor-agent", Args: []string{"-p", "--output-format", "text"}, ModelFlag: "--model", PromptViaStdin: true, Experimental: true, Credentials: []string{"CURSOR_*"}},
 		{Name: "amp", Bin: "amp", Args: []string{"-x"}, Experimental: true, Credentials: []string{"AMP_*"}},
 		{Name: "crush", Bin: "crush", Args: []string{"run"}, Experimental: true, Credentials: append([]string{"CRUSH_*"}, anyModelCredentials...)},
 		{Name: "goose", Bin: "goose", Args: []string{"run", "--no-session", "-i", "-"}, PromptViaStdin: true, Experimental: true, Credentials: append([]string{"GOOSE_*"}, anyModelCredentials...)},
-		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file", Credentials: []string{"XAI_*", "GROK_*"}},
+		{Name: "grok", Bin: "grok", Args: []string{"--output-format", "plain", "--single"}, PromptFileFlag: "--prompt-file", Experimental: true, Credentials: []string{"XAI_*", "GROK_*"}},
 		{Name: "qwen", Bin: "qwen", Args: []string{"-p"}, Experimental: true, Credentials: append([]string{"QWEN_*", "DASHSCOPE_*", "BAILIAN_*"}, anyModelCredentials...)},
 		// Agent Client Protocol transports. claude-acp is verified end to end
 		// against @zed-industries/claude-code-acp 0.16; the others speak the
@@ -170,6 +174,17 @@ var codexHermetic = []string{
 	"-c", `default_permissions="draft"`,
 	"-c", `permissions.draft.extends=":read-only"`,
 	"-c", `permissions.draft.filesystem={":root"="deny", ":minimal"="read", ":tmpdir"="deny", ":slash_tmp"="deny", ":workspace_roots"={"."="read"}}`,
+}
+
+// agyHermetic overrides, for this session only, the user's settings that
+// widen agy's reach: run with draft's old flags and the user's
+// allowNonWorkspaceAccess, agy read the canary file and printed it. --settings
+// rejects a key it does not know, so a rename fails loudly rather than
+// silently dropping a restriction. No setting removes agy's web, browser and
+// subagent tools; parseAgyStreamJSON fails any turn that starts one.
+var agyHermetic = []string{
+	"--disable-slash-commands",
+	"--settings", `{"allowNonWorkspaceAccess":false,"enableTerminalSandbox":true,"permissions":{"deny":["command(*)","read_file(*)","write_file(*)","read_url(*)","mcp(*)"]}}`,
 }
 
 // registry holds the provider table behind a lock.

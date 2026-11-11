@@ -306,12 +306,12 @@ takes the first installed provider, skipping experimental rows unless
 | 1  | `claude`       | stable       | `claude -p --output-format stream-json …` (live-streamed, prompt on stdin) | none                                |
 | 2  | `copilot`      | stable       | `copilot --acp` over the Agent Client Protocol (prompt on stdin)           | refused; a turn that runs one fails |
 | 3  | `codex`        | stable       | `codex exec` (prompt on stdin)                                             | none                                |
-| 4  | `agy`          | stable       | `agy --input-format stream-json` turn protocol (prompt on stdin)           | its own defaults                    |
-| 5  | `cursor-agent` | stable       | `cursor-agent -p --output-format text` (prompt on stdin)                   | its own defaults                    |
+| 4  | `agy`          | stable       | `agy --input-format stream-json` turn protocol (prompt on stdin)           | denied; a turn that runs one fails  |
+| 5  | `cursor-agent` | experimental | `cursor-agent -p --output-format text` (prompt on stdin)                   | its own defaults                    |
 | 6  | `amp`          | experimental | `amp -x`                                                                   | its own defaults                    |
 | 7  | `crush`        | experimental | `crush run`                                                                | its own defaults                    |
 | 8  | `goose`        | experimental | `goose run --no-session -i -` (prompt on stdin)                            | its own defaults                    |
-| 9  | `grok`         | stable       | `grok --output-format plain --single` (prompt in a private file)           | its own defaults                    |
+| 9  | `grok`         | experimental | `grok --output-format plain --single` (prompt in a private file)           | its own defaults                    |
 | 10 | `qwen`         | experimental | `qwen -p`                                                                  | its own defaults                    |
 | 11 | `claude-acp`   | stable       | `claude-code-acp` over the Agent Client Protocol                           | refused; a turn that runs one fails |
 | 12 | `gemini-acp`   | experimental | `gemini --experimental-acp` over the Agent Client Protocol                 | refused; a turn that runs one fails |
@@ -319,9 +319,15 @@ takes the first installed provider, skipping experimental rows unless
 
 **Tools** is what the agent may do besides answer. *None* means it was
 started with no tools and none of your own hooks, plugins or MCP servers, and
-was checked by asking it to read a file outside its working directory. *Its own
-defaults* means draft passes no tool-granting flag but cannot take tools away:
-the CLI does whatever its configuration allows. See
+was checked by asking it to read a file outside its working directory.
+*Denied* means the agent still has tools, but draft denies them for the
+session (for `agy`, no reads outside its working directory and no commands,
+file access, URLs or MCP tools) and fails a turn that starts one anyway. *Its
+own defaults* means draft passes no tool-granting flag but cannot take tools
+away: the CLI does whatever its configuration allows, which is why auto mode
+never picks one. `cursor-agent` and `grok` write good articles but are
+experimental for that reason: nobody has yet checked a restriction against
+them. See
 [ADR 0004](docs/adr/0004-no-tools-granted-to-providers.md).
 
 `go run ./examples/providers` shows which are installed on your machine.
@@ -1247,11 +1253,11 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 - **Prompts stay out of `argv` where the CLI allows it.** A prompt passed as a
   command-line argument is visible in a process listing for the duration of the
   call, along with the source excerpts it quotes. `claude`, `codex`,
-  `cursor-agent` and `goose` are driven over stdin; `grok` receives the prompt
-  through a `0600` file inside the call's private directory. `copilot` ignores
-  stdin and offers no prompt-file flag, and `agy` offers only an NDJSON turn
-  protocol, so those two still use an argument. On a shared host, prefer any of
-  the others, or Ollama.
+  `cursor-agent` and `goose` are driven over stdin, `agy` through its NDJSON
+  turn protocol on stdin and `copilot` over ACP; `grok` receives the prompt
+  through a `0600` file inside the call's private directory. The experimental
+  `amp`, `crush` and `qwen` offer no such route and still take it as an
+  argument, so on a shared host prefer any of the others, or Ollama.
 - **No tools are granted.** `draft` only ever asks a provider for text, so no
   provider is invoked with a flag that lets the agent act on your machine.
   `copilot --allow-all-tools` and `cursor-agent --force` (its own help calls

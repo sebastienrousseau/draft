@@ -98,6 +98,31 @@ canary file outside its working directory):
 `TestNoProviderGrantsTools` now also catches `--flag=value` spellings and
 flags such as `--permission-mode` whose danger lies in their value.
 
+## Amendment, 2026-11: agy, and providers that keep their tools
+
+`agy`, started with draft's flags and a user setting of
+`allowNonWorkspaceAccess`, read the canary file and printed it. It now gets
+`--disable-slash-commands` and a `--settings` override for the session alone:
+no access outside the workspace, the terminal sandbox on, and the `command`,
+`read_file`, `write_file`, `read_url` and `mcp` grants denied. Under them it
+tried to read the canary, was refused, and answered `NO-ACCESS`. No setting
+removes its web, browser and subagent tools, so the deny rules are not the
+whole guarantee: agy's stream reports each tool step, and a turn that starts
+one is killed and fails with `ErrToolUse`, as an ACP turn does. `--settings`
+rejects a key it does not know, so a renamed setting fails the call instead
+of silently dropping a restriction. Checked against agy 1.5.5.
+
+`cursor-agent` and `grok` were not installed where this was done, and no
+restriction has been checked against either. Rather than ship flags read
+from documentation as a guarantee, both are now experimental: auto mode
+never picks a provider that keeps its own tools, and
+`TestAutoModeUsesOnlyRestrictedProviders` fails if one becomes auto-selectable
+without a pinned, canary-checked restriction. Naming one with `--engine`, or
+passing `--experimental`, still runs it, with its own defaults.
+
+`TestProvidersCannotReadOutsideTheSandboxLive` repeats the canary check
+against installed CLIs when `DRAFT_LIVE_CANARY` names them.
+
 ## Amendment, 2026-11: other tools' credentials
 
 The child environment was filtered only of `DRAFT_*`, so every token in the

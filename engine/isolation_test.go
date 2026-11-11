@@ -126,6 +126,10 @@ var requiredRestrictions = map[string][][]string{
 		{"-c", `web_search="disabled"`},
 		{"-c", `default_permissions="draft"`},
 	},
+	"agy": {
+		{"--disable-slash-commands"},
+		{"--settings", `{"allowNonWorkspaceAccess":false,"enableTerminalSandbox":true,"permissions":{"deny":["command(*)","read_file(*)","write_file(*)","read_url(*)","mcp(*)"]}}`},
+	},
 	"copilot": {
 		{"--disable-builtin-mcps"},
 		{"--no-custom-instructions"},
@@ -143,6 +147,21 @@ func TestProvidersKeepTheirRestrictions(t *testing.T) {
 			if !containsRun(p.Args, want) {
 				t.Errorf("provider %q has lost %q from its invocation: %q", name, want, p.Args)
 			}
+		}
+	}
+}
+
+// Auto mode picks a provider without the user naming it, so it may only pick
+// one whose tools were taken away and checked against the canary, or an ACP
+// agent, whose tool turns fail closed. Anything else is experimental: still
+// usable by name, never chosen for the user.
+func TestAutoModeUsesOnlyRestrictedProviders(t *testing.T) {
+	for _, p := range Providers() {
+		if p.Experimental || p.ACP {
+			continue
+		}
+		if _, ok := requiredRestrictions[p.Name]; !ok {
+			t.Errorf("auto mode can pick %q, which keeps its own tools; restrict it or mark it Experimental", p.Name)
 		}
 	}
 }

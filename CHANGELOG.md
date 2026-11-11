@@ -6,6 +6,23 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Security
+
+- **`agy` no longer reads outside its working directory, and auto mode no
+  longer picks `cursor-agent` or `grok` (S-H1, breaking).** Started with
+  draft's flags, `agy` read a file outside its working directory and printed
+  it, because the user's own settings allowed it. It now runs with a
+  session-only settings override that denies commands, file access, URLs, MCP
+  tools and anything outside the workspace, and a turn in which it starts a
+  tool is stopped and fails with `ErrToolUse`, as an ACP turn does. Checked
+  against agy 1.5.5 with a canary file. `cursor-agent` and `grok` still run
+  with their own tools, and no restriction has been checked against them, so
+  they are now experimental: name one with `--engine`, or pass
+  `--experimental`, to keep using it. A test fails if auto mode can pick a
+  provider that keeps its own tools, and `DRAFT_LIVE_CANARY=agy,claude,codex
+  go test ./engine -run Live` repeats the canary check against installed
+  CLIs.
+
 ### Fixed
 
 - A config file written like the README's own example now reads as

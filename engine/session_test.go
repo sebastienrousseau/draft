@@ -73,6 +73,12 @@ func TestHelperProcess(t *testing.T) {
 		os.Stdout.WriteString(`{"event":"result","result":{"status":"SUCCESS","response":` + jsonString("GOT:"+text) + `}}` + "\n")
 	case "agy-error":
 		os.Stdout.WriteString(`{"event":"result","result":{"status":"ERROR","response":"","error":"agy could not do it\nsecond line"}}` + "\n")
+	case "agy-tool":
+		// A turn that starts a tool and would only answer much later: the
+		// answer must never be waited for, let alone returned.
+		os.Stdout.WriteString(`{"event":"step_update","step_update":{"state":"ACTIVE","step_type":"tool","tool_name":"read_file"}}` + "\n")
+		time.Sleep(30 * time.Second)
+		os.Stdout.WriteString(`{"event":"result","result":{"status":"SUCCESS","response":"secret"}}` + "\n")
 	case "acp-agent":
 		acpFakeAgent(false)
 	case "acp-agent-badversion":
@@ -405,6 +411,25 @@ func TestSessionAgyStreamJSON(t *testing.T) {
 		_, err := s.Generate(context.Background(), Request{Prompt: "x"})
 		if err == nil || !strings.Contains(err.Error(), "could not do it") {
 			t.Errorf("an agy ERROR result should surface, got %v", err)
+		}
+	})
+}
+
+// agy loads tools no setting removes, so a turn that starts one is stopped
+// and failed rather than read to the end.
+func TestAgyTurnThatRunsAToolFails(t *testing.T) {
+	withExec("agy-tool", func() {
+		s, _ := NewSession("agy", config.Config{})
+		start := time.Now()
+		res, err := s.Generate(context.Background(), Request{Prompt: "x"})
+		if !errors.Is(err, ErrToolUse) {
+			t.Fatalf("err = %v, want ErrToolUse", err)
+		}
+		if res.Text != "" {
+			t.Errorf("a tool turn returned text %q", res.Text)
+		}
+		if d := time.Since(start); d > 10*time.Second {
+			t.Errorf("the tool turn was waited out (%s), not stopped", d)
 		}
 	})
 }
