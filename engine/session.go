@@ -148,6 +148,7 @@ func (s *Session) collect(ctx context.Context, cmd *exec.Cmd, onChunk func(strin
 	}
 
 	res, streamErr := s.parse(stdout, onChunk)
+	stopToolTurn(cmd, streamErr)
 	// A parser that gave up partway leaves the CLI blocked on a full pipe,
 	// where it would sit until the call timeout. Drain it so the CLI can exit.
 	_, _ = io.Copy(io.Discard, stdout)
@@ -161,8 +162,8 @@ func (s *Session) collect(ctx context.Context, cmd *exec.Cmd, onChunk func(strin
 	// result whose stop_reason is "refusal", then exits non-zero with nothing
 	// else to say. Read the stream's verdict before the exit status, or the
 	// caller sees a bare "exit status 1" and mistakes a declined prompt for a
-	// dead provider.
-	if errors.Is(streamErr, ErrRefused) {
+	// dead provider. A tool turn was killed, so its exit status says nothing.
+	if isStreamVerdict(streamErr) {
 		return Result{}, fmt.Errorf("%s: %w", s.provider.Name, streamErr)
 	}
 	if waitErr != nil {
@@ -176,6 +177,20 @@ func (s *Session) collect(ctx context.Context, cmd *exec.Cmd, onChunk func(strin
 		return Result{}, fmt.Errorf("%s: %s", s.provider.Name, firstLine(streamErr.Error()))
 	}
 	return res, nil
+}
+
+// stopToolTurn kills a CLI whose turn started a tool rather than draining it:
+// the tool may still be running, and nothing it does from here on is wanted.
+func stopToolTurn(cmd *exec.Cmd, streamErr error) {
+	if errors.Is(streamErr, ErrToolUse) {
+		_ = proc.Kill(cmd)
+	}
+}
+
+// isStreamVerdict reports whether the stream itself said why the call
+// failed, which then outranks the CLI's exit status.
+func isStreamVerdict(err error) bool {
+	return errors.Is(err, ErrRefused) || errors.Is(err, ErrToolUse)
 }
 
 // parse reads the CLI's answer in whichever output format it speaks.

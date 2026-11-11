@@ -33,75 +33,113 @@ func agyUserEvent(prompt string) string {
 // result.status is SUCCESS or ERROR and whose result.response is the answer.
 // Assistant text chunks, when present, are forwarded to onChunk for a live
 // preview; the authoritative answer is the result event's response.
+//
+// A step_update whose step_type is "tool" ends the read with ErrToolUse. agy
+// loads web, browser and subagent tools that no setting removes, so the deny
+// rules in agyHermetic cannot be the whole guarantee: as with ACP, an answer
+// from a turn that ran a tool is discarded rather than trusted.
 func parseAgyStreamJSON(r io.Reader, onChunk func(string)) (string, Usage, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	var response string
-	var acc strings.Builder
-	var haveResult, isError bool
-	var errMsg string
-	var usage Usage
+	var turn agyTurn
 	for scanner.Scan() {
-		line := scanner.Bytes()
-		var ev struct {
-			Event   string `json:"event"`
-			Content struct {
-				Text string `json:"text"`
-			} `json:"content"`
-			Delta struct {
-				Text string `json:"text"`
-			} `json:"delta"`
-			Result struct {
-				Status   string `json:"status"`
-				Response string `json:"response"`
-				Error    string `json:"error"`
-				Usage    struct {
-					InputTokens  int `json:"input_tokens"`
-					OutputTokens int `json:"output_tokens"`
-					TotalTokens  int `json:"total_tokens"`
-				} `json:"usage"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal(line, &ev); err != nil {
+		var ev agyEvent
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
 			continue // agy may print a non-JSON banner line
 		}
-		switch ev.Event {
-		case "assistant", "text", "message_delta", "content_block_delta":
-			chunk := ev.Content.Text
-			if chunk == "" {
-				chunk = ev.Delta.Text
-			}
-			if chunk != "" {
-				acc.WriteString(chunk)
-				if onChunk != nil {
-					onChunk(chunk)
-				}
-			}
-		case "result":
-			haveResult = true
-			response = ev.Result.Response
-			isError = strings.EqualFold(ev.Result.Status, "ERROR")
-			errMsg = ev.Result.Error
-			in, out := ev.Result.Usage.InputTokens, ev.Result.Usage.OutputTokens
-			if in == 0 && out == 0 && ev.Result.Usage.TotalTokens > 0 {
-				in = ev.Result.Usage.TotalTokens // agy reports only a total
-			}
-			if in > 0 || out > 0 {
-				usage = Usage{InputTokens: in, OutputTokens: out, Reported: true}
-			}
+		if err := turn.apply(ev, onChunk); err != nil {
+			return "", turn.usage, err
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return acc.String(), usage, err
+		return turn.acc.String(), turn.usage, err
 	}
-	if isError {
-		if strings.TrimSpace(errMsg) == "" {
-			errMsg = "agy reported an error"
+	return turn.answer()
+}
+
+// agyEvent is the part of one agy stream-json event that draft reads.
+type agyEvent struct {
+	Event      string `json:"event"`
+	StepUpdate struct {
+		StepType string `json:"step_type"`
+		ToolName string `json:"tool_name"`
+	} `json:"step_update"`
+	Content struct {
+		Text string `json:"text"`
+	} `json:"content"`
+	Delta struct {
+		Text string `json:"text"`
+	} `json:"delta"`
+	Result struct {
+		Status   string `json:"status"`
+		Response string `json:"response"`
+		Error    string `json:"error"`
+		Usage    struct {
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+			TotalTokens  int `json:"total_tokens"`
+		} `json:"usage"`
+	} `json:"result"`
+}
+
+// agyTurn accumulates one turn's events into its answer.
+type agyTurn struct {
+	acc        strings.Builder
+	response   string
+	errMsg     string
+	haveResult bool
+	isError    bool
+	usage      Usage
+}
+
+func (t *agyTurn) apply(ev agyEvent, onChunk func(string)) error {
+	switch ev.Event {
+	case "step_update":
+		if ev.StepUpdate.StepType == "tool" {
+			return fmt.Errorf("%w (%s)", ErrToolUse, ev.StepUpdate.ToolName)
 		}
-		return "", usage, fmt.Errorf("%s", firstLine(errMsg))
+	case "assistant", "text", "message_delta", "content_block_delta":
+		chunk := ev.Content.Text
+		if chunk == "" {
+			chunk = ev.Delta.Text
+		}
+		if chunk != "" {
+			t.acc.WriteString(chunk)
+			if onChunk != nil {
+				onChunk(chunk)
+			}
+		}
+	case "result":
+		t.haveResult = true
+		t.response = ev.Result.Response
+		t.isError = strings.EqualFold(ev.Result.Status, "ERROR")
+		t.errMsg = ev.Result.Error
+		t.setUsage(ev.Result.Usage.InputTokens, ev.Result.Usage.OutputTokens, ev.Result.Usage.TotalTokens)
 	}
-	if haveResult && strings.TrimSpace(response) != "" {
-		return strings.TrimSpace(response), usage, nil
+	return nil
+}
+
+func (t *agyTurn) setUsage(in, out, total int) {
+	if in == 0 && out == 0 && total > 0 {
+		in = total // agy reports only a total
 	}
-	return strings.TrimSpace(acc.String()), usage, nil
+	if in > 0 || out > 0 {
+		t.usage = Usage{InputTokens: in, OutputTokens: out, Reported: true}
+	}
+}
+
+// answer is the turn's text: the result event's response when there is one,
+// the accumulated chunks otherwise.
+func (t *agyTurn) answer() (string, Usage, error) {
+	if t.isError {
+		msg := t.errMsg
+		if strings.TrimSpace(msg) == "" {
+			msg = "agy reported an error"
+		}
+		return "", t.usage, fmt.Errorf("%s", firstLine(msg))
+	}
+	if t.haveResult && strings.TrimSpace(t.response) != "" {
+		return strings.TrimSpace(t.response), t.usage, nil
+	}
+	return strings.TrimSpace(t.acc.String()), t.usage, nil
 }

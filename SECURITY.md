@@ -59,8 +59,13 @@ asks it only for text. What that agent can do depends on the provider:
 - An agent driven over ACP (`copilot`, `claude-acp`, …) is refused every
   permission it asks for, and a turn in which it runs a tool anyway is
   cancelled and its answer thrown away.
+- `agy` keeps tools no setting removes, but is denied reads outside its
+  working directory, commands, file access, URLs and MCP tools for the
+  session, and a turn in which it starts a tool is stopped and its answer
+  thrown away.
 - Any other provider is given no tool-granting flag, but otherwise runs with
-  whatever its own configuration allows.
+  whatever its own configuration allows. Auto mode never picks one; it runs
+  only when you name it with `--engine` or pass `--experimental`.
 
 Each runs in an empty temporary directory. Its environment loses `draft`'s own
 `DRAFT_*` settings and every credential but its own: variables ending
