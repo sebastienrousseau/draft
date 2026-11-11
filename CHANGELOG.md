@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.46] - 2026-11-11
+
 ### Security
 
 - **`agy` no longer reads outside its working directory, and auto mode no
@@ -22,6 +24,9 @@ series until `0.0.999`.
   provider that keeps its own tools, and `DRAFT_LIVE_CANARY=agy,claude,codex
   go test ./engine -run Live` repeats the canary check against installed
   CLIs.
+- Release binaries are built with Go 1.27.4 or later, which fixes the standard
+  library's GO-2026-6859 (`net/http`). v0.0.45 was built with Go 1.27.3,
+  before that fix.
 
 ### Fixed
 
@@ -1521,6 +1526,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.46]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.46
 [0.0.45]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.45
 [0.0.44]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.44
 [0.0.43]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.43
