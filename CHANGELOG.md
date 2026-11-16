@@ -22,6 +22,16 @@ series until `0.0.999`.
   keywords are deliberately not checked, because Google says it does not use
   them. The rules are importable as the `seo` package.
 
+### Fixed
+
+- **Ollama auto-start no longer leaves orphaned servers.** With
+  `OLLAMA_HOST` on port 0, draft started `ollama serve`, which bound a
+  random free port the client never looked at, and left it running; and
+  any server it started that did not answer within the wait kept running
+  after draft gave up. draft now refuses to auto-start for port 0 and stops
+  a server it started that never answers. The `cmd/draft` tests had leaked
+  two real `ollama serve` processes per run this way.
+
 ### Changed
 
 - **Generated descriptions end on a whole sentence (breaking: generated

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"sync"
@@ -309,6 +310,10 @@ var dialTimeout = net.DialTimeout
 // reaping path can be exercised without a real Ollama install.
 var startCommand = exec.Command
 
+// ollamaStartWait is how long EnsureOllamaRunning waits for a server it
+// started to answer; a variable so tests need not wait the full time.
+var ollamaStartWait = 3 * time.Second
+
 // IsOnline probes public DNS endpoints with a short timeout to check for network connectivity.
 var IsOnline = func() bool {
 	conn, err := dialTimeout("tcp", "1.1.1.1:53", 300*time.Millisecond)
@@ -340,10 +345,15 @@ func IsOllamaRunning(host string) bool {
 }
 
 // EnsureOllamaRunning checks if Ollama is running at host. If not, it attempts to launch
-// `ollama serve` in the background and waits up to 3 seconds for it to become responsive.
+// `ollama serve` in the background and waits up to ollamaStartWait for it to become
+// responsive. A server it starts that never answers is stopped again, so a wrong
+// host cannot leave an orphaned server behind every run.
 func EnsureOllamaRunning(host string) error {
 	if IsOllamaRunning(host) {
 		return nil
+	}
+	if err := checkAutostartHost(host); err != nil {
+		return err
 	}
 	if !available("ollama") {
 		return fmt.Errorf("ollama is not installed on PATH; please install Ollama from https://ollama.com")
@@ -352,17 +362,47 @@ func EnsureOllamaRunning(host string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start 'ollama serve': %w", err)
 	}
-	// Reap the child when it eventually exits. draft does not own the
-	// server's lifetime — it is deliberately left running for the next run —
-	// but a started process that is never waited on becomes a zombie held by
-	// this process for as long as it lives.
-	go func() { _ = cmd.Wait() }()
-	deadline := time.Now().Add(3 * time.Second)
+	// Reap the child when it exits. draft does not own a healthy server's
+	// lifetime (it is left running for the next run), but a started process
+	// that is never waited on becomes a zombie held by this process.
+	exited := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(exited) }()
+	if waitForOllama(host, ollamaStartWait) {
+		return nil
+	}
+	stopUnanswered(cmd, exited)
+	return fmt.Errorf("started 'ollama serve' but server at %s did not respond within %s", host, ollamaStartWait)
+}
+
+// checkAutostartHost refuses a host no started server could answer on. Port 0
+// asks the OS for any free port, so `ollama serve` would bind somewhere the
+// client never looks and run forever.
+func checkAutostartHost(host string) error {
+	u, err := url.Parse(host)
+	if err == nil && u.Port() == "0" {
+		return fmt.Errorf("ollama host %s uses port 0, so a started server could never be reached; set a real port", host)
+	}
+	return nil
+}
+
+// waitForOllama polls host until it answers or wait elapses.
+func waitForOllama(host string, wait time.Duration) bool {
+	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		time.Sleep(250 * time.Millisecond)
 		if IsOllamaRunning(host) {
-			return nil
+			return true
 		}
 	}
-	return fmt.Errorf("started 'ollama serve' but server at %s did not respond within 3 seconds", host)
+	return false
+}
+
+// stopUnanswered kills a server draft started that never answered, and waits
+// briefly for the reaper so the caller returns with the process gone.
+func stopUnanswered(cmd *exec.Cmd, exited <-chan struct{}) {
+	_ = cmd.Process.Kill()
+	select {
+	case <-exited:
+	case <-time.After(2 * time.Second):
+	}
 }
