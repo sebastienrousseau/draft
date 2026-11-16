@@ -6,6 +6,22 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- **`draft --seo <file>...` checks final articles against Google Search
+  guidance.** Each rule enforces a sentence from Google Search Central's SEO
+  starter guide, title-link, snippet, helpful-content or FAQ structured-data
+  pages, and each finding links to it: a missing, boilerplate or
+  word-stuffed title; a missing, one- or two-word, keyword-list, clipped or
+  title-repeating description; images without alt text; generic link text,
+  or a cited work linked to a site's home page; more than one main heading;
+  no byline; no AI disclosure; a missing or conflicting canonical URL; no
+  schema type, or `FAQPage`, whose rich results Google stopped showing on
+  7 May 2026. Files are checked as a set, so a shared title or description
+  is reported on both. Length limits, word counts, keyword density and meta
+  keywords are deliberately not checked, because Google says it does not use
+  them. The rules are importable as the `seo` package.
+
 ## [0.0.46] - 2026-11-11
 
 ### Security
