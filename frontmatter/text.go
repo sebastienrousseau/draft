@@ -96,6 +96,83 @@ func cleanText(s string) string {
 	return strings.TrimSpace(strings.Join(strings.Fields(s), " "))
 }
 
+// shorten fits s into maxLen bytes. It keeps whole sentences when at least
+// one fits, because a description cut mid-sentence is not the summary of the
+// page that Google's snippet guidance asks for; only a first sentence too long
+// to fit is clipped at a word and marked with an ellipsis.
+func shorten(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if cut := truncateAtSentence(s, maxLen); cut != "" {
+		return cut
+	}
+	return truncateAtWord(s, maxLen-3) + "..."
+}
+
+// describe fits s into maxLen bytes the way shorten does, except that a
+// first sentence longer than maxLen is kept whole. Google sets no length
+// limit on a meta description and truncates it for display itself, so
+// clipping a sentence there would only make the summary worse.
+func describe(s string, maxLen int) string {
+	if cut := truncateAtSentence(s, maxLen); cut != "" {
+		return cut
+	}
+	for i := range len(s) {
+		if end := sentenceEnd(s, i); end > 0 {
+			return s[:end]
+		}
+	}
+	return shorten(s, maxLen)
+}
+
+// truncateAtSentence returns the longest run of whole sentences at the start
+// of s that fits in maxLen bytes, or "" when not even the first one fits.
+func truncateAtSentence(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	best := 0
+	for i := 0; i < maxLen; i++ {
+		if end := sentenceEnd(s, i); end > 0 && end <= maxLen {
+			best = end
+		}
+	}
+	return s[:best]
+}
+
+// sentenceEnd reports where a sentence ending at the terminator s[i] stops,
+// closing quotes and brackets included, or 0 when s[i] does not end one.
+func sentenceEnd(s string, i int) int {
+	if !strings.ContainsRune(".!?", rune(s[i])) || isAbbreviation(s[:i+1]) {
+		return 0
+	}
+	end := i + 1
+	for end < len(s) && strings.ContainsRune(`"')]`, rune(s[end])) {
+		end++
+	}
+	if end == len(s) || s[end] == ' ' {
+		return end
+	}
+	return 0
+}
+
+// abbreviations end in a full stop without ending a sentence.
+var abbreviations = map[string]bool{
+	"al.": true, "vs.": true, "fig.": true, "eq.": true, "no.": true, "dr.": true,
+	"mr.": true, "ms.": true, "mrs.": true, "st.": true, "e.g.": true, "i.e.": true, "cf.": true,
+}
+
+// isAbbreviation reports whether the word ending s is an abbreviation or an
+// initialism ("J.P.", "U.S.", "A.") rather than the last word of a sentence.
+func isAbbreviation(s string) bool {
+	word := s[strings.LastIndexAny(s, " (\"")+1:]
+	if abbreviations[strings.ToLower(word)] || strings.Count(word, ".") > 1 {
+		return true
+	}
+	return len(word) == 2 && word[0] >= 'A' && word[0] <= 'Z'
+}
+
 func truncateAtWord(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

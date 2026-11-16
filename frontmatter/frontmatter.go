@@ -145,17 +145,13 @@ func ExtractMetadata(markdown string) Metadata {
 	if desc == "" {
 		desc = title
 	}
-	if len(desc) > 200 {
-		desc = truncateAtWord(desc, 197) + "..."
-	}
+	desc = describe(desc, 200)
 
 	excerpt := desc
 	if subtitle != "" && len(subtitle) > len(desc) {
 		excerpt = subtitle
 	}
-	if len(excerpt) > 220 {
-		excerpt = truncateAtWord(excerpt, 217) + "..."
-	}
+	excerpt = shorten(excerpt, 220)
 
 	// 4. Keywords & Tags: title terms lead (they are topical by construction),
 	// then the most frequent content words from the body. H2 headings are

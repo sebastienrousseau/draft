@@ -22,6 +22,19 @@ series until `0.0.999`.
   keywords are deliberately not checked, because Google says it does not use
   them. The rules are importable as the `seo` package.
 
+### Changed
+
+- **Generated descriptions end on a whole sentence (breaking: generated
+  output).** A description over 200 bytes was clipped at a word with `...`,
+  so every long one stopped mid-sentence: not the summary of the page
+  Google's snippet guidance asks for. `description` and `item_description`
+  now keep the whole sentences that fit, and keep a longer first sentence
+  whole, since Google sets no length limit and truncates for display itself.
+  `twitter_description` and `excerpt` keep their caps, ending on a sentence
+  where one fits. Abbreviations and initialisms such as `et al.` and `J.P.`
+  are not taken as sentence ends. Existing frontmatter is kept as it is;
+  delete the fields and regenerate a set to pick this up.
+
 ## [0.0.46] - 2026-11-11
 
 ### Security

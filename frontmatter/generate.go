@@ -180,7 +180,7 @@ func GenerateWithOptions(markdown string, opts Options) string {
 	b.WriteString("# Twitter Card - The Twitter Card front matter (YAML).\n\n")
 	b.WriteString(field("twitter_card", "summary_large_image"))
 	b.WriteString(optional("twitter_creator", site.TwitterHandle))
-	b.WriteString(field("twitter_description", meta.Description))
+	b.WriteString(field("twitter_description", shorten(meta.Description, 200)))
 	b.WriteString(optional("twitter_image", sf.logo))
 	b.WriteString(optional("twitter_image_alt", sf.twitterImageAlt))
 	b.WriteString(optional("twitter_site", site.TwitterHandle))

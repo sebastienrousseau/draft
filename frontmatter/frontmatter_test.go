@@ -815,3 +815,64 @@ func TestSiteOverride(t *testing.T) {
 		t.Error("Identified should mean a name or a site")
 	}
 }
+
+// A description that must be shortened ends on a full sentence, because a
+// clipped one is not the "summary of the whole page" Google asks for.
+func TestDescriptionEndsOnASentence(t *testing.T) {
+	first := "Celestial holography proposes a duality between the gravitational S-matrix and a conformal field theory, as in J.P. Morgan's work et al. today."
+	second := " The motivation comes from asymptotic symmetries, soft theorems and memory effects, which all turn out to be the same physics."
+	body := "# Celestial\n\n" + `<p class="post-lead-tldr"><strong>TL;DR.</strong> ` + first + second + `</p>` + "\n\nProse.\n"
+	if got := ExtractMetadata(body).Description; got != first {
+		t.Errorf("description = %q, want the first sentence whole", got)
+	}
+}
+
+func TestTruncateAtSentence(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"One. Two words here.", "One. Two words here."},
+		{"Short one. A much longer second sentence that runs past the cap.", "Short one."},
+		{"Did it work? Yes it did, and for a long while.", "Did it work?"},
+		{"No full stop anywhere in this rather long text", ""},
+		{"See Fig. 3 and the U.S. data here, plus more", ""},
+		{"Quoted \"end.\" Then more text that overflows it", "Quoted \"end.\""},
+	}
+	for _, c := range cases {
+		if got := truncateAtSentence(c.in, 20); got != c.want {
+			t.Errorf("truncateAtSentence(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Google sets no length limit on a description and truncates it for display
+// itself, so a first sentence longer than the cap is kept whole rather than
+// clipped; only text with no sentence end at all is clipped.
+func TestDescribeKeepsALongFirstSentence(t *testing.T) {
+	long := "An IETF Standards Track RFC defines Composite ML-DSA, a scheme that pairs ML-DSA with a traditional signature algorithm and exposes the pair as one key."
+	cases := []struct{ in, want string }{
+		{long + " A second sentence follows it.", long},
+		{long, long},
+		{"Short. " + long, "Short."},
+		{strings.Repeat("word ", 20) + "end", "word word word word..."},
+	}
+	for _, c := range cases {
+		if got := describe(c.in, 25); got != c.want {
+			t.Errorf("describe(%.30q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// The X card description keeps the 200-byte cap even when the meta
+// description is longer.
+func TestTwitterDescriptionStaysCapped(t *testing.T) {
+	sentence := strings.TrimSpace(strings.Repeat("grounded ", 30)) + "."
+	body := "# Title\n\n" + `<p class="post-lead-tldr"><strong>TL;DR.</strong> ` + sentence + `</p>` + "\n\nProse.\n"
+	fm := GenerateWithOptions(body, Options{})
+	if !strings.Contains(fm, "description: \""+sentence+"\"") {
+		t.Errorf("meta description must keep the whole sentence:\n%s", fm)
+	}
+	for _, line := range strings.Split(fm, "\n") {
+		if v, ok := strings.CutPrefix(line, "twitter_description: "); ok && len(v) > 202 {
+			t.Errorf("twitter_description is %d bytes: %s", len(v), v)
+		}
+	}
+}
