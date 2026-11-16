@@ -6,6 +6,9 @@ package seo
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/sebastienrousseau/draft/frontmatter"
 )
 
 // clean is an article every rule passes; each case below breaks one thing.
@@ -192,4 +195,16 @@ func FuzzParseCheck(f *testing.F) {
 	f.Fuzz(func(t *testing.T, doc string) {
 		_ = Check(Parse("f.md", doc)) // must not panic on any input
 	})
+}
+
+// What draft generates must not trip a structured-data rule: a declared type
+// Google no longer shows earns nothing and warns on every article.
+func TestGeneratedFrontmatterDeclaresALiveSchema(t *testing.T) {
+	body := "# Quantum-Safe Readiness\n\nA paragraph of prose.\n"
+	doc := frontmatter.Combine(frontmatter.Generate(body, time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)), body)
+	for _, f := range Check(Parse("g.md", doc)) {
+		if strings.HasPrefix(f.Rule, "structured-data-") {
+			t.Errorf("generated frontmatter: %+v", f)
+		}
+	}
 }

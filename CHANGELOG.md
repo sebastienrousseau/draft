@@ -34,6 +34,12 @@ series until `0.0.999`.
   where one fits. Abbreviations and initialisms such as `et al.` and `J.P.`
   are not taken as sentence ends. Existing frontmatter is kept as it is;
   delete the fields and regenerate a set to pick this up.
+- **Generated frontmatter declares `schema: "Article"`, no longer
+  `"FAQPage, Article"` (breaking: generated output).** Google stopped showing
+  FAQ rich results on 7 May 2026, so the type no longer earned anything, and
+  `draft --seo` warned about it on every article. A layout that read
+  `FAQPage` from this field to emit FAQ markup stops doing so. Existing
+  frontmatter keeps its value; edit the field or delete it and regenerate.
 
 ## [0.0.46] - 2026-11-11
 

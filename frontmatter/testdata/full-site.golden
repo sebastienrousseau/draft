@@ -37,7 +37,7 @@ permalink: "https://example.org/2026-07-26-from-evidence-to-truth-why-certified-
 rating: "general"
 referrer: "no-referrer"
 robots: "index, follow"
-schema: "FAQPage, Article"
+schema: "Article"
 seo_title: "From Evidence to Truth: Why Certified Blockchains Will Define Banking Trust"
 short_name: "adaexample"
 subtitle: "ISO/IEC TC 307 guidance is not assurance, and scoring ledger governance against a 5-level maturity model turns engineering metrics into board-auditable truth."
