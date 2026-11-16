@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -148,4 +149,43 @@ func mergeLower(base, add []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ExemptSourceTerms returns s without the banned words and phrases that occur in
+// quotes, together with the exempted terms in lower case. A banned term that a
+// verified source quote uses is the source's own vocabulary, not the writer's
+// filler: "DeepSeek Harness" is a name, "ReAct harness" is the paper's term and
+// "seamless" may be exactly what a report said. Banning or rewriting those
+// changes what the source is reported to have said.
+func (s Style) ExemptSourceTerms(quotes []string) (Style, map[string]bool) {
+	text := strings.Join(strings.Fields(strings.ToLower(strings.Join(quotes, " "))), " ")
+	exempt := make(map[string]bool)
+	out := s
+	out.BannedWords = keepUnused(s.BannedWords, exempt, func(w string) bool { return usesWord(text, w) })
+	out.BannedPhrases = keepUnused(s.BannedPhrases, exempt, func(p string) bool { return strings.Contains(text, p) })
+	return out, exempt
+}
+
+// keepUnused returns the terms used reports false for, recording the rest.
+func keepUnused(terms []string, exempt map[string]bool, used func(string) bool) []string {
+	var kept []string
+	for _, t := range terms {
+		if lower := strings.ToLower(t); used(lower) {
+			exempt[lower] = true
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return kept
+}
+
+// usesWord reports whether text contains w or one of its inflections as a
+// whole word, the same forms the validator and the rewrite match.
+func usesWord(text, w string) bool {
+	for _, f := range WordForms(w) {
+		if regexp.MustCompile(`\b` + regexp.QuoteMeta(f.Form) + `\b`).MatchString(text) {
+			return true
+		}
+	}
+	return false
 }

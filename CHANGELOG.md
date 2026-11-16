@@ -24,6 +24,14 @@ series until `0.0.999`.
 
 ### Fixed
 
+- **The house-style rewrite no longer changes words the source uses.** A
+  banned word or phrase that a verified source quote contains is now the
+  source's own term: draft neither rewrites it nor rejects a draft for it.
+  It had renamed "DeepSeek Harness" to "DeepSeek Use", turned a paper's
+  "ReAct harness" into "ReAct use", and swapped a report's "seamless",
+  "robust" and "at its core" for "smooth", "strong" and "essentially", so the
+  article no longer said what the source said. A banned term the source does
+  not use is still rewritten.
 - **Ollama auto-start no longer leaves orphaned servers.** With
   `OLLAMA_HOST` on port 0, draft started `ollama serve`, which bound a
   random free port the client never looked at, and left it running; and

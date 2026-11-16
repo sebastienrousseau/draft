@@ -76,6 +76,7 @@ func cleanOutput(s string) string {
 var styleReplacers = buildStyleReplacers()
 
 type styleReplacer struct {
+	term string // the banned word or phrase, lower case, for source exemptions
 	re   *regexp.Regexp
 	with string
 }
@@ -85,7 +86,7 @@ func buildStyleReplacers() []styleReplacer {
 	sort.SliceStable(phrases, func(i, j int) bool { return len(phrases[i]) > len(phrases[j]) })
 	var out []styleReplacer
 	for _, p := range phrases {
-		out = append(out, styleReplacer{regexp.MustCompile(`(?i)` + regexp.QuoteMeta(p)), rules.StyleReplacements[p]})
+		out = append(out, styleReplacer{strings.ToLower(p), regexp.MustCompile(`(?i)` + regexp.QuoteMeta(p)), rules.StyleReplacements[p]})
 	}
 	for _, w := range rules.BannedWords {
 		repl := rules.StyleReplacements[w]
@@ -93,6 +94,7 @@ func buildStyleReplacers() []styleReplacer {
 			// Replace each inflected banned form with the replacement inflected the
 			// same way, so "leverages" -> "uses" and "leveraging" -> "using".
 			out = append(out, styleReplacer{
+				strings.ToLower(w),
 				regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(f.Form) + `\b`),
 				rules.InflectLike(repl, f.Kind),
 			})
@@ -107,18 +109,27 @@ func buildStyleReplacers() []styleReplacer {
 // rules, avoiding a slow full regeneration that would only introduce fresh
 // clichés.
 //
-// It never rewrites code or a quoted span. The patterns cannot match a number or
-// a name, but they very much can match inside a quotation — and rewriting there
-// changes what a source is reported to have said, which is the one edit that
-// would void the grounding guarantee. See internal/mdspan.
+// It never rewrites code or a quoted span: rewriting there changes what a source
+// is reported to have said, which is the one edit that would void the grounding
+// guarantee. See internal/mdspan.
 func enforceStyle(md string) string {
-	return mdspan.OutsideProtected(md, applyStyleReplacers)
+	return enforceStyleExcept(md, nil)
 }
 
-// applyStyleReplacers runs every replacement over one unprotected region.
-func applyStyleReplacers(md string) string {
+// enforceStyleExcept is enforceStyle that leaves the terms in exempt alone.
+// Those are banned terms the verified sources themselves use, including names
+// such as "DeepSeek Harness", which the patterns would otherwise match.
+func enforceStyleExcept(md string, exempt map[string]bool) string {
+	return mdspan.OutsideProtected(md, func(region string) string {
+		return applyStyleReplacers(region, exempt)
+	})
+}
+
+// applyStyleReplacers runs every replacement not in exempt over one
+// unprotected region.
+func applyStyleReplacers(md string, exempt map[string]bool) string {
 	for _, r := range styleReplacers {
-		if r.with == "" {
+		if r.with == "" || exempt[r.term] {
 			continue
 		}
 		md = r.re.ReplaceAllStringFunc(md, func(m string) string {
@@ -157,10 +168,15 @@ var unfilledSectionHeading = regexp.MustCompile(`(?m)^#{2,6}[ \t]*(?:\.{2,}|…)
 // unfilled skeleton placeholder, and enforces the house vocabulary — the standard
 // post-processing for generated Markdown before it is validated.
 func normalizeDraft(s string) string {
+	return normalizeDraftExcept(s, nil)
+}
+
+// normalizeDraftExcept is normalizeDraft leaving the source's own terms alone.
+func normalizeDraftExcept(s string, exempt map[string]bool) string {
 	s = leakedThesisLabel.ReplaceAllString(s, "")
 	s = unfilledThesisLine.ReplaceAllString(s, "")
 	s = unfilledSectionHeading.ReplaceAllString(s, "")
-	return enforceStyle(stripThinking(cleanOutput(s)))
+	return enforceStyleExcept(stripThinking(cleanOutput(s)), exempt)
 }
 
 // repairDuplicates drops paragraphs that nearly duplicate an earlier one,
