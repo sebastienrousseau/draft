@@ -111,8 +111,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	// sources were supplied today. Failing on a violation the edit did not
 	// introduce makes an existing article permanently unreviewable for a reason
 	// the review had nothing to do with.
-	before := reviewViolations(draftBody, records, r.cfg.Style, r.validateOptions())
-	after := reviewViolations(enhanced, records, r.cfg.Style, r.validateOptions())
+	before, after := r.reviewViolationsBoth(draftBody, enhanced, records)
 	if introduced := newViolations(before, after); len(introduced) > 0 {
 		r.phase(PhaseSave, "failed")
 		return r.saveFailure(outputDir, enhanced, fmt.Errorf("enhanced draft broke the rules:\n- %s", strings.Join(introduced, "\n- ")))

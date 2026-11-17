@@ -26,7 +26,7 @@ engine/ollama.go Ollama.Generate cognitive=25 cyclomatic=19 halstead=32.3 lines=
 engine/session.go Session.Generate cyclomatic=13 halstead=32.1
 engine/session.go parseStreamJSON cognitive=44 cyclomatic=24 halstead=34.3 lines=80
 examples/frontmatter/main.go main cognitive=16 cyclomatic=16 lines=91
-frontmatter/frontmatter.go ExtractMetadata cognitive=31 cyclomatic=21 halstead=36.2 lines=98
+frontmatter/frontmatter.go ExtractMetadata cognitive=29 cyclomatic=19 halstead=34.3 lines=94
 frontmatter/generate.go GenerateWithOptions lines=159
 internal/atomicfile/atomicfile.go WriteSet cognitive=16 halstead=32
 internal/pdf/pdf.go ExtractWith cognitive=20 cyclomatic=17 lines=69
@@ -42,8 +42,8 @@ pipeline/enginechain.go Runner.generateOn cognitive=28 cyclomatic=16 halstead=35
 pipeline/grounding.go Runner.extractClaims cognitive=17 cyclomatic=15 halstead=33.4 lines=82
 pipeline/grounding.go Runner.extractOne cyclomatic=12
 pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
-pipeline/pipeline.go (file) filelines=617
-pipeline/review.go Runner.review cyclomatic=14 lines=115
+pipeline/pipeline.go (file) filelines=592
+pipeline/review.go Runner.review cyclomatic=14 lines=114
 pipeline/review.go applySurgicalEdits halstead=37.2
 provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 lines=79
 provenance/provenance.go sentences cognitive=29 cyclomatic=21 halstead=49.4

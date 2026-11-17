@@ -402,6 +402,7 @@ draft [flags] <source> [more-sources...]
 | `--review <draft>`     | Enhance an existing draft with surgical edits             |
 | `--frontmatter <f>`    | Regenerate frontmatter + final document from an article   |
 | `--verify <f>`         | Check an article against its provenance, and exit         |
+| `--seo <f>...`         | Check final articles against Google Search guidance       |
 | `--attest <f>`         | Record a human review of the article as it stands         |
 | `--reviewed-by <id>`   | With `--attest`: who takes editorial responsibility       |
 | `--combine <f>`        | Alias for `--frontmatter`                                 |
@@ -517,6 +518,26 @@ package, so anything can consume it without the CLI.
 ```sh
 draft --verify 2026-07-29/final/2026-07-29-<slug>-final.md
 draft --verify --json 2026-07-29/final/2026-07-29-<slug>-final.md
+```
+
+**Checking search guidance.** `draft --seo <file>...` checks final articles
+against what Google Search Central publishes for page content and metadata:
+a descriptive title that is not boilerplate or stuffed with one word, a meta
+description that summarises the page rather than listing keywords or
+stopping mid-sentence, alt text on every image, descriptive link text, one
+main heading, a byline, a disclosure that AI helped, one canonical URL, and
+a declared structured-data type that Google still shows. Every finding names
+the Google page it comes from. Files given together are checked as a set, so
+two articles sharing a title or description fail on both. It exits non-zero
+on any error; warnings alone pass. `--json` prints one object per article.
+
+Nothing Google says it ignores is checked: there is no title or description
+length limit, no word count, no keyword density, no meta-keywords rule and no
+heading-order rule. The check reads metadata and structure; it cannot judge
+whether the writing is helpful, and it never edits the article.
+
+```sh
+draft --seo 2026-07-29/final/*.md
 ```
 
 **Marking and review (EU AI Act Art. 50).** Every manifest marks the article
@@ -868,6 +889,7 @@ Each has its own README with a runnable quick start and an API table:
 | [`pipeline`](pipeline)       | Five-phase orchestration, retries, continuation, events      |
 | [`prompt`](prompt)           | Grounded claim, writing and review prompts                   |
 | [`rules`](rules)             | Shared editorial constants                                   |
+| [`seo`](seo)                 | Google Search guidance checks for a final article            |
 | [`validate`](validate)       | House-rule and faithfulness checks                           |
 
 > **API stability.** While the module is `0.0.x`, the exported Go API may change

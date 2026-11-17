@@ -119,7 +119,7 @@ type options struct {
 	showVersion, headless, jsonOut, dryRun                   bool
 	clearCache, doctor, manPage, trustConfig                 bool
 	reviewPath, frontmatterPath, completionShell, verifyPath string
-	attestPath, reviewedBy                                   string
+	attestPath, reviewedBy, seoPath                          string
 	args                                                     []string
 }
 
@@ -154,6 +154,7 @@ func newFlagSet(o *options, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&o.headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&o.jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&o.verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
+	fs.StringVar(&o.seoPath, "seo", "", "check final articles against Google Search guidance, and exit")
 	fs.StringVar(&o.attestPath, "attest", "", "record that --reviewed-by reviewed an article as it now stands, and exit")
 	fs.StringVar(&o.reviewedBy, "reviewed-by", "", "with --attest: the person taking editorial responsibility")
 	fs.StringVar(&o.completionShell, "completion", "", "print a shell completion script: bash, zsh, or fish")
@@ -189,7 +190,7 @@ func runInfo(o options, stdout, stderr io.Writer) (code int, done bool) {
 }
 
 // runOnFile handles the modes that work on an existing file and need no run
-// configuration: --verify, --trust-config, and --frontmatter, which reads
+// configuration: --verify, --seo, --trust-config, and --frontmatter, which reads
 // only the publisher identity.
 func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 	switch {
@@ -197,6 +198,8 @@ func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 		return runVerifyJSON(o.verifyPath, stdout, stderr), true
 	case o.verifyPath != "":
 		return runVerify(o.verifyPath, stdout, stderr), true
+	case o.seoPath != "":
+		return runSEO(o, stdout, stderr), true
 	case o.attestPath != "":
 		return runAttest(o, stdout, stderr), true
 	case o.frontmatterPath != "":
@@ -403,12 +406,13 @@ var flagHelp = [][2]string{
 	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
 	{"--verify <file>", "check an article against its provenance, and exit"},
+	{"--seo <file>...", "check final articles against Google Search guidance, and exit"},
 	{"--attest <file>", "record a human review of an article as it stands, and exit"},
 	{"--reviewed-by <id>", "with --attest: who takes editorial responsibility"},
 	{"--combine <file>", "alias for --frontmatter"},
 	{"--keep-artifacts", "keep prompt/ledger files beside a successful draft"},
 	{"--print", "run without the TUI; print draft paths to stdout"},
-	{"--json", "machine-readable output: one JSON object per job, or a verification record with --verify"},
+	{"--json", "machine-readable output: one JSON object per job, a verification record with --verify, or one object per article with --seo"},
 	{"--dry-run", "report what a run would do, without calling a model"},
 	{"--doctor", "check that this machine can run draft, and exit"},
 	{"--trust-config", "trust ./draft.toml as it now stands, and exit"},

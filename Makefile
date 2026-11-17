@@ -46,6 +46,7 @@ fuzz: ## Run each fuzz target briefly (FUZZTIME=30s make fuzz)
 	@go test ./claims/ -run FuzzParse -fuzz FuzzParse -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./frontmatter/ -run FuzzSplit -fuzz FuzzSplit -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./frontmatter/ -run FuzzExtractMetadata -fuzz FuzzExtractMetadata -fuzztime $(or $(FUZZTIME),20s)
+	@go test ./seo/ -run FuzzParseCheck -fuzz FuzzParseCheck -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./pipeline/ -run FuzzParseSurgicalEdits -fuzz FuzzParseSurgicalEdits -fuzztime $(or $(FUZZTIME),20s)
 
 .PHONY: corpus

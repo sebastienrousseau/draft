@@ -13,6 +13,11 @@ import (
 	"github.com/sebastienrousseau/draft/internal/atomicfile"
 )
 
+// articleSchema is the structured-data type every article declares. FAQPage
+// is not among it: Google stopped showing FAQ rich results on 7 May 2026, so
+// the type earned nothing and the seo check flags it.
+const articleSchema = "Article"
+
 // Options adjusts how Generate builds frontmatter beyond what the body provides.
 type Options struct {
 	// Date is used for all date-derived fields when the corresponding
@@ -125,7 +130,7 @@ func GenerateWithOptions(markdown string, opts Options) string {
 	b.WriteString(field("rating", "general"))
 	b.WriteString(field("referrer", "no-referrer"))
 	b.WriteString(field("robots", "index, follow"))
-	b.WriteString(field("schema", "FAQPage, Article"))
+	b.WriteString(field("schema", articleSchema))
 	b.WriteString(field("seo_title", meta.Title))
 	b.WriteString(optional("short_name", site.ShortName))
 	if _, ok := opts.Existing["subtitle"]; ok || meta.Subtitle != "" {
@@ -180,7 +185,7 @@ func GenerateWithOptions(markdown string, opts Options) string {
 	b.WriteString("# Twitter Card - The Twitter Card front matter (YAML).\n\n")
 	b.WriteString(field("twitter_card", "summary_large_image"))
 	b.WriteString(optional("twitter_creator", site.TwitterHandle))
-	b.WriteString(field("twitter_description", meta.Description))
+	b.WriteString(field("twitter_description", shorten(meta.Description, 200)))
 	b.WriteString(optional("twitter_image", sf.logo))
 	b.WriteString(optional("twitter_image_alt", sf.twitterImageAlt))
 	b.WriteString(optional("twitter_site", site.TwitterHandle))

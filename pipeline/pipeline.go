@@ -227,6 +227,9 @@ type runState struct {
 	// styleText is the style-calibration block embedded in the writing prompt, kept
 	// so any of it the model echoes verbatim into the draft can be stripped back out.
 	styleText string
+	// sourceTerms are banned terms the verified sources themselves use, which
+	// finalize must not rewrite. Set by adoptSourceTerms.
+	sourceTerms map[string]bool
 	// done mirrors the running job's ctx.Done so emit can abandon a send whose
 	// consumer has gone away. Set at the top of Run; nil outside a run, which
 	// is a valid never-ready channel in a select.
@@ -397,34 +400,6 @@ func (r *Runner) readSections(ctx context.Context, sources []string) ([]pdf.Sect
 	r.log(fmt.Sprintf("read %d section(s)", len(sections)))
 	r.phase(PhaseExtract, "done")
 	return sections, nil
-}
-
-// compose is phase 3: write the article. It sizes the article to the grounded
-// material: a handful of claims cannot honestly fill 3000 words, and padding is
-// what both slows local generation and trips the faithfulness checks into a
-// costly retry. It returns the prompt and style validation needs.
-func (r *Runner) compose(ctx context.Context, records []claims.Record, ledger string) (markdown, writePrompt string, style rules.Style, err error) {
-	r.phase(PhaseWrite, "running")
-	minWords, maxWords := writeBudget(len(records), r.cfg.Style)
-	r.writeTokens = writeNumPredict(maxWords, r.cfg.PredictLength)
-	if r.engineName == "ollama" {
-		r.log(fmt.Sprintf("target %d–%d words for %d claim(s) (cap %d tokens)", minWords, maxWords, len(records), r.writeTokens))
-	}
-	templates := loadTemplates(r.cfg)
-	r.styleText = prompt.EffectiveStyle(templates)
-	style = r.cfg.Style
-	style.MinWords, style.MaxWords = minWords, maxWords
-	// The prompt aims below the limit; validation still enforces style.
-	aimed := style
-	aimed.MinWords, aimed.MaxWords = promptBudget(minWords, maxWords)
-	writePrompt = prompt.WritingWithStyle(templates, ledger, aimed)
-	markdown, err = r.write(ctx, writePrompt, ledger)
-	if err != nil {
-		r.phase(PhaseWrite, "failed")
-		return "", "", style, err
-	}
-	r.phase(PhaseWrite, "done")
-	return markdown, writePrompt, style, nil
 }
 
 // validateAndSave is phase 4: validate the article (retrying the write when it

@@ -6,6 +6,59 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- **`draft --seo <file>...` checks final articles against Google Search
+  guidance.** Each rule enforces a sentence from Google Search Central's SEO
+  starter guide, title-link, snippet, helpful-content or FAQ structured-data
+  pages, and each finding links to it: a missing, boilerplate or
+  word-stuffed title; a missing, one- or two-word, keyword-list, clipped or
+  title-repeating description; images without alt text; generic link text,
+  or a cited work linked to a site's home page; more than one main heading;
+  no byline; no AI disclosure; a missing or conflicting canonical URL; no
+  schema type, or `FAQPage`, whose rich results Google stopped showing on
+  7 May 2026. Files are checked as a set, so a shared title or description
+  is reported on both. Length limits, word counts, keyword density and meta
+  keywords are deliberately not checked, because Google says it does not use
+  them. The rules are importable as the `seo` package.
+
+### Fixed
+
+- **The house-style rewrite no longer changes words the source uses.** A
+  banned word or phrase that a verified source quote contains is now the
+  source's own term: draft neither rewrites it nor rejects a draft for it.
+  It had renamed "DeepSeek Harness" to "DeepSeek Use", turned a paper's
+  "ReAct harness" into "ReAct use", and swapped a report's "seamless",
+  "robust" and "at its core" for "smooth", "strong" and "essentially", so the
+  article no longer said what the source said. A banned term the source does
+  not use is still rewritten.
+- **Ollama auto-start no longer leaves orphaned servers.** With
+  `OLLAMA_HOST` on port 0, draft started `ollama serve`, which bound a
+  random free port the client never looked at, and left it running; and
+  any server it started that did not answer within the wait kept running
+  after draft gave up. draft now refuses to auto-start for port 0 and stops
+  a server it started that never answers. The `cmd/draft` tests had leaked
+  two real `ollama serve` processes per run this way.
+
+### Changed
+
+- **Generated descriptions end on a whole sentence (breaking: generated
+  output).** A description over 200 bytes was clipped at a word with `...`,
+  so every long one stopped mid-sentence: not the summary of the page
+  Google's snippet guidance asks for. `description` and `item_description`
+  now keep the whole sentences that fit, and keep a longer first sentence
+  whole, since Google sets no length limit and truncates for display itself.
+  `twitter_description` and `excerpt` keep their caps, ending on a sentence
+  where one fits. Abbreviations and initialisms such as `et al.` and `J.P.`
+  are not taken as sentence ends. Existing frontmatter is kept as it is;
+  delete the fields and regenerate a set to pick this up.
+- **Generated frontmatter declares `schema: "Article"`, no longer
+  `"FAQPage, Article"` (breaking: generated output).** Google stopped showing
+  FAQ rich results on 7 May 2026, so the type no longer earned anything, and
+  `draft --seo` warned about it on every article. A layout that read
+  `FAQPage` from this field to emit FAQ markup stops doing so. Existing
+  frontmatter keeps its value; edit the field or delete it and regenerate.
+
 ## [0.0.46] - 2026-11-11
 
 ### Security

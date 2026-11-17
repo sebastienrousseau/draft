@@ -19,7 +19,35 @@ import (
 // enforce the house vocabulary, and strip any style-calibration guidance the model
 // echoed into the body.
 func (r *Runner) finalize(raw string) string {
-	return stripCalibrationEcho(normalizeDraft(raw), r.styleText)
+	return stripCalibrationEcho(normalizeDraftExcept(raw, r.sourceTerms), r.styleText)
+}
+
+// compose is phase 3: write the article. It sizes the article to the grounded
+// material: a handful of claims cannot honestly fill 3000 words, and padding is
+// what both slows local generation and trips the faithfulness checks into a
+// costly retry. It returns the prompt and style validation needs.
+func (r *Runner) compose(ctx context.Context, records []claims.Record, ledger string) (markdown, writePrompt string, style rules.Style, err error) {
+	r.phase(PhaseWrite, "running")
+	minWords, maxWords := writeBudget(len(records), r.cfg.Style)
+	r.writeTokens = writeNumPredict(maxWords, r.cfg.PredictLength)
+	if r.engineName == "ollama" {
+		r.log(fmt.Sprintf("target %d–%d words for %d claim(s) (cap %d tokens)", minWords, maxWords, len(records), r.writeTokens))
+	}
+	templates := loadTemplates(r.cfg)
+	r.styleText = prompt.EffectiveStyle(templates)
+	style = r.adoptSourceTerms(r.cfg.Style, records)
+	style.MinWords, style.MaxWords = minWords, maxWords
+	// The prompt aims below the limit; validation still enforces style.
+	aimed := style
+	aimed.MinWords, aimed.MaxWords = promptBudget(minWords, maxWords)
+	writePrompt = prompt.WritingWithStyle(templates, ledger, aimed)
+	markdown, err = r.write(ctx, writePrompt, ledger)
+	if err != nil {
+		r.phase(PhaseWrite, "failed")
+		return "", "", style, err
+	}
+	r.phase(PhaseWrite, "done")
+	return markdown, writePrompt, style, nil
 }
 
 // writeBudget scales the target article length to the amount of grounded
