@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.47] - 2026-11-17
+
 ### Added
 
 - **`draft --seo <file>...` checks final articles against Google Search
@@ -1579,6 +1581,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.47]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.47
 [0.0.46]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.46
 [0.0.45]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.45
 [0.0.44]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.44
