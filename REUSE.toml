@@ -40,6 +40,10 @@ path = [
   # ("go test fuzz v1" plus typed literals) and admits no comment syntax, so
   # they are annotated here rather than in-file.
   "**/testdata/fuzz/**",
+  # Hash-pinned requirements written by `make requirements`. uv writes its
+  # own header and keeps no other, so a tag in-file would not survive a
+  # re-pin.
+  ".github/requirements/*.txt",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Sebastien Rousseau"

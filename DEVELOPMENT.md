@@ -54,6 +54,7 @@ make lint       # golangci-lint
 make complexity # complexity ceilings against complexity-baseline.txt
 make docs-lint  # markdown, spelling, intra-repo links
 make check      # fmt, vet, test, complexity, docs-lint
+make requirements # re-pin the docs tools' hashed Python requirements (uv)
 make help       # every target
 
 # The Unix install contract (GNU make reads GNUmakefile first, and it

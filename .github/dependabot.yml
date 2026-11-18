@@ -9,6 +9,9 @@
 #    its analysis libraries stay out of draft's dependency graph.
 # 2. `github-actions` — every workflow under `.github/workflows/`.
 #    Weekly. Keeps action pins current alongside version tags.
+# 3. `pip`: the hash-pinned docs tools in `.github/requirements/`
+#    (codespell, MkDocs). Weekly. The `.in` files name what is wanted, and
+#    the `.txt` files are what CI installs with `--require-hashes`.
 #
 # Reference: https://docs.github.com/en/code-security/dependabot
 
@@ -72,3 +75,18 @@ updates:
       golangci:
         patterns:
           - "golangci/*"
+
+  - package-ecosystem: pip
+    directory: /.github/requirements
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(docs)"
+      include: scope
+    labels:
+      - dependencies
+      - documentation

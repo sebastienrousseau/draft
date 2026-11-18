@@ -4,6 +4,8 @@ PKG := ./...
 # Local builds carry the same version a release would, derived from git.
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
 LDFLAGS := -s -w -X main.version=$(VERSION)
+# Hash-pinned Python requirements for the docs tools; CI installs the same.
+REQS := .github/requirements
 
 .DEFAULT_GOAL := build
 
@@ -104,7 +106,7 @@ fmt: ## Format the code
 .PHONY: docs-lint
 docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, links)
 	npx --yes markdownlint-cli2
-	python3 -m pip install --quiet --disable-pip-version-check codespell
+	python3 -m pip install --quiet --disable-pip-version-check --require-hashes -r $(REQS)/codespell.txt
 	python3 -m codespell_lib
 	python3 scripts/check-links.py
 	python3 scripts/verify-release-versions.py
@@ -115,9 +117,18 @@ docs-lint: ## Lint the documentation exactly as CI does (markdown, spelling, lin
 
 .PHONY: manual
 manual: ## Build the rendered user manual into .gen/site
-	python3 -m pip install --quiet --disable-pip-version-check mkdocs mkdocs-material
+	python3 -m pip install --quiet --disable-pip-version-check --require-hashes -r $(REQS)/manual.txt
 	python3 scripts/build-manual.py
 	python3 -m mkdocs build
+
+.PHONY: requirements
+requirements: ## Re-pin the docs tools' Python requirements, with hashes (needs uv)
+	@# Universal and from the 3.9 floor, so one file serves every Python CI
+	@# and contributors run, each resolving its own markers.
+	cd $(REQS) && for r in codespell manual; do \
+	  uv pip compile --quiet --universal --python-version 3.9 --generate-hashes \
+	    --custom-compile-command 'make requirements' $$r.in -o $$r.txt; \
+	done
 
 .PHONY: manual-serve
 manual-serve: ## Serve the manual locally with live reload

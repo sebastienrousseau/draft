@@ -51,6 +51,20 @@ series until `0.0.999`.
   redirecting endpoint could hand the Anthropic key and the source text to
   a host the user never named. Redirects within the endpoint's own origin
   are still followed.
+- The release job runs an exact GoReleaser (v2.20.2) instead of any `v2`
+  release, since it holds the Apple signing certificate, and builds
+  without a restored Go cache. Its before-hook checks the module graph
+  (`go mod tidy -diff`, `go mod verify`) instead of rewriting it after
+  review.
+- Release binaries are built with `-trimpath` and the tagged commit's
+  timestamp, so they carry no build-machine paths and an unsigned rebuild
+  of a tag can be compared with the release digest for digest.
+- The docs workflow installs codespell and MkDocs from hash-pinned
+  requirements (`.github/requirements/`, re-pinned by
+  `make requirements`) with `--require-hashes`, as `make docs-lint` and
+  `make manual` now do. The manual it builds is deployed with
+  `id-token: write`, and was built from whatever versions PyPI served
+  that day. Dependabot watches the pins.
 
 ## [0.0.48] - 2026-11-18
 

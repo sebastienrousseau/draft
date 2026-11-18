@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# Spell checking for `make docs-lint` and the docs workflow. Pinned with
+# hashes in codespell.txt by `make requirements`.
+codespell

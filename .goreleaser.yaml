@@ -6,7 +6,12 @@ project_name: draft
 
 before:
   hooks:
-    - go mod tidy
+    # Check, never fix: a release builds the tree that was tagged. `go mod
+    # tidy` here would rewrite go.mod or go.sum after review, and the binary
+    # would come from a module graph nobody saw. `-diff` fails instead of
+    # writing, and `verify` checks the module cache against go.sum.
+    - go mod tidy -diff
+    - go mod verify
     # Generate the manpage and completions from the CLI definitions, so the
     # packaged documentation cannot describe a different program than the
     # binary beside it. `go run` builds the current tree, so these always
@@ -34,6 +39,12 @@ builds:
     goarch:
       - amd64
       - arm64
+    # Reproducible: no build-machine paths in the binary, and file times
+    # taken from the tagged commit rather than the clock, so anyone can
+    # rebuild the tag and compare digests.
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X main.version={{ .Version }}
 

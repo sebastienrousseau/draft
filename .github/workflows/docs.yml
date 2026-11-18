@@ -27,9 +27,11 @@ jobs:
       # Run codespell directly rather than through an action wrapper, so it
       # reads .codespellrc — the single place the ignore list and its reasons
       # live — and so `make docs-lint` locally is the same command CI runs.
+      # Hash-pinned, so a release of codespell or a compromised mirror cannot
+      # change what runs here; `make requirements` re-pins.
       - name: Spell check
         run: |
-          python3 -m pip install --quiet codespell
+          python3 -m pip install --quiet --require-hashes -r .github/requirements/codespell.txt
           codespell
 
       # Intra-repo links only, checked by a script in this repository rather
@@ -57,9 +59,13 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.x"
+      # Every package, transitive ones included, is pinned by version and
+      # SHA-256: this build's output is what the publish job deploys with
+      # `id-token: write`, so an unpinned install would let any new upstream
+      # release choose what the site serves.
       - name: Build (warnings are errors)
         run: |
-          python3 -m pip install --quiet mkdocs mkdocs-material
+          python3 -m pip install --quiet --require-hashes -r .github/requirements/manual.txt
           python3 scripts/build-manual.py
           python3 -m mkdocs build
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
