@@ -17,6 +17,12 @@ func TestProtectedFindsEachKind(t *testing.T) {
 		{"inline code", "a `leverage` b", "`leverage`"},
 		{"straight quote", `a "leverage" b`, `"leverage"`},
 		{"smart quote", "a “leverage” b", "“leverage”"},
+		{"smart single quote", "a ‘leverage it’ b", "‘leverage it’"},
+		{"straight single quote", "a 'leverage it' b", "'leverage it'"},
+		{"guillemets", "a «leverage it» b", "«leverage it»"},
+		{"quote across a line", "a \"leverage\nit\" b", "\"leverage\nit\""},
+		{"apostrophe inside", "a 'we don't leverage' b", "'we don't leverage'"},
+		{"curly apostrophe inside", "a ‘we don’t leverage’ b", "‘we don’t leverage’"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			locs := Protected(tc.in)
@@ -44,9 +50,53 @@ func TestProtectedBoundsAnUnbalancedQuote(t *testing.T) {
 	if locs := Protected(in); len(locs) != 0 {
 		t.Errorf("Protected() = %d spans for an unbalanced quote, want 0", len(locs))
 	}
-	long := `"` + strings.Repeat("x", 500) + `"`
+	long := `"` + strings.Repeat("x", maxQuoteBytes+1) + `"`
 	if locs := Protected(long); len(locs) != 0 {
 		t.Errorf("Protected() matched an over-long quoted span")
+	}
+	// A quotation does not run across a paragraph break, so one stray quote
+	// character cannot pair with another paragraphs later.
+	if locs := Protected("He said \"leverage\n\nthings\" later"); len(locs) != 0 {
+		t.Errorf("Protected() = %d spans across a paragraph break, want 0", len(locs))
+	}
+}
+
+// A quotation longer than one line of prose is still somebody else's words.
+// The old bound of 400 characters left a long quote open to the rewrite.
+func TestProtectedKeepsALongQuotation(t *testing.T) {
+	in := "a “" + strings.Repeat("leverage ", 100) + "” b"
+	locs := Protected(in)
+	if len(locs) != 1 || in[locs[0][0]:locs[0][1]] != in[2:len(in)-2] {
+		t.Errorf("Protected() = %v, want the whole quotation", locs)
+	}
+}
+
+// An apostrophe is the same character as a straight single quote, so it
+// must not open or close a span: a contraction, a possessive or an elided
+// year would otherwise exempt the prose between two of them.
+func TestProtectedLeavesApostrophesAlone(t *testing.T) {
+	for _, in := range []string{
+		"we don't leverage it and it's robust",
+		"the authors' method and the model's leverage",
+		"in the '90s we leverage it, don't we",
+		"we don’t leverage it and it’s robust",
+	} {
+		if locs := Protected(in); len(locs) != 0 {
+			t.Errorf("Protected(%q) = %v, want none", in, locs)
+		}
+	}
+}
+
+// Quotations names only the quoted spans, never code: a quoted string in a
+// code sample is not a claim about what a source said.
+func TestQuotationsExcludesCode(t *testing.T) {
+	in := "`\"in code\"` and \"in prose\""
+	locs := Quotations(in)
+	if len(locs) != 1 || in[locs[0][0]:locs[0][1]] != `"in prose"` {
+		t.Errorf("Quotations() = %v, want only the prose quotation", locs)
+	}
+	if Quotations("no quotation here") != nil {
+		t.Error("Quotations() found a span in plain text")
 	}
 }
 

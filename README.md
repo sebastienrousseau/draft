@@ -232,7 +232,9 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   call fails because you are on a plane, the chain advances to Ollama and
   stays there for the rest of the run.
 - **Verbatim grounding.** Quote-checked claims, numeric cross-checks, and
-  metric-conversion detection. Unverifiable claims are dropped before writing.
+  metric-conversion detection. Unverifiable claims are dropped before writing,
+  and a quotation in the article that no verified source quote contains is
+  reported.
 - **Semantic second gate (opt-in).** `--second-gate` runs each verified claim
   past a local model that judges whether its quote actually *supports* it — the
   one thing verbatim matching cannot check. Strictly additive and fail-open: it

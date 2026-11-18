@@ -101,7 +101,11 @@ pinned by a test.
    ever produce *fewer* claims, never an ungrounded one.
 4. **Nothing rewrites text inside a quotation.** The house-vocabulary repair
    runs only outside code and quoted spans (`internal/mdspan`); rewriting there
-   would attribute words to a source that never wrote them.
+   would attribute words to a source that never wrote them. A quoted span is
+   one in double or single quotes, straight or curly, or guillemets, up to a
+   paragraph break; an apostrophe opens none. The same spans are checked
+   against the verified source quotes (`validate`), so the writer cannot
+   quote words no source wrote without a warning.
 5. **Untrusted text is fenced and never granted tools.** Source documents reach
    an agent in a nonce-delimited block, in an empty working directory, with no
    tool-granting flags.

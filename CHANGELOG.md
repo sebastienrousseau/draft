@@ -11,6 +11,26 @@ series until `0.0.999`.
 - CI installs `c2patool` on Linux (a release pinned by version and SHA-256)
   and macOS, so the live C2PA tests run there instead of skipping.
 
+### Security
+
+- **Quotations in the article are checked against the sources (A-M3,
+  breaking: generated output).** The writer could put any words in
+  quotation marks, and nothing compared them with what a source said. A
+  quotation of three or more words that occurs in no verified claim's
+  `SOURCE_QUOTE`, compared after the same normalisation the claim gate
+  uses, is now reported as `quotation found in no verified source quote`.
+  The claim text does not count, since it is the extractor's paraphrase,
+  and the parts of a quotation cut with an ellipsis must all come from one
+  quote. On the write path this is a warning, as an ungrounded number is
+  without `--strict-numbers`; `validate.Options.StrictQuotes` makes it an
+  error. The house-vocabulary repair and the banned-word check now also
+  leave alone text in single quotes (`'...'`, `‘...’`), guillemets
+  (`«...»`) and quotations that wrap across lines or run past 400
+  characters, up to a paragraph break or 2,000 bytes. An apostrophe, as in
+  `don't`, `the authors'` or `'90s`, does not open or close a quotation.
+  An article using banned vocabulary only inside such a quotation used to
+  be rewritten or rejected, and is now saved as written.
+
 ## [0.0.48] - 2026-11-18
 
 ### Added

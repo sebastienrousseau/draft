@@ -27,6 +27,10 @@ type Options struct {
 	// so the real false-positive rate can be measured on a corpus before it
 	// becomes the default.
 	StrictNumbers bool
+
+	// StrictQuotes makes a quotation that no verified source quote contains
+	// block the save instead of merely warning. See unsourcedQuotations.
+	StrictQuotes bool
 }
 
 // indexOutsideProtected returns the offset of the first occurrence of term in s
@@ -80,14 +84,18 @@ func FaithfulnessWithOptions(article string, records []claims.Record, opts Optio
 	errs = append(errs, duplicateParagraphs(article)...)
 
 	warnings = append(warnings, hedgeUpgrades(article, records)...)
-	if ungrounded := ungroundedNumbers(article, records, opts.StrictNumbers); len(ungrounded) > 0 {
-		if opts.StrictNumbers {
-			errs = append(errs, ungrounded...)
-		} else {
-			warnings = append(warnings, ungrounded...)
-		}
-	}
+	errs, warnings = route(opts.StrictNumbers, ungroundedNumbers(article, records, opts.StrictNumbers), errs, warnings)
+	errs, warnings = route(opts.StrictQuotes, unsourcedQuotations(article, records), errs, warnings)
 	return errs, warnings
+}
+
+// route files findings as errors under a strict policy and as warnings
+// otherwise.
+func route(strict bool, findings, errs, warnings []string) ([]string, []string) {
+	if strict {
+		return append(errs, findings...), warnings
+	}
+	return errs, append(warnings, findings...)
 }
 
 // metricGrounded reports whether the metric term — or any equivalent surface form
