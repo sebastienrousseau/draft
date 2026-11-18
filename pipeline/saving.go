@@ -168,7 +168,7 @@ func (r *Runner) saveProvenance(outputDir, stem, title, saved string, records []
 	}
 	sources := make([]provenance.Source, 0, len(r.sourceDigests))
 	for _, s := range r.sourceDigests {
-		sources = append(sources, provenance.Source{Path: s.Path, SHA256: s.SHA256})
+		sources = append(sources, provenance.Source{Path: manifestSourcePath(absOr(dir), absOr(s.Path)), SHA256: s.SHA256})
 	}
 	man := provenance.NewManifest(provenance.ManifestInput{
 		Title: title, Body: saved, Version: r.cfg.Version,
@@ -223,6 +223,29 @@ func (r *Runner) saveFailure(outputDir, markdown string, verr error) error {
 		}
 	}
 	return fmt.Errorf("%w%s", verr, note.String())
+}
+
+// manifestSourcePath is how a source is named in the manifest: relative to
+// the manifest's folder, slash-separated. The manifest is signed and meant
+// to travel, and an absolute path put the user's home directory, and so
+// usually their account name, into it; --verify resolves the relative form
+// from the manifest while the set and its sources keep their places. Where
+// there is no relative path, as between Windows volumes, the base name still
+// identifies the source without saying where it lived.
+func manifestSourcePath(manifestDir, src string) string {
+	rel, err := filepath.Rel(manifestDir, src)
+	if err != nil {
+		return filepath.Base(src)
+	}
+	return filepath.ToSlash(rel)
+}
+
+// absOr is p made absolute, or p itself when the working directory is gone.
+func absOr(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
 }
 
 func (r *Runner) datedDir() string {

@@ -320,8 +320,8 @@ func TestRunVerifyChecksALedgerNamedForTheRun(t *testing.T) {
 
 func sha256File(t *testing.T, path string) string {
 	t.Helper()
-	got, ok := resolveSourceDigest(path)
-	if !ok {
+	got, ok, err := digestSource(path)
+	if !ok || err != nil {
 		t.Fatalf("hashing %s failed", path)
 	}
 	return got

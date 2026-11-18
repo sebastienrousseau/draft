@@ -507,7 +507,11 @@ draft is exactly what the ledger was verified against or has been edited
 since. Point it at any file of a set — the body, the final document, or the
 manifest — and it finds the rest by the day-folder layout. When the sources
 are still on the machine it hashes them too; when they are not, it says so and
-still checks the article. It exits non-zero if the article, the ledger or a
+still checks the article. The manifest records each source relative to its own
+folder, so it does not carry your home directory, and `--verify` resolves it
+from there; a manifest from before 0.0.49 holds absolute paths, which still
+resolve. A source that is not a regular file, or is over 1 GiB, is refused by
+name rather than read. It exits non-zero if the article, the ledger or a
 source no longer matches.
 
 When a signed `.c2pa` credential sits beside the set and `c2patool` is

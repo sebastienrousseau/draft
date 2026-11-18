@@ -91,6 +91,16 @@ series until `0.0.999`.
   is now tightened to `0700`; one that cannot be is not used. Published
   articles and their provenance stay `0644`, as files meant to be read by
   whatever publishes them (S-L5).
+- **The manifest records each source relative to itself, not by absolute
+  path (breaking: generated output).** The `sources` of the
+  `com.draftlib.grounding` assertion, which a signed credential covers and
+  which travels with the article, carried the user's home directory and so
+  usually their account name. A source is now recorded slash-separated and
+  relative to the manifest's folder, or by base name where no relative
+  path exists. `--verify` resolves a relative source from the manifest's
+  folder and still reads the absolute paths of older manifests. It also
+  refuses a source that is not a regular file, which used to hang it on a
+  FIFO, or is over 1 GiB, naming the source in the error (S-L6).
 
 ## [0.0.48] - 2026-11-18
 
