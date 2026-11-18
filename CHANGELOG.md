@@ -50,6 +50,10 @@ series until `0.0.999`.
   `context.DeadlineExceeded`, which an ACP agent's own timeout does, so one
   hung agent ended the run with engines still untried. Only the caller's
   own cancellation or deadline stops the chain now.
+- A provider CLI that times out, or whose run is cancelled, now fails with
+  an error wrapping `context.DeadlineExceeded` or `context.Canceled`
+  instead of the killed process's `signal: killed`, so a library caller can
+  tell a timeout from a broken provider with `errors.Is`.
 
 ## [0.0.47] - 2026-11-17
 

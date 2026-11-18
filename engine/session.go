@@ -158,6 +158,12 @@ func (s *Session) collect(ctx context.Context, cmd *exec.Cmd, onChunk func(strin
 	if errors.Is(waitErr, exec.ErrWaitDelay) && ctx.Err() == nil {
 		waitErr = nil
 	}
+	// A cancelled or timed-out call is reported as exactly that, wrapped, so
+	// callers can tell it from a sick provider with errors.Is. The stderr
+	// text and exit status of a process that was killed say nothing useful.
+	if ctx.Err() != nil {
+		return Result{}, fmt.Errorf("%s: %w", s.provider.Name, ctx.Err())
+	}
 	// A refusal is reported in the stream, not on stderr: the CLI writes a
 	// result whose stop_reason is "refusal", then exits non-zero with nothing
 	// else to say. Read the stream's verdict before the exit status, or the

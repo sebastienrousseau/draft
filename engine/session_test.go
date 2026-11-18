@@ -516,3 +516,25 @@ func TestSessionReturnsPromptlyAfterAStreamError(t *testing.T) {
 		}
 	})
 }
+
+// A call that runs out of time, or whose caller gives up, is reported as
+// exactly that, wrapped, so the engine chain can tell a provider's own
+// timeout (a hung backend, worth failing over from) from the caller
+// abandoning the run. The killed process's exit status says neither.
+func TestSessionTimeoutAndCancelAreWrapped(t *testing.T) {
+	withExec("sleep", func() {
+		s, _ := NewSession("codex", config.Config{CallTimeout: 300 * time.Millisecond})
+		_, err := s.Generate(context.Background(), Request{Prompt: "x"})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("timeout: err = %v, want a wrapped context.DeadlineExceeded", err)
+		}
+
+		s, _ = NewSession("codex", config.Config{CallTimeout: time.Minute})
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(300*time.Millisecond, cancel)
+		_, err = s.Generate(ctx, Request{Prompt: "x"})
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("cancel: err = %v, want a wrapped context.Canceled", err)
+		}
+	})
+}
