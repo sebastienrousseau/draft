@@ -108,6 +108,18 @@ jobs:
         run: brew install c2patool && c2patool --version
       - name: Test
         run: go test ./...
+      - name: Live C2PA tests ran
+        # A plain go test does not show skips, so an install that broke
+        # would quietly turn these tests off again.
+        if: runner.os != 'Windows'
+        run: |
+          log="$RUNNER_TEMP/c2pa-tests.log"
+          go test -count=1 -v ./internal/c2pa ./cmd/draft ./pipeline > "$log" 2>&1 || { cat "$log"; exit 1; }
+          if grep -E '_test\.go:[0-9]+: c2patool not installed' "$log"; then
+            echo "live C2PA tests skipped: c2patool is not on PATH"
+            exit 1
+          fi
+          grep -E -- '--- PASS: Test[A-Za-z]*(Live|Signature)' "$log"
 
   lint:
     runs-on: ubuntu-latest
