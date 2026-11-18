@@ -204,7 +204,7 @@ func (r *Runner) reviewOptions() validate.Options {
 // enforces it, and compared whole, a draft with one pre-existing ungrounded
 // figure would block every edit that touched any other.
 var (
-	listMessagePat = regexp.MustCompile(`^(contains banned (?:words|phrases)|numbers not found in any claim): (.+)$`)
+	listMessagePat = regexp.MustCompile(`^(contains (?:banned (?:words|phrases)|unsafe markup)|numbers not found in any claim): (.+)$`)
 	wordCountPat   = regexp.MustCompile(`^article is \d+ words; (minimum|maximum) is \d+$`)
 )
 

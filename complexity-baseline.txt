@@ -47,4 +47,3 @@ provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 line
 provenance/provenance.go sentences cognitive=29 cyclomatic=21 halstead=49.4
 rules/rules.go InflectLike cyclomatic=14
 validate/banned.go bannedScanner.findAll halstead=30.8
-validate/validate.go ErrorsWithStyle cognitive=27 cyclomatic=20 halstead=34.7 lines=82

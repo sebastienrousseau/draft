@@ -67,6 +67,13 @@ func (r *Runner) save(ctx context.Context, outputDir, markdown string, records [
 		Model:   r.writerModel(),
 		Version: r.cfg.Version,
 	})
+	// The last gate before disk, and the only one that sees the frontmatter.
+	// It is generated from the body and the site configuration, and a theme
+	// renders its values unescaped, so it is checked as part of the page.
+	if unsafe := validate.UnsafeMarkup(frontmatter.Combine(fmYAML, body)); len(unsafe) > 0 {
+		_ = os.Remove(set.body)
+		return "", 0, fmt.Errorf("refusing to save: the article or its frontmatter contains unsafe markup: %s", strings.Join(unsafe, ", "))
+	}
 	if err := set.write(body, fmYAML); err != nil {
 		return "", 0, err
 	}
@@ -215,12 +222,7 @@ func (r *Runner) saveFailure(outputDir, markdown string, verr error) error {
 		note.WriteString("\nRaw output saved: " + rawPath)
 	}
 	if validate.LooksLikeArticle(markdown) {
-		reviewPath, err := createPrivate(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+slugify(extractTitle(markdown))+"-needs-review.md"), []byte(markdown+"\n"))
-		if err != nil {
-			note.WriteString("\nNeeds-review Markdown could not be saved: " + err.Error())
-		} else {
-			note.WriteString("\nNeeds-review Markdown saved: " + reviewPath)
-		}
+		note.WriteString(saveNeedsReview(outputDir, markdown))
 	}
 	return fmt.Errorf("%w%s", verr, note.String())
 }
@@ -246,6 +248,21 @@ func absOr(p string) string {
 		return abs
 	}
 	return p
+}
+
+// saveNeedsReview writes the rescued draft as Markdown and says what became
+// of it. A draft with unsafe markup is not written: it would sit beside the
+// drafts as renderable as they are, and the raw output already keeps it as
+// plain text for whoever needs to see what the model produced.
+func saveNeedsReview(outputDir, markdown string) string {
+	if unsafe := validate.UnsafeMarkup(markdown); len(unsafe) > 0 {
+		return "\nNeeds-review Markdown not saved: it contains unsafe markup (" + strings.Join(unsafe, ", ") + ")"
+	}
+	reviewPath, err := createPrivate(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+slugify(extractTitle(markdown))+"-needs-review.md"), []byte(markdown+"\n"))
+	if err != nil {
+		return "\nNeeds-review Markdown could not be saved: " + err.Error()
+	}
+	return "\nNeeds-review Markdown saved: " + reviewPath
 }
 
 func (r *Runner) datedDir() string {

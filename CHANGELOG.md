@@ -103,6 +103,21 @@ series until `0.0.999`.
   `--keep-artifacts` is set. `--verify` recognises both names, through the
   new `pipeline.IsLedgerFor` (A-M5).
 
+### Security
+
+- **A draft whose Markdown would run script on a site is sent back to the
+  writer and never saved (S-M4, breaking: generated output).** Jekyll and
+  kramdown pass raw HTML through, and a claim's quote is verbatim, so a
+  source could put `<script>` in the article. `script`, `iframe`, `object`,
+  `embed`, `style`, `base`, `meta`, `link` and `form` elements, event
+  handler attributes (in HTML or a kramdown `{: }` attribute list), and
+  `javascript:`, `vbscript:` and `data:` URLs, entity-encoded or not, are
+  now a rule violation the retry loop names, as `contains unsafe markup`.
+  The save checks the generated frontmatter too, and a failed run no longer
+  writes a needs-review Markdown copy that carries the markup; the raw
+  `failed-output.txt` keeps it as text. `--review` fails an edit that adds
+  any. `validate.UnsafeMarkup` is the new check, with a fuzz target.
+
 ## [0.0.48] - 2026-11-18
 
 ### Added
