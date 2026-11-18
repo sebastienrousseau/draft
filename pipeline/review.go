@@ -71,15 +71,12 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	ledger := promptLedger(records)
 	r.phase(PhaseClaims, "done")
 
-	var research strings.Builder
-	for _, s := range sections {
-		research.WriteString(s.Body + "\n\n")
-	}
-
+	// The sections are mined for claims and go no further: the editor sees
+	// the verified ledger only, as the writer does. See prompt.Review.
 	r.phase(PhaseWrite, "running")
 	res, err := r.generate(ctx, engine.Request{
 		Kind:        engine.KindEdit,
-		Prompt:      prompt.Review(research.String(), draftBody, ledger),
+		Prompt:      prompt.Review(draftBody, ledger),
 		Temperature: editTemperature,
 		OnChunk:     func(s string) { r.emit(TokenEvent(s)) },
 	})
@@ -187,9 +184,12 @@ func reviewViolations(article string, records []claims.Record, style rules.Style
 // in the draft is in both lists and is reported, not enforced. What is left is
 // a figure the edit added that no claim contains, and "factual correction" is
 // an allowed edit reason, so that is exactly the invention review must stop.
+// A quotation the edit added that no verified source quote contains is the
+// same invention in words, and is enforced for the same reason.
 func (r *Runner) reviewOptions() validate.Options {
 	opts := r.validateOptions()
 	opts.StrictNumbers = true
+	opts.StrictQuotes = true
 	return opts
 }
 

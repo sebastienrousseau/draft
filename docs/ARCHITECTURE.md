@@ -23,7 +23,9 @@ allowed to use when it writes the article. The result is checked against house
 rules and against the ledger before it is saved.
 
 The order matters: **verification happens before writing, not after.** A model
-that never sees an unverified fact cannot repeat one.
+that never sees an unverified fact cannot repeat one. `--review` is held to the
+same rule: its editor sees the ledger and the draft, never the section text,
+because an edit may correct a fact.
 
 ## Package graph
 
@@ -105,7 +107,8 @@ pinned by a test.
    one in double or single quotes, straight or curly, or guillemets, up to a
    paragraph break; an apostrophe opens none. The same spans are checked
    against the verified source quotes (`validate`), so the writer cannot
-   quote words no source wrote without a warning.
+   quote words no source wrote without a warning, and a `--review` edit that
+   adds such a quotation is rejected.
 5. **Untrusted text is fenced and never granted tools.** Source documents reach
    an agent in a nonce-delimited block, in an empty working directory, with no
    tool-granting flags.

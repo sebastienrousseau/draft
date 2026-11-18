@@ -41,7 +41,7 @@ pipeline/grounding.go Runner.extractClaims cyclomatic=13 halstead=32.4 lines=63
 pipeline/grounding.go Runner.extractOne cyclomatic=12
 pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
 pipeline/pipeline.go (file) filelines=592
-pipeline/review.go Runner.review cyclomatic=14 lines=114
+pipeline/review.go Runner.review cyclomatic=13 lines=111
 pipeline/review.go applySurgicalEdits halstead=37.2
 provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 lines=79
 provenance/provenance.go sentences cognitive=29 cyclomatic=21 halstead=49.4

@@ -30,6 +30,16 @@ series until `0.0.999`.
   `don't`, `the authors'` or `'90s`, does not open or close a quotation.
   An article using banned vocabulary only inside such a quotation used to
   be rewritten or rejected, and is now saved as written.
+- **`--review` no longer shows the editor unverified source text (A-M4,
+  breaking).** The review prompt carried up to 6,000 characters of raw
+  section text beside the ledger, and "factual correction" is an allowed
+  edit, so a fact whose quote was never found in its source could reach
+  your file, guarded only by the number check. The editor now sees the
+  verified claims and the draft, as the writer does, and is told to quote
+  only from a `SOURCE_QUOTE`. An edit that adds a quotation no verified
+  source quote contains is rejected, as an edit adding an ungrounded
+  number already was. `prompt.Review` takes `(draft, ledger)`, and
+  `prompt.MaxReviewSourceChars` is removed.
 
 ## [0.0.48] - 2026-11-18
 

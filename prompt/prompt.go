@@ -22,11 +22,8 @@ import (
 // LedgerPlaceholder is substituted with the compact verified claim ledger.
 const LedgerPlaceholder = "{{VERIFIED_CLAIM_LEDGER}}"
 
-// MaxReviewSourceChars and MaxDraftChars bound the review prompt inputs.
-const (
-	MaxReviewSourceChars = 6000
-	MaxDraftChars        = 80000
-)
+// MaxDraftChars bounds the draft a review prompt carries.
+const MaxDraftChars = 80000
 
 // maxContinueTailChars is how much of the partial draft a continuation prompt
 // echoes back so the model can resume mid-sentence.
@@ -219,7 +216,13 @@ func ContinueWriting(partial, ledger string) string {
 
 // Review builds the surgical-edit prompt for enhancing an existing draft: the
 // model returns a JSON array of exact find/replace edits, never a rewrite.
-func Review(research, draft, ledger string) string {
+//
+// The editor sees the verified claims and the draft, never the source text.
+// "Factual correction" is an allowed edit, so whatever facts the editor can
+// read it can write, and a fact that reaches article text must have had its
+// quote found verbatim in its source section: the same rule the writer is
+// held to.
+func Review(draft, ledger string) string {
 	return fmt.Sprintf(`You are editing an existing article. You do not rewrite it. You return a list of precise, individual edits, and nothing else.
 
 The draft is mostly good. Your job is the smallest set of changes that raises quality. If a sentence works, leave it untouched. You are not polishing; you are fixing specific, nameable problems.
@@ -229,12 +232,14 @@ Use the verified claim ledger only to make existing claims more specific or corr
 ## WHAT COUNTS AS A PROBLEM WORTH FIXING
 Flag an edit only when one of these is true:
 - A banned word or phrase from the STYLE RULES appears.
-- A sentence is generic where a specific detail from the source material would land harder.
+- A sentence is generic where a specific detail from the verified claim ledger would land harder.
 - Three or more sentences or paragraphs in a row open the same way.
 - Choppiness or fragments are used for effect and read as forced.
 - The ending summarizes instead of closing on a sharp thought, a call to action, or a prediction.
 - A qualifier is deadweight: very, really, quite, basically, essentially, arguably.
-- A numerical claim contradicts the source material.
+- A numerical claim contradicts the verified claim ledger.
+
+The verified claim ledger is the only source of facts. Do not add a fact, number, or name it does not contain. Put words in quotation marks only when they are copied exactly from a SOURCE_QUOTE.
 
 The test for every edit: would a sharp editor circle this in red? If it is a matter of taste between two working sentences, do NOT touch it.
 
@@ -266,16 +271,10 @@ Order edits by their position in the text, top to bottom.
 ## VERIFIED CLAIM LEDGER
 %s
 
-## SOURCE MATERIAL FOR CONTEXT ONLY
-Use this only to understand nearby wording. Do not add factual claims from this section unless they also appear in the verified claim ledger.
-
-%s
-
 ## DRAFT
 %s`,
 		houseStyleRules,
 		Untrusted("UNTRUSTED VERIFIED CLAIMS", ledger),
-		Untrusted("UNTRUSTED SOURCE DOCUMENT", clip(research, MaxReviewSourceChars)),
 		Untrusted("UNTRUSTED DRAFT UNDER REVIEW", clip(draft, MaxDraftChars)),
 	)
 }

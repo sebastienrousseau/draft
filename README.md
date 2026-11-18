@@ -250,8 +250,10 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   not merely requested.
 - **Surgical review.** `--review` asks for exact find/replace edits, applies
   only the unique non-overlapping ones, and re-checks the rules before saving.
-  An edit that adds a number no verified claim contains is always rejected,
-  whatever `--strict-numbers` says.
+  The editor sees the verified claims and your draft, never the source text.
+  An edit that adds a number no verified claim contains, or a quotation no
+  verified source quote contains, is always rejected, whatever
+  `--strict-numbers` says.
 - **Publish-ready sets.** Body, frontmatter and combined document, written
   side by side and regenerable without losing a single curated field.
 - **Fast where it counts.** A 62-page paper is read and sectioned in ~110 ms

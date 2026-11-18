@@ -110,6 +110,66 @@ func TestReviewRejectsAnInventedNumberWithoutStrictNumbers(t *testing.T) {
 	}
 }
 
+// The editor may change facts ("factual correction" is an allowed reason), so
+// it must see only what the writer sees: verified claims. Raw section text
+// carried facts no claim was verified for straight into the edit prompt.
+func TestReviewPromptCarriesNoUnverifiedSourceText(t *testing.T) {
+	cfg := testConfig(t)
+	eng := &fakeEngine{name: "fake"}
+	_, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}, ReviewPath: writeDraft(t)})
+	if errText != "" {
+		t.Fatalf("review failed: %s", errText)
+	}
+	// "5x fewer samples" is in the source and in no verified claim.
+	if strings.Contains(eng.lastEditPrompt, "5x fewer samples") {
+		t.Error("unverified source text reached the review prompt")
+	}
+	if !strings.Contains(eng.lastEditPrompt, "reached a score of 0.82 on the test set") {
+		t.Error("the verified claim did not reach the review prompt")
+	}
+}
+
+// A quotation is attribution, and an edit can add one as easily as a number.
+// One that no verified source quote contains must not reach the user's file.
+func TestReviewRejectsAnInventedQuotation(t *testing.T) {
+	cfg := testConfig(t)
+	draft := writeDraft(t)
+	before, err := os.ReadFile(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := &fakeEngine{name: "fake", editResponse: editsJSON(t, surgicalEdit{
+		Find:    "The system reached a score on the test set.",
+		Replace: `The authors call it "a result nobody expected" on the test set.`,
+		Reason:  "factual correction",
+	})}
+	_, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}, ReviewPath: draft})
+	if !strings.Contains(errText, "quotation found in no verified source quote") {
+		t.Fatalf("an edit inventing a quotation was not rejected: %q", errText)
+	}
+	after, err := os.ReadFile(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Error("the draft was modified despite the review failing")
+	}
+}
+
+// Quoting the verified source quote is what a quotation should be.
+func TestReviewAcceptsAQuotationFromTheLedger(t *testing.T) {
+	cfg := testConfig(t)
+	eng := &fakeEngine{name: "fake", editResponse: editsJSON(t, surgicalEdit{
+		Find:    "The system reached a score on the test set.",
+		Replace: `The system "reached a score of 0.82 on the test set".`,
+		Reason:  "factual correction",
+	})}
+	_, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}, ReviewPath: writeDraft(t)})
+	if errText != "" {
+		t.Fatalf("a quotation from the ledger was rejected: %s", errText)
+	}
+}
+
 // Both write paths must run both gates. This is the parity assertion that
 // would have caught the review path skipping Faithfulness in the first place:
 // any article the write path would reject must also be rejected on review.
