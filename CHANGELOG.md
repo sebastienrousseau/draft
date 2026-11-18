@@ -57,6 +57,10 @@ series until `0.0.999`.
 - An `ollama serve` that draft starts is put in a process group of its own,
   on Unix, so pressing Ctrl-C to stop draft no longer stops the server it
   left running for the next run.
+- `--num-ctx` and `--num-predict` are held to the same bounds as
+  `DRAFT_NUM_CTX` and `DRAFT_NUM_PREDICT` (512 and 1024 up to 1,048,576). A
+  value outside them, including a negative one, is ignored with a warning
+  instead of being sent to Ollama as asked.
 
 ## [0.0.47] - 2026-11-17
 

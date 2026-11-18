@@ -66,6 +66,38 @@ func TestRemainingFlagsBeatEnvironment(t *testing.T) {
 	}
 }
 
+// --num-ctx and --num-predict used to be applied unchecked while the matching
+// variables were clamped, so a flag could ask Ollama for any allocation at all.
+func TestNumericFlagsAreClamped(t *testing.T) {
+	t.Setenv("DRAFT_NUM_CTX", "4096")
+	t.Setenv("DRAFT_NUM_PREDICT", "")
+	cases := []struct {
+		name              string
+		flags             Flags
+		wantCtx, wantPred int
+		wantWarn          string
+	}{
+		{"ctx too large", Flags{ContextLength: maxContextLen + 1}, 4096, DefaultPredictLen, "--num-ctx=1048577 is outside [512, 1048576]; using 4096"},
+		{"ctx too small", Flags{ContextLength: 511}, 4096, DefaultPredictLen, "--num-ctx=511"},
+		{"ctx negative", Flags{ContextLength: -1}, 4096, DefaultPredictLen, "--num-ctx=-1"},
+		{"predict too large", Flags{PredictLength: maxPredictLen + 1}, 4096, DefaultPredictLen, "--num-predict=1048577 is outside [1024, 1048576]; using 6000"},
+		{"predict too small", Flags{PredictLength: 1023}, 4096, DefaultPredictLen, "--num-predict=1023"},
+		{"bounds accepted", Flags{ContextLength: 512, PredictLength: maxPredictLen}, 512, maxPredictLen, ""},
+	}
+	for _, tc := range cases {
+		c := Load(tc.flags)
+		if c.ContextLength != tc.wantCtx || c.PredictLength != tc.wantPred {
+			t.Errorf("%s: ctx/predict = %d/%d, want %d/%d", tc.name, c.ContextLength, c.PredictLength, tc.wantCtx, tc.wantPred)
+		}
+		if tc.wantWarn != "" && !hasWarning(c, tc.wantWarn) {
+			t.Errorf("%s: warnings %v lack %q", tc.name, c.Warnings, tc.wantWarn)
+		}
+		if tc.wantWarn == "" && hasWarning(c, "--num-") {
+			t.Errorf("%s: unexpected warning %v", tc.name, c.Warnings)
+		}
+	}
+}
+
 func TestEnvBeatsDefault(t *testing.T) {
 	t.Setenv("DRAFT_ENGINE", "grok")
 	t.Setenv("DRAFT_MODEL", "custom-ollama")
