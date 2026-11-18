@@ -300,6 +300,24 @@ func TestRunVerifyChecksALedgerNamedForTheSource(t *testing.T) {
 	}
 }
 
+// A ledger now carries its run's token in its name. A tampered one is still
+// this set's own, and must still fail.
+func TestRunVerifyChecksALedgerNamedForTheRun(t *testing.T) {
+	day, stem, _ := writeRichSet(t, "the source text", true, false)
+	if err := os.Remove(filepath.Join(day, stem+"-verified-claim-ledger.md")); err != nil {
+		t.Fatal(err)
+	}
+	own := filepath.Join(day, "2026-09-06-paper.0a1b2c3d-verified-claim-ledger.md")
+	if err := os.WriteFile(own, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb strings.Builder
+	final := filepath.Join(day, "final", stem+"-final.md")
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), "does not match the recorded digest") {
+		t.Errorf("a tampered run-named ledger should fail, exit %d:\n%s", code, out.String())
+	}
+}
+
 func sha256File(t *testing.T, path string) string {
 	t.Helper()
 	got, ok := resolveSourceDigest(path)

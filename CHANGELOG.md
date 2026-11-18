@@ -66,6 +66,19 @@ series until `0.0.999`.
   `id-token: write`, and was built from whatever versions PyPI served
   that day. Dependabot watches the pins.
 
+### Fixed
+
+- Two runs of the same paper on the same day no longer share one claim
+  ledger. Each run's ledger name now carries a token drawn for that run
+  (`<date>-<slug>.<token>-verified-claim-ledger.md`), so one run's cleanup
+  no longer deletes the ledger the other is writing from, and the ledger
+  is written by rename, so a concurrent `--resume` never reads a truncated
+  file. `--resume` picks the newest of today's ledgers for the sources,
+  including one under the old name, re-verifies it as before, and writes
+  its own; on success it removes the ledger it consumed unless
+  `--keep-artifacts` is set. `--verify` recognises both names, through the
+  new `pipeline.IsLedgerFor` (A-M5).
+
 ## [0.0.48] - 2026-11-18
 
 ### Added

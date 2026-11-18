@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
@@ -136,12 +135,7 @@ func ownsLedger(name, stem string, sources []provenance.Source) bool {
 	for i, s := range sources {
 		paths[i] = s.Path
 	}
-	date, ok := strings.CutSuffix(name, "-"+pipeline.LedgerStem(paths)+pipeline.LedgerSuffix)
-	if !ok {
-		return false
-	}
-	_, err := time.Parse("2006-01-02", date)
-	return err == nil
+	return pipeline.IsLedgerFor(name, paths)
 }
 
 // runVerify checks an article against the provenance written beside it and

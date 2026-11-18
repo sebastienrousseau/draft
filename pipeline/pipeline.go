@@ -217,9 +217,9 @@ type runState struct {
 	// usage accumulates what every model call in the current job cost, as far
 	// as the backends report it.
 	usage engine.Usage
-	// ledgerPath is the verified-claim-ledger scratch file for the current run,
-	// removed on success unless the user asked to keep artifacts.
-	ledgerPath string
+	// ledgerPath is this run's ledger, named by runToken, and resumedFrom the
+	// one a --resume read; both are removed on success unless artifacts are kept.
+	ledgerPath, resumedFrom, runToken string
 	// writeTokens caps output tokens for the writing calls of the current job,
 	// sized to the article's word budget (see writeBudget) so a thin ledger does
 	// not drive a local model to pad toward its token ceiling.
@@ -490,7 +490,7 @@ func (r *Runner) DryRun(ctx context.Context, job Job) (DryRunReport, error) {
 	rep.SectionCount = len(sections)
 	rep.EstCalls = len(sections) + 1
 
-	if _, statErr := os.Stat(ledgerPathFor(rep.OutputDir, job)); statErr == nil {
+	if _, found := resumableLedger(rep.OutputDir, job); found {
 		rep.LedgerFound = true
 		// A resumable ledger means extraction is already paid for.
 		rep.EstCalls = 1
