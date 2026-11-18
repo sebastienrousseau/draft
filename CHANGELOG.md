@@ -79,6 +79,19 @@ series until `0.0.999`.
   `--keep-artifacts` is set. `--verify` recognises both names, through the
   new `pipeline.IsLedgerFor` (A-M5).
 
+### Security
+
+- Scratch files are private to the user. The claim ledger, the raw output
+  of a failed run and its needs-review copy are written `0600`, since they
+  hold text from the user's documents and are not publications. The raw
+  output and the needs-review copy are created exclusively, so a symlink
+  planted at the day's `failed-output.txt` name can no longer redirect the
+  write, and a second failure on the same day takes a numbered name
+  instead of overwriting the first. An existing extraction cache directory
+  is now tightened to `0700`; one that cannot be is not used. Published
+  articles and their provenance stay `0644`, as files meant to be read by
+  whatever publishes them (S-L5).
+
 ## [0.0.48] - 2026-11-18
 
 ### Added

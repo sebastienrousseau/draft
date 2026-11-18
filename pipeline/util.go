@@ -6,8 +6,10 @@ package pipeline
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -309,27 +311,32 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// uniquePath returns path, or the first numbered variant of it that does not
-// already exist.
+// createPrivate writes data to a new file at path, or at the first numbered
+// variant of it that is free, readable by the user alone, and returns the
+// name it used.
 //
-// The loop is bounded and treats any Stat error other than "does not exist" as
-// good enough to use the candidate. Testing only os.IsNotExist meant a
-// directory we cannot stat into — no execute permission, a dead network mount —
-// made every candidate look occupied and span the loop forever. Failing to
-// write the file afterwards is a reported error; spinning is not.
-func uniquePath(path string) string {
-	if !fileExists(path) {
-		return path
-	}
+// The create is exclusive, which refuses any existing name, a symlink
+// included: a link planted at a predictable name such as the day's
+// failed-output file cannot redirect the write, and an earlier failure's
+// output is never overwritten.
+func createPrivate(path string, data []byte) (string, error) {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
-	for i := 2; i <= maxStemAttempts; i++ {
-		candidate := fmt.Sprintf("%s-%d%s", base, i, ext)
-		if !fileExists(candidate) {
-			return candidate
+	candidate := path
+	for i := 2; ; i++ {
+		f, err := os.OpenFile(candidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			_, err = f.Write(data)
+			if cerr := f.Close(); err == nil {
+				err = cerr
+			}
+			return candidate, err
 		}
+		if !errors.Is(err, fs.ErrExist) || i > maxStemAttempts {
+			return "", err
+		}
+		candidate = fmt.Sprintf("%s-%d%s", base, i, ext)
 	}
-	return fmt.Sprintf("%s-%d%s", base, maxStemAttempts+1, ext)
 }
 
 func shortPath(cfg config.Config, path string) string {

@@ -206,15 +206,17 @@ func (r *Runner) saveProvenance(outputDir, stem, title, saved string, records []
 // path that does not exist.
 func (r *Runner) saveFailure(outputDir, markdown string, verr error) error {
 	var note strings.Builder
-	rawPath := filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-failed-output.txt")
-	if err := os.WriteFile(rawPath, []byte(markdown+"\n"), 0o644); err != nil {
+	// Both files are scratch, holding text drawn from the user's documents,
+	// so they are private; see createPrivate for why the names are not fixed.
+	rawPath, err := createPrivate(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-failed-output.txt"), []byte(markdown+"\n"))
+	if err != nil {
 		note.WriteString("\nRaw output could not be saved: " + err.Error())
 	} else {
 		note.WriteString("\nRaw output saved: " + rawPath)
 	}
 	if validate.LooksLikeArticle(markdown) {
-		reviewPath := uniquePath(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+slugify(extractTitle(markdown))+"-needs-review.md"))
-		if err := os.WriteFile(reviewPath, []byte(markdown+"\n"), 0o644); err != nil {
+		reviewPath, err := createPrivate(filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+slugify(extractTitle(markdown))+"-needs-review.md"), []byte(markdown+"\n"))
+		if err != nil {
 			note.WriteString("\nNeeds-review Markdown could not be saved: " + err.Error())
 		} else {
 			note.WriteString("\nNeeds-review Markdown saved: " + reviewPath)

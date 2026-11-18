@@ -22,7 +22,9 @@ import (
 // ledger_sha256 must name the ledger that was used, not the one it came from.
 //
 // The write goes through a rename, so a concurrent --resume reading the same
-// folder sees a whole ledger or none, never a truncated one.
+// folder sees a whole ledger or none, never a truncated one. The ledger
+// quotes the user's documents verbatim and is scratch rather than a
+// publication, so it is readable by the user alone.
 //
 // Report what actually happened. Logging "claims saved" unconditionally
 // after a discarded write tells the user a fact-checking artefact exists
@@ -31,7 +33,7 @@ func (r *Runner) saveLedger(path string, records []claims.Record, dropped int) {
 	text := claims.RenderLedger(records, dropped) + "\n"
 	r.ledgerDigest = sha256Hex(text)
 	r.ledgerPath = path
-	if err := atomicfile.Write(path, []byte(text), 0o644); err != nil {
+	if err := atomicfile.Write(path, []byte(text), 0o600); err != nil {
 		r.ledgerPath = ""
 		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
 		return

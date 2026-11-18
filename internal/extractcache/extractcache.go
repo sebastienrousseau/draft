@@ -61,6 +61,12 @@ func Open(dir string) *Cache {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil
 	}
+	// MkdirAll leaves an existing directory's mode alone, and the cache holds
+	// extractions of the user's documents. One that cannot be made private
+	// is not used: a slow run is better than one that exposes them.
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil
+	}
 	return &Cache{dir: dir}
 }
 
