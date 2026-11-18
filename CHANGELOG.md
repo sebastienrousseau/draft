@@ -25,6 +25,12 @@ series until `0.0.999`.
   Devanagari, are read as numbers instead of being skipped, so a claim
   written in them no longer escapes the check. The same reading applies to
   the article's number check and to attribution.
+- `--review` always rejects an edit that adds a number no verified claim
+  contains, whatever `--strict-numbers` says. "Factual correction" is an
+  allowed edit reason, so an invented figure could otherwise reach your file.
+  Review compares the draft before and after the edit, number by number, so
+  a figure already in the draft is reported, not enforced, and the noise that
+  keeps `--strict-numbers` opt-in for a whole article does not arise.
 
 ### Fixed
 

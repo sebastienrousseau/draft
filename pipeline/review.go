@@ -121,7 +121,7 @@ func (r *Runner) review(ctx context.Context, job Job) error {
 	for _, e := range before {
 		r.warn("pre-existing: " + e)
 	}
-	_, warnings := validate.FaithfulnessWithOptions(enhanced, records, r.validateOptions())
+	_, warnings := validate.FaithfulnessWithOptions(enhanced, records, r.reviewOptions())
 	for _, w := range warnings {
 		r.warn("review: " + w)
 	}
@@ -181,23 +181,37 @@ func reviewViolations(article string, records []claims.Record, style rules.Style
 	return append(errs, factErrs...)
 }
 
+// reviewOptions is the write path's policy with the number check always
+// strict. --strict-numbers is opt-in because the check is noisy on a whole
+// article, but review judges only what an edit introduced: a number already
+// in the draft is in both lists and is reported, not enforced. What is left is
+// a figure the edit added that no claim contains, and "factual correction" is
+// an allowed edit reason, so that is exactly the invention review must stop.
+func (r *Runner) reviewOptions() validate.Options {
+	opts := r.validateOptions()
+	opts.StrictNumbers = true
+	return opts
+}
+
 // Validator messages embed data that an edit can shift without changing what
 // is wrong: a word count moves by one, a banned-word list gains an entry. These
 // reduce such a message to keys that are stable across an edit.
 //
-// The coupling to validate's wording is deliberate and narrow — only these two
+// The coupling to validate's wording is deliberate and narrow — only these
 // shapes carry variable data — and TestViolationMessageShapesAreStable pins it,
 // so a change to those messages fails here rather than silently degrading the
-// comparison to exact matching.
+// comparison to exact matching. The number list matters most: review always
+// enforces it, and compared whole, a draft with one pre-existing ungrounded
+// figure would block every edit that touched any other.
 var (
-	bannedListPat = regexp.MustCompile(`^(contains banned (?:words|phrases)): (.+)$`)
-	wordCountPat  = regexp.MustCompile(`^article is \d+ words; (minimum|maximum) is \d+$`)
+	listMessagePat = regexp.MustCompile(`^(contains banned (?:words|phrases)|numbers not found in any claim): (.+)$`)
+	wordCountPat   = regexp.MustCompile(`^article is \d+ words; (minimum|maximum) is \d+$`)
 )
 
 func violationKeys(msg string) []string {
 	// A list message is one key per item, so an edit that adds a banned word to
 	// an article that already had one is still caught.
-	if m := bannedListPat.FindStringSubmatch(msg); m != nil {
+	if m := listMessagePat.FindStringSubmatch(msg); m != nil {
 		items := strings.Split(m[2], ", ")
 		keys := make([]string, 0, len(items))
 		for _, item := range items {
