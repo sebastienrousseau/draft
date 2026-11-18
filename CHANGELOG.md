@@ -89,22 +89,6 @@ series until `0.0.999`.
   folder and still reads the absolute paths of older manifests. It also
   refuses a source that is not a regular file, which used to hang it on a
   FIFO, or is over 1 GiB, naming the source in the error (S-L6).
-
-### Fixed
-
-- Two runs of the same paper on the same day no longer share one claim
-  ledger. Each run's ledger name now carries a token drawn for that run
-  (`<date>-<slug>.<token>-verified-claim-ledger.md`), so one run's cleanup
-  no longer deletes the ledger the other is writing from, and the ledger
-  is written by rename, so a concurrent `--resume` never reads a truncated
-  file. `--resume` picks the newest of today's ledgers for the sources,
-  including one under the old name, re-verifies it as before, and writes
-  its own; on success it removes the ledger it consumed unless
-  `--keep-artifacts` is set. `--verify` recognises both names, through the
-  new `pipeline.IsLedgerFor` (A-M5).
-
-### Security
-
 - **A draft whose Markdown would run script on a site is sent back to the
   writer and never saved (S-M4, breaking: generated output).** Jekyll and
   kramdown pass raw HTML through, and a claim's quote is verbatim, so a
@@ -138,6 +122,19 @@ series until `0.0.999`.
   C0 controls other than newline and tab, DEL and C1 controls are now
   removed before display. Saved files, stdout and `--json` records keep the
   text as written.
+
+### Fixed
+
+- Two runs of the same paper on the same day no longer share one claim
+  ledger. Each run's ledger name now carries a token drawn for that run
+  (`<date>-<slug>.<token>-verified-claim-ledger.md`), so one run's cleanup
+  no longer deletes the ledger the other is writing from, and the ledger
+  is written by rename, so a concurrent `--resume` never reads a truncated
+  file. `--resume` picks the newest of today's ledgers for the sources,
+  including one under the old name, re-verifies it as before, and writes
+  its own; on success it removes the ledger it consumed unless
+  `--keep-artifacts` is set. `--verify` recognises both names, through the
+  new `pipeline.IsLedgerFor` (A-M5).
 
 ## [0.0.48] - 2026-11-18
 
