@@ -54,6 +54,9 @@ series until `0.0.999`.
   an error wrapping `context.DeadlineExceeded` or `context.Canceled`
   instead of the killed process's `signal: killed`, so a library caller can
   tell a timeout from a broken provider with `errors.Is`.
+- An `ollama serve` that draft starts is put in a process group of its own,
+  on Unix, so pressing Ctrl-C to stop draft no longer stops the server it
+  left running for the next run.
 
 ## [0.0.47] - 2026-11-17
 

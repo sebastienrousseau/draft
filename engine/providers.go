@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sebastienrousseau/draft/internal/proc"
 )
 
 // Provider describes how to drive one token-free AI coding-agent CLI in headless
@@ -359,6 +361,10 @@ func EnsureOllamaRunning(host string) error {
 		return fmt.Errorf("ollama is not installed on PATH; please install Ollama from https://ollama.com")
 	}
 	cmd := startCommand("ollama", "serve")
+	// The server is meant to outlive this run, so it must not share draft's
+	// process group, where interrupting draft would stop it too. It is
+	// deliberately not bound: nothing should kill a healthy server on cancel.
+	proc.Detach(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start 'ollama serve': %w", err)
 	}

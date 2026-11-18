@@ -8,11 +8,14 @@ package engine
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -144,5 +147,36 @@ func TestSessionTimeoutEndsTheCallWhenAGrandchildEscapesTheGroup(t *testing.T) {
 	_ = syscall.Kill(grandchildPid(t, pidfile), syscall.SIGKILL)
 	if err == nil {
 		t.Fatal("a call that timed out must fail")
+	}
+}
+
+// The autostarted server is meant to outlive draft. Sharing draft's process
+// group would let the Ctrl-C that stops draft stop the server as well.
+func TestEnsureOllamaRunningStartsTheServerInItsOwnGroup(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	var captured *exec.Cmd
+	orig := startCommand
+	startCommand = func(string, ...string) *exec.Cmd {
+		captured = exec.Command("true")
+		return captured
+	}
+	defer func() { startCommand = orig }()
+
+	withAvailable(map[string]bool{"ollama": true}, func() {
+		if err := EnsureOllamaRunning(server.URL); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if captured == nil || captured.SysProcAttr == nil || !captured.SysProcAttr.Setpgid {
+		t.Error("ollama serve was started in draft's process group")
 	}
 }
