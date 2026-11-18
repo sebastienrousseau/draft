@@ -96,7 +96,7 @@ The [November 2026 audit](docs/AUDIT-2026-11.md) found the issues below, apart
 from the five fixed in v0.0.48 without an audit ID, which were found in the
 work that followed it. Each was held back until its fix was released, and
 each fix arrived with a test that failed on the code before it. Upgrade to
-v0.0.48 or later to have them all.
+v0.0.49 or later to have them all.
 
 | Issue | Severity | Affected | Fixed in |
 | --- | --- | --- | --- |
@@ -114,6 +114,16 @@ v0.0.48 or later to have them all.
 | A comma, or digits in another script, let a claim's number pass against a quote without it | Medium | before v0.0.48 | v0.0.48 |
 | `--review` could add a number no verified claim contains | Medium | before v0.0.48 | v0.0.48 |
 | `--verify` reported a certificate as trusted when `c2patool` had not said so | Low | before v0.0.48 | v0.0.48 |
+| The writer could put invented words in quotation marks (audit A-M3) | Medium | before v0.0.49 | v0.0.49 |
+| `--review` showed the editor raw, unverified source text (audit A-M4) | Medium | before v0.0.49 | v0.0.49 |
+| Concurrent runs shared and deleted one ledger (audit A-M5) | Medium | before v0.0.49 | v0.0.49 |
+| Script and `javascript:` links could reach the published article (audit S-M4) | Medium | before v0.0.49 | v0.0.49 |
+| Release builds took unpinned inputs (audit S-L4) | Low | before v0.0.49 | v0.0.49 |
+| Invisible Unicode in a source reached the model (audit S-L2) | Low | before v0.0.49 | v0.0.49 |
+| Scratch files were world-readable and failed output followed symlinks (audit S-L5) | Low | before v0.0.49 | v0.0.49 |
+| `--verify` hung on a FIFO source, and manifests held absolute paths (audit S-L6) | Low | before v0.0.49 | v0.0.49 |
+| An API redirect to another host received the API key (audit S-L7) | Low | before v0.0.49 | v0.0.49 |
+| Model text could send escape sequences to the terminal (audit S-L8) | Low | before v0.0.49 | v0.0.49 |
 
 **Ledger record smuggling.** A claim field kept its newlines, and the ledger
 the writer reads is line-structured, so text extracted from a crafted source
@@ -182,7 +192,46 @@ correction" is an edit it allows; it now always rejects one.
 says nothing about the certificate, and `--verify` showed that as "valid
 and trusted". Trust is now reported only when `c2patool` asserts it.
 
-The ledger smuggling, ungrounded writing, provider tools, credential, resume
-and number issues need a source document crafted by an attacker; the hung
-call needs a misbehaving provider; and the exclusion range, unbound
-manifests and missing credentials need someone able to alter a signed set.
+**Quotations and review.** Nothing compared the article's quotations with
+the sources, so the writer could attribute invented words to a paper, and
+the house-style rewrite changed words inside single quotes and guillemets.
+`--review` also gave the editor raw section text, so a "factual
+correction" could bring in a fact whose quote was never verified. A
+quotation of three or more words that no verified source quote contains is
+now reported, an edit that adds one is rejected, and the editor sees only
+the verified claims.
+
+**Active content.** Raw HTML and links in the article were not checked, so
+a `<script>` element, an `on*=` attribute or a `javascript:` link in a
+source could reach a site that renders the Markdown. These now send the
+draft back for a retry, and an article holding one is never saved.
+
+**Hidden text and terminal output.** Tag characters, bidirectional
+controls and stray zero-width characters in a source reached the model
+unseen; they are now stripped at extraction. Model text shown in the
+terminal could carry escape sequences; control characters are now removed
+before display.
+
+**Files.** Two runs on the same source and day shared one ledger, so one
+run's cleanup deleted the other's. Ledgers and failure files were
+world-readable, the failure file followed a symlink, and `--verify` would
+hang on a FIFO named in a manifest, which also recorded absolute paths.
+Each run now writes its own ledger atomically, scratch files are private
+and created exclusively, `--verify` refuses a source that is not a regular
+file or exceeds 1 GiB, and manifests name sources relative to themselves.
+
+**Network and builds.** A redirect from the `--engine api:` endpoint to
+another host received the `x-api-key` header and the prompt; such
+redirects are now refused. The release build floated GoReleaser and Go,
+used a restored cache and was not reproducible, and the docs deploy
+installed unpinned Python packages; all of these are now pinned, and two
+builds of the same commit give the same binary.
+
+The ledger smuggling, ungrounded writing, provider tools, credential,
+resume, number, quotation, review, active content and hidden text issues
+need a source document crafted by an attacker; the hung call and terminal
+escapes need a misbehaving provider or model; the exclusion range, unbound
+manifests and missing credentials need someone able to alter a signed set;
+the shared ledger and file modes need another process or user on the same
+machine; and the redirect and build inputs need a compromised endpoint or
+dependency.
