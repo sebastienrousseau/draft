@@ -424,17 +424,23 @@ var flagHelp = [][2]string{
 // usage prints the branded help: the logo and wordmark, then coral section
 // headings over the reference text. Colour is dropped automatically when the
 // output is not a terminal, and DRAFT_SHOW_LOGO=0 suppresses the logo.
-func usage(w io.Writer) {
-	head := func(s string) string { return brand.Title.Render(s) }
-	flag := func(s string) string { return brand.Accent.Render(s) }
-	dim := func(s string) string { return brand.Help.Render(s) }
-
+// usageBanner prints the logo, or the wordmark when the logo is off, and the
+// one-line description that opens --help.
+func usageBanner(w io.Writer) {
 	if brand.ShowLogo() {
 		fmt.Fprint(w, brand.Logo(false))
 	} else {
 		fmt.Fprint(w, "  "+brand.Accent.Render(brand.Wordmark)+"  "+brand.Subtle.Render(brand.Tagline)+"\n\n")
 	}
-	fmt.Fprintf(w, "  %s\n\n", dim("draft "+version+" — research PDFs into grounded Markdown drafts"))
+	fmt.Fprintf(w, "  %s\n\n", brand.Help.Render("draft "+version+" — research PDFs into grounded Markdown drafts"))
+}
+
+func usage(w io.Writer) {
+	head := func(s string) string { return brand.Title.Render(s) }
+	flag := func(s string) string { return brand.Accent.Render(s) }
+	dim := func(s string) string { return brand.Help.Render(s) }
+
+	usageBanner(w)
 
 	fmt.Fprintf(w, "%s\n  draft [flags] <source> [more-sources...]\n\n", head("USAGE"))
 	fmt.Fprintf(w, "  %s\n  %s\n\n",
