@@ -45,6 +45,11 @@ series until `0.0.999`.
   leaving the process running after draft exited. The reaper also waited
   behind an agent that was still starting, which can take minutes; it now
   skips a session in use and closes agents outside its locks.
+- A provider that hits its own per-call timeout now fails over to the next
+  engine. The chain stopped on any error that wrapped
+  `context.DeadlineExceeded`, which an ACP agent's own timeout does, so one
+  hung agent ended the run with engines still untried. Only the caller's
+  own cancellation or deadline stops the chain now.
 
 ## [0.0.47] - 2026-11-17
 

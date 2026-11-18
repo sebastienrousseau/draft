@@ -49,6 +49,12 @@ func (r *Runner) generate(ctx context.Context, req engine.Request) (engine.Resul
 // generateOn is generate against an explicitly supplied chain. generate is the
 // common case that resolves the chain from the request's kind; the grounding
 // phase uses this form to walk the exact chain it was handed.
+//
+// Cancellation and timeout of the caller's context are the caller's decision,
+// not a sick backend, so they stop the walk. That is decided from ctx, never
+// from the returned error: an engine's own per-call timeout also wraps
+// context.DeadlineExceeded, and a CLI that hangs until that timeout is
+// exactly the sick backend the chain exists to route around.
 func (r *Runner) generateOn(ctx context.Context, req engine.Request, cs *chainState) (engine.Result, error) {
 	if cs.rehabilitate(timeNow()) {
 		r.log("retrying " + cs.engines[0].Name() + " after its earlier failure")
@@ -79,9 +85,8 @@ func (r *Runner) generateOn(ctx context.Context, req engine.Request, cs *chainSt
 			r.addUsage(res.Usage)
 			return res, nil
 		}
-		// Cancellation and timeout are the caller's decision, not a sick
-		// backend. Failing over would retry work the user just abandoned.
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		// The caller gave up; failing over would retry abandoned work.
+		if ctx.Err() != nil {
 			return engine.Result{}, err
 		}
 		// A refusal is the model's verdict on this prompt, not on the backend.
