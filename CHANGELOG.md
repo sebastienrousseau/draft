@@ -17,6 +17,14 @@ series until `0.0.999`.
   rewritten with the records actually kept, so the manifest's
   `ledger_sha256` names it; a resumed run used to record no digest.
   `claims.ParseLedgerSections` is the new per-section reader.
+- A claim's numbers are checked against its quote more strictly. Every
+  comma used to be dropped, so a European decimal `1,5` in a quote grounded
+  the claim `15`, and a citation list `[1,2,3]` grounded `123`; only a
+  well-formed Western (`1,000,000`) or Indian (`10,00,000`) thousands group
+  now loses its commas. Digits in other scripts, such as Arabic-Indic or
+  Devanagari, are read as numbers instead of being skipped, so a claim
+  written in them no longer escapes the check. The same reading applies to
+  the article's number check and to attribution.
 
 ## [0.0.47] - 2026-11-17
 

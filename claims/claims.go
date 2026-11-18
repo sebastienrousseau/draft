@@ -24,7 +24,13 @@ type Record struct {
 var (
 	blockSep     = regexp.MustCompile(`(?m)^---\s*$`)
 	danglingTail = regexp.MustCompile(`(?i)(?:,|;|\b(?:and|or|but|the|a|an|of|to|in|for|with|that|which|is|are|was|were))\s*$`)
-	numberPat    = regexp.MustCompile(`\d+(?:[.,]\d+)*`)
+	// numberPat uses \p{Nd} rather than \d, which is ASCII-only in RE2: a
+	// claim written in another script's digits would otherwise carry no
+	// numbers at all and skip the check that its numbers are in its quote.
+	numberPat = regexp.MustCompile(`\p{Nd}+(?:[.,]\p{Nd}+)*`)
+	// thousandsPat is a number whose commas only group digits — Western
+	// (1,000,000) or Indian (10,00,000) — and so may be dropped.
+	thousandsPat = regexp.MustCompile(`^(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?:\.\d+)?$`)
 	spacePat     = regexp.MustCompile(`\s+`)
 )
 
