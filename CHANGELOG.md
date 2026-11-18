@@ -130,6 +130,14 @@ series until `0.0.999`.
   marks are kept. A resumed claim whose quote held a stripped tag or bidi
   character no longer verifies and is dropped; the extraction cache is keyed
   on section text, so a section that changed is extracted afresh.
+- **Text from models and providers reaches the terminal without control
+  characters (S-L8).** Streamed tokens, progress and warning lines, and a
+  failed job's error, in the dashboard and on headless stderr, quote text a
+  model or another program chose, and an escape sequence in it could clear
+  the screen, retitle the window, overwrite a line or set the clipboard.
+  C0 controls other than newline and tab, DEL and C1 controls are now
+  removed before display. Saved files, stdout and `--json` records keep the
+  text as written.
 
 ## [0.0.48] - 2026-11-18
 

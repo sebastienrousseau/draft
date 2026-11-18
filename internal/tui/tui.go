@@ -245,7 +245,7 @@ const (
 // and the time halved (see BenchmarkTokenAppend).
 func (m *Model) appendToken(chunk string) {
 	m.out = append(m.out, chunk...)
-	m.tail = append(m.tail, chunk...)
+	m.tail = append(m.tail, display(chunk)...)
 	m.trimTail()
 	m.preview = previewText(string(m.tail), previewLines)
 	m.words = wordCount(m.preview)
@@ -285,7 +285,7 @@ const maxLogLines = 8
 
 // appendLog adds a progress line, keeping only the most recent ones.
 func (m *Model) appendLog(line string) {
-	m.logs = append(m.logs, line)
+	m.logs = append(m.logs, display(line))
 	if len(m.logs) > maxLogLines {
 		m.logs = m.logs[len(m.logs)-maxLogLines:]
 	}
