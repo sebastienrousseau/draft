@@ -31,6 +31,11 @@ series until `0.0.999`.
   Review compares the draft before and after the edit, number by number, so
   a figure already in the draft is reported, not enforced, and the noise that
   keeps `--strict-numbers` opt-in for a whole article does not arise.
+- `--verify` reports a signing certificate as trusted only when `c2patool`
+  says it is, by the `signingCredential.trusted` code or the overall state
+  `Trusted`. A report that validated the signature and said nothing about
+  the certificate, as `c2patool` does with no trust list, was shown as
+  "valid and trusted".
 
 ### Fixed
 

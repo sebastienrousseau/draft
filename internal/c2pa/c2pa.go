@@ -66,9 +66,10 @@ type Report struct {
 	// SignatureValid is true when c2patool validated the claim signature and
 	// every hashed assertion and the data hash matched the article.
 	SignatureValid bool
-	// Trusted is true when the signing certificate chained to a trust anchor
-	// c2patool recognises. A development certificate is valid but untrusted,
-	// which is reported, not treated as a signature failure.
+	// Trusted is true only when c2patool positively reported that the signing
+	// certificate chained to a trust anchor it recognises. A development
+	// certificate is valid but untrusted, which is reported, not treated as a
+	// signature failure.
 	Trusted bool
 	// State is c2patool's overall validation_state ("Valid", "Invalid", ...).
 	State string
@@ -174,7 +175,7 @@ func withSigner(manifestDef []byte, cert, key, alg string) ([]byte, error) {
 // parseReport reads c2patool's JSON report into a Report. The untrusted-
 // credential code is not a signature failure: it means the certificate is not
 // in a recognised trust list, which is exactly the state of a development
-// certificate, so it sets Trusted=false rather than SignatureValid=false.
+// certificate, so it leaves Trusted false rather than SignatureValid false.
 func parseReport(out string) (Report, error) {
 	var doc struct {
 		ValidationState   string `json:"validation_state"`
@@ -199,7 +200,11 @@ func parseReport(out string) (Report, error) {
 	rep := Report{State: doc.ValidationState}
 	var untrusted bool
 	rep.Failures, untrusted = failures(doc.ValidationResults.ActiveManifest.Failure)
-	rep.Trusted = !untrusted && !passed["signingCredential.untrusted"]
+	// Trust is only ever positively asserted: c2patool run with no trust
+	// list validates the signature and says nothing about the certificate,
+	// and silence is not trust.
+	rep.Trusted = (rep.State == "Trusted" || passed["signingCredential.trusted"]) &&
+		!untrusted && !passed["signingCredential.untrusted"]
 	sawValidated := passed["claimSignature.validated"]
 
 	// A valid overall state is authoritative; absent that, a validated claim
