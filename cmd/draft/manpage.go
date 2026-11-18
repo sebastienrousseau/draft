@@ -81,13 +81,7 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 		roff("Flags beat environment variables, which beat defaults. Every numeric "+
 			"variable is clamped at both ends; an out-of-range value is reported on "+
 			"stderr rather than silently ignored.")+"\n.PP\n"+
-			roff("DRAFT_ENGINE, DRAFT_EXTRACT_ENGINE, DRAFT_WRITE_ENGINE, DRAFT_EDIT_ENGINE, "+
-				"DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL, DRAFT_EXTRACT_MODEL, "+
-				"DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT, DRAFT_WRITE_RETRIES, "+
-				"DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY, DRAFT_CALL_TIMEOUT, "+
-				"DRAFT_EXPERIMENTAL, DRAFT_STRICT_NUMBERS, DRAFT_DRAFTS_DIR, "+
-				"DRAFT_SOURCES_DIR, DRAFT_CACHE_DIR, DRAFT_NO_CACHE, DRAFT_SHOW_LOGO, "+
-				"DRAFT_SITE_*, OLLAMA_HOST."))
+			roff(strings.Join(helpLines("ENVIRONMENT"), " ")+"."))
 
 	section(b, "FILES",
 		".TP\n.I ~/Drop/Drafts/YYYY-MM-DD/\n"+

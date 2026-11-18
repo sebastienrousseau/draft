@@ -61,6 +61,12 @@ series until `0.0.999`.
   `DRAFT_NUM_CTX` and `DRAFT_NUM_PREDICT` (512 and 1024 up to 1,048,576). A
   value outside them, including a negative one, is ignored with a warning
   instead of being sent to Ollama as asked.
+- `--help` lists every environment variable draft reads; eleven were
+  missing, among them `DRAFT_READER`, `DRAFT_STYLE`, `DRAFT_CALL_TIMEOUT`,
+  the per-stage `*_ENGINE` variables and the `DRAFT_C2PA_*` signing keys.
+  The manpage now prints the same list instead of its own copy, which
+  lacked three. A test reads the names from `config` and checks `--help`,
+  the manpage and the README against them.
 
 ## [0.0.47] - 2026-11-17
 

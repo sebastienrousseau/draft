@@ -471,25 +471,13 @@ func usage(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "%s\n", head("ENVIRONMENT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n\n",
-		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
-		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
-		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
-		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR, DRAFT_STRICT_NUMBERS,"),
-		dim("DRAFT_CACHE_DIR, DRAFT_NO_CACHE, DRAFT_CONFIG, DRAFT_NO_CONFIG,"),
-		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
-
-	fmt.Fprintf(w, "%s\n", head("CONFIG"))
-	fmt.Fprintf(w, "  %s\n  %s\n\n",
-		dim("~/.config/draft/config.toml (user), or a draft.toml (project) once trusted with"),
-		dim("--trust-config, sets defaults. Environment variables and flags override it."))
-
-	fmt.Fprintf(w, "%s\n", head("OUTPUT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n\n",
-		dim("Each draft is saved as a set under ~/Drop/Drafts/YYYY-MM-DD/:"),
-		dim("source/<stem>-body.md, yaml/<stem>-frontmatter.yaml, final/<stem>-final.md."),
-		dim("Scratch files are removed unless --keep-artifacts."))
+	for _, s := range helpSections {
+		fmt.Fprintf(w, "%s\n", head(s.title))
+		for _, line := range s.lines {
+			fmt.Fprintf(w, "  %s\n", dim(line))
+		}
+		fmt.Fprintln(w)
+	}
 
 	fmt.Fprintf(w, "%s\n  %s\n\n", head("REQUIREMENTS"),
 		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline).\n  "+
