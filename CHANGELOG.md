@@ -40,6 +40,11 @@ series until `0.0.999`.
   source quote contains is rejected, as an edit adding an ungrounded
   number already was. `prompt.Review` takes `(draft, ledger)`, and
   `prompt.MaxReviewSourceChars` is removed.
+- `SECURITY.md` and `docs/ARCHITECTURE.md` state what grounding does not
+  prove (S-L1): a quote found verbatim in its source is not checked to
+  support its claim, so a real sentence attached to an overstated or
+  reversed claim passes. The semantic second gate checks this, but it is
+  opt-in and fails open. Nothing in the code changed.
 
 ## [0.0.48] - 2026-11-18
 

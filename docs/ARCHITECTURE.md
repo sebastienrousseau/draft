@@ -118,6 +118,16 @@ pinned by a test.
    failed save removes the whole set, claim included.
    `TestFailedSaveLeavesNoPartialSet`.
 
+What the invariants do not cover, on purpose: none of them checks that a
+claim *means* what its quote says. Invariant 1 is about wording, so a real
+quote attached to a claim that overstates or reverses it, or a quote that is
+misleading out of context, passes. The semantic second gate
+([ADR 0009](adr/0009-optional-semantic-second-gate.md)) is the only check on
+meaning, and it is opt-in and fails open, so it narrows this gap without
+closing it. This is a residual risk, recorded in
+[SECURITY.md](../SECURITY.md#security-design); a person reviewing the draft
+against the paper is the control for it.
+
 ## The two seams
 
 Almost every extension goes through one of these.
