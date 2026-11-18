@@ -6,6 +6,14 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- `--verify --json` prints a record for a set it cannot load, with
+  `verified: false` and an `error` field, instead of printing nothing on
+  stdout. A program reading the record no longer has to tell "unverified"
+  from "no output". `error` is an addition within
+  `draft.verification-record/v1`.
+
 ### Security
 
 - `--resume` now verifies a saved ledger to the same standard as a fresh

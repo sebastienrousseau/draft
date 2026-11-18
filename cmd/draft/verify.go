@@ -65,20 +65,18 @@ func locateSet(path string) (bodyPath, manifestPath string, err error) {
 // is still present), and runs the digest checks. A load failure is reported to
 // stderr and ok is false. It is shared by the human and JSON verify paths so
 // both check exactly the same thing.
-func loadSet(path string, stderr io.Writer) (report provenance.CheckReport, bodyPath, manifestPath string, ok bool) {
-	bodyPath, manifestPath, err := locateSet(path)
+func loadSet(path string) (report provenance.CheckReport, bodyPath, manifestPath string, err error) {
+	bodyPath, manifestPath, err = locateSet(path)
 	if err != nil {
-		fmt.Fprintln(stderr, "draft:", err)
 		return
 	}
 	body, err := readBodyOrFinal(bodyPath, path)
 	if err != nil {
-		fmt.Fprintln(stderr, "draft:", err)
 		return
 	}
 	manifest, err := os.ReadFile(manifestPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "draft: no manifest for this article (%s); it was written before provenance existed, or the file was moved out of its set\n", filepath.Base(manifestPath))
+		err = fmt.Errorf("no manifest for this article (%s); it was written before provenance existed, or the file was moved out of its set", filepath.Base(manifestPath))
 		return
 	}
 	// The ledger is normally cleaned up after a successful run, so its digest
@@ -87,7 +85,6 @@ func loadSet(path string, stderr io.Writer) (report provenance.CheckReport, body
 	stem := strings.TrimSuffix(filepath.Base(manifestPath), "-c2pa.json")
 	ledger := findLedger(dayRoot, stem, manifest)
 	report = provenance.CheckArticle(body+"\n", manifest, ledger, resolveSourceDigest)
-	ok = true
 	return
 }
 
@@ -151,8 +148,9 @@ func ownsLedger(name, stem string, sources []provenance.Source) bool {
 // prints a human report, returning 0 when the article still matches its
 // manifest and 1 when it does not or a file is missing.
 func runVerify(path string, stdout, stderr io.Writer) int {
-	report, bodyPath, manifestPath, ok := loadSet(path, stderr)
-	if !ok {
+	report, bodyPath, manifestPath, err := loadSet(path)
+	if err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
 		return 1
 	}
 	printVerifyReport(stdout, path, manifestPath, report)
@@ -188,8 +186,13 @@ func runVerify(path string, stdout, stderr io.Writer) int {
 // verdict is verified. It is the stable seam a program (CI, a hosted verifier)
 // consumes: bring your own artifact, verify anywhere.
 func runVerifyJSON(path string, stdout, stderr io.Writer) int {
-	report, bodyPath, manifestPath, ok := loadSet(path, stderr)
-	if !ok {
+	report, bodyPath, manifestPath, err := loadSet(path)
+	if err != nil {
+		// A program reading the record must not have to tell "unverified"
+		// from "no output": a set that cannot be loaded is a record too.
+		fmt.Fprintln(stderr, "draft:", err)
+		b, _ := json.MarshalIndent(provenance.VerificationRecord{Kind: provenance.RecordKind, Error: err.Error()}, "", "  ")
+		fmt.Fprintln(stdout, string(b))
 		return 1
 	}
 	var sig *provenance.SignatureState

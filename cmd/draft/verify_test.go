@@ -760,3 +760,24 @@ func TestRunVerifyFailsWhenARecordedCredentialIsMissing(t *testing.T) {
 		t.Errorf("--json: exit %d, want 1 with the credential expected:\n%s", code, out.String())
 	}
 }
+
+// A program reading --verify --json gets a record on stdout even when the set
+// cannot be loaded, so it never has to tell "unverified" from "no output".
+func TestRunVerifyJSONRecordsASetThatCannotBeLoaded(t *testing.T) {
+	var out, errb strings.Builder
+	code := runVerifyJSON(filepath.Join(t.TempDir(), "missing-final.md"), &out, &errb)
+	if code != 1 {
+		t.Errorf("exit = %d, want 1", code)
+	}
+	var rec struct {
+		Kind     string `json:"kind"`
+		Verified bool   `json:"verified"`
+		Error    string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &rec); err != nil {
+		t.Fatalf("stdout is not a record: %v\n%q", err, out.String())
+	}
+	if rec.Kind != provenance.RecordKind || rec.Verified || rec.Error == "" {
+		t.Errorf("record = %+v, want an unverified record with an error", rec)
+	}
+}

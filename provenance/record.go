@@ -33,6 +33,9 @@ type VerificationRecord struct {
 	// know them still reads every field it did.
 	Disclosure DisclosureState `json:"disclosure"`
 	Review     *ReviewState    `json:"review,omitempty"`
+	// Error says why the set could not be read at all, in which case
+	// Verified is false and nothing else was checked. Added within v1.
+	Error string `json:"error,omitempty"`
 }
 
 // DisclosureState is how the manifest says the article was made, the
