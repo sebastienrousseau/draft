@@ -209,8 +209,11 @@ draft --resume paper.pdf
    redo, and it is what makes re-verification possible).
 2. Look for the ledger for these sources in today's folder.
 3. If found, parse it and **re-verify every record against the freshly
-   sectioned text**. A record whose quote no longer appears — because the
-   source changed — is dropped and reported.
+   sectioned text**, one section at a time as a fresh run does, then run the
+   opt-in second gate and rewrite the ledger with the records kept. A record
+   whose quote no longer appears in any one section — because the source
+   changed, or because the quote runs across a section boundary — is dropped
+   and reported.
 4. Skip `PhaseClaims` entirely; proceed to write.
 
 Re-verification is the important part: a resumed ledger is not trusted because

@@ -6,6 +6,18 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Security
+
+- `--resume` now verifies a saved ledger to the same standard as a fresh
+  run. Each record is checked against one section rather than all of them
+  joined, so a quote running from the end of one section, or one merged
+  paper, into the start of the next no longer passes while occurring in no
+  source. The resumed records then go through de-duplication and the
+  opt-in second gate, which resume used to skip, and the ledger is
+  rewritten with the records actually kept, so the manifest's
+  `ledger_sha256` names it; a resumed run used to record no digest.
+  `claims.ParseLedgerSections` is the new per-section reader.
+
 ## [0.0.47] - 2026-11-17
 
 ### Added

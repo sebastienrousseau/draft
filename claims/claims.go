@@ -103,6 +103,44 @@ func ParseLedger(ledger, source string) (records []Record, dropped int) {
 	return Parse(ledger[i:], source)
 }
 
+// ParseLedgerSections is ParseLedger against sources kept apart: a record is
+// kept when its quote verifies in any one section.
+//
+// Verifying against the sections joined together is weaker than a fresh run,
+// which verifies each section's claims against that section alone.
+// Normalisation folds the separator between two sections into a space, so a
+// quote running from the end of one into the start of the next is found in
+// the joined text while occurring in no source.
+func ParseLedgerSections(ledger string, sections []string) (records []Record, dropped int) {
+	i := strings.Index(ledger, "CLAIM:")
+	if i < 0 {
+		// An empty ledger renders as a header and "NONE"; see ParseLedger.
+		return nil, 0
+	}
+	for _, block := range blockSep.Split(ledger[i:], -1) {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+		if rec, ok := firstSupporting(block, sections); ok {
+			records = append(records, rec)
+			continue
+		}
+		dropped++
+	}
+	return records, dropped
+}
+
+// firstSupporting verifies one ledger block against each section in turn and
+// returns the record from the first that supports it.
+func firstSupporting(block string, sections []string) (Record, bool) {
+	for _, s := range sections {
+		if recs, _ := Parse(block, s); len(recs) == 1 {
+			return recs[0], true
+		}
+	}
+	return Record{}, false
+}
+
 // Dedupe removes records whose normalised claim text has already been seen.
 func Dedupe(records []Record) []Record {
 	seen := map[string]bool{}
