@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.48] - 2026-11-18
+
 ### Added
 
 - `--verify --json` prints a record for a set it cannot load, with
@@ -1679,6 +1681,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.48]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.48
 [0.0.47]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.47
 [0.0.46]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.46
 [0.0.45]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.45
