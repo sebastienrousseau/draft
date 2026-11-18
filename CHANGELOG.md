@@ -6,6 +6,11 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Changed
+
+- CI installs `c2patool` on Linux (a release pinned by version and SHA-256)
+  and macOS, so the live C2PA tests run there instead of skipping.
+
 ## [0.0.48] - 2026-11-18
 
 ### Added
