@@ -80,10 +80,11 @@ you do not trust.
 
 ## Fixed Vulnerabilities
 
-The [November 2026 audit](docs/AUDIT-2026-11.md) found the issues below. Each
-was held back until its fix was released, and each fix arrived with a test
-that failed on the code before it. Upgrade to v0.0.46 or later to have them
-all.
+The [November 2026 audit](docs/AUDIT-2026-11.md) found the issues below, apart
+from the five fixed in v0.0.48 without an audit ID, which were found in the
+work that followed it. Each was held back until its fix was released, and
+each fix arrived with a test that failed on the code before it. Upgrade to
+v0.0.48 or later to have them all.
 
 | Issue | Severity | Affected | Fixed in |
 | --- | --- | --- | --- |
@@ -94,6 +95,13 @@ all.
 | Every credential in the environment reached every provider | Medium | before v0.0.44 | v0.0.44 |
 | A per-call timeout could not stop a hung provider | High | before v0.0.44 | v0.0.44 |
 | `--verify` accepted a credential whose data hash excluded the article | High | before v0.0.45 | v0.0.45 |
+| A credential vouched for the article but not for the manifest's digests, review or AI disclosure | High | before v0.0.48 | v0.0.48 |
+| Deleting the credential made a signed set verify as unsigned | Medium | before v0.0.48 | v0.0.48 |
+| A resumed ledger was verified against all sections joined (audit A-M1) | Medium | before v0.0.48 | v0.0.48 |
+| A resumed run recorded no ledger digest and skipped the second gate (audit A-M2) | Medium | before v0.0.48 | v0.0.48 |
+| A comma, or digits in another script, let a claim's number pass against a quote without it | Medium | before v0.0.48 | v0.0.48 |
+| `--review` could add a number no verified claim contains | Medium | before v0.0.48 | v0.0.48 |
+| `--verify` reported a certificate as trusted when `c2patool` had not said so | Low | before v0.0.48 | v0.0.48 |
 
 **Ledger record smuggling.** A claim field kept its newlines, and the ledger
 the writer reads is line-structured, so text extracted from a crafted source
@@ -130,5 +138,39 @@ length as valid, as Buchanan showed in October 2026. `--verify` now fails a
 credential that excludes any byte range or does not bind the article by its
 data hash, and signing refuses to produce one.
 
-The first four need a source document crafted by an attacker; the hung call
-needs a misbehaving provider, and the exclusion range a forged credential.
+**Unbound manifests.** A credential signs the article's bytes, but the
+source and ledger digests, the review record and the AI disclosure live in
+the manifest beside it, which nothing tied to the signature. Anyone could
+rewrite them, or add a review, and the set still verified as signed and
+trusted. `--verify` now requires draft's three assertions in the manifest to
+equal the copies the credential signed, and says which one differs.
+
+**Missing credentials.** Deleting the `.c2pa` file turned a signed set into
+one that verified as never signed. A signed manifest now records
+`signed: true`, so a missing credential fails `--verify`, and
+`--require-signature` fails any set without a valid, bound credential.
+
+**Resumed ledgers.** `--resume` checked a saved ledger against every section
+joined together, so a quote running from the end of one section, or one
+merged paper, into the start of the next passed while occurring in no
+source. It also wrote no ledger digest into the manifest and skipped the
+second gate. Each record is now verified against one section, as on a fresh
+run, and a resumed ledger goes through the same de-duplication, second gate
+and digest as a fresh one.
+
+**Number checks.** Every comma was dropped before a claim's numbers were
+compared with its quote, so `1,5` grounded `15` and `[1,2,3]` grounded `123`,
+and digits in other scripts were not read as numbers at all. Only a
+well-formed thousands group now loses its commas, and any script's digits
+are compared by value. Separately, `--review` rejected an edit that added an
+ungrounded number only under `--strict-numbers`, although "factual
+correction" is an edit it allows; it now always rejects one.
+
+**Reported trust.** With no trust list, `c2patool` validates a signature and
+says nothing about the certificate, and `--verify` showed that as "valid
+and trusted". Trust is now reported only when `c2patool` asserts it.
+
+The ledger smuggling, ungrounded writing, provider tools, credential, resume
+and number issues need a source document crafted by an attacker; the hung
+call needs a misbehaving provider; and the exclusion range, unbound
+manifests and missing credentials need someone able to alter a signed set.
