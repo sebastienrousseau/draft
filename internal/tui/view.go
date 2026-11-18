@@ -272,7 +272,7 @@ func (m Model) renderSummary(width int) string {
 			b.WriteString(helpStyle.Render("     "+r.outputPath) + "\n")
 		case stateFailed:
 			b.WriteString("  " + errStyle.Render("✗") + " " + valueStyle.Render(r.label) + "\n")
-			b.WriteString(helpStyle.Render("     "+firstLine(r.errText)) + "\n")
+			b.WriteString(helpStyle.Render("     "+firstLine(display(r.errText))) + "\n")
 		}
 	}
 	b.WriteString("\n  " + titleStyle.Render("Next") + "\n")

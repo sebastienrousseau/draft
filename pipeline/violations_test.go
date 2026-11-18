@@ -65,6 +65,23 @@ func TestViolationMessageShapesAreStable(t *testing.T) {
 			t.Errorf("number message %q no longer splits into one key per number: %v", got, keys)
 		}
 	})
+
+	// One key per kind, so a review edit that adds a script tag to an article
+	// that already had a javascript: link is still caught.
+	t.Run("unsafe markup", func(t *testing.T) {
+		var got string
+		for _, e := range validate.Errors("# T\n\n<script>x</script> [a](javascript:x)") {
+			if strings.HasPrefix(e, "contains unsafe markup") {
+				got = e
+			}
+		}
+		if got == "" {
+			t.Fatal("no unsafe-markup violation produced")
+		}
+		if keys := violationKeys(got); len(keys) != 2 {
+			t.Errorf("unsafe-markup message %q no longer splits into one key per kind: %v", got, keys)
+		}
+	})
 }
 
 func TestViolationKeys(t *testing.T) {

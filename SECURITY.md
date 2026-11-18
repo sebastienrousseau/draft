@@ -48,6 +48,18 @@ within 7 days of confirmation.
 - **Grounding as a control.** Every fact must trace to a verbatim-quote-verified
   claim; ungrounded numbers and silent metric conversions are flagged and
   unverifiable claims are dropped before writing.
+- **What grounding does not prove (residual risk).** The verbatim gate proves
+  that a claim's quote occurs in its source section, and that the claim's
+  numbers occur in that quote. It does not prove that the quote supports the
+  claim. A real sentence attached to a claim that overstates it, reverses it,
+  or takes it out of context passes by design, and so does a quote that is
+  itself misleading, such as a sentence the paper goes on to qualify. The
+  semantic second gate (`--second-gate`,
+  [ADR 0009](docs/adr/0009-optional-semantic-second-gate.md)) asks a model
+  whether each quote entails its claim, but it is off by default and fails
+  open: a model error, a cancelled call or an unreadable verdict keeps the
+  claim. Treat a draft as a well-sourced first version that a person checks
+  against the paper before publishing, not as a verified summary.
 
 ## Agent Trust Surface
 

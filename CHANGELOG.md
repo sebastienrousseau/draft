@@ -6,6 +6,136 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Changed
+
+- CI installs `c2patool` on Linux (a release pinned by version and SHA-256)
+  and macOS, so the live C2PA tests run there instead of skipping.
+- The release job builds with an exact Go toolchain (1.27.4, the one that
+  built v0.0.48) instead of whatever `stable` is on the day, and the
+  devcontainer installs the docs tooling from the same hash-pinned files
+  as CI.
+
+### Security
+
+- **Quotations in the article are checked against the sources (A-M3,
+  breaking: generated output).** The writer could put any words in
+  quotation marks, and nothing compared them with what a source said. A
+  quotation of three or more words that occurs in no verified claim's
+  `SOURCE_QUOTE`, compared after the same normalisation the claim gate
+  uses, is now reported as `quotation found in no verified source quote`.
+  The claim text does not count, since it is the extractor's paraphrase,
+  and the parts of a quotation cut with an ellipsis must all come from one
+  quote. On the write path this is a warning, as an ungrounded number is
+  without `--strict-numbers`; `validate.Options.StrictQuotes` makes it an
+  error. The house-vocabulary repair and the banned-word check now also
+  leave alone text in single quotes (`'...'`, `‘...’`), guillemets
+  (`«...»`) and quotations that wrap across lines or run past 400
+  characters, up to a paragraph break or 2,000 bytes. An apostrophe, as in
+  `don't`, `the authors'` or `'90s`, does not open or close a quotation.
+  An article using banned vocabulary only inside such a quotation used to
+  be rewritten or rejected, and is now saved as written.
+- **`--review` no longer shows the editor unverified source text (A-M4,
+  breaking).** The review prompt carried up to 6,000 characters of raw
+  section text beside the ledger, and "factual correction" is an allowed
+  edit, so a fact whose quote was never found in its source could reach
+  your file, guarded only by the number check. The editor now sees the
+  verified claims and the draft, as the writer does, and is told to quote
+  only from a `SOURCE_QUOTE`. An edit that adds a quotation no verified
+  source quote contains is rejected, as an edit adding an ungrounded
+  number already was. `prompt.Review` takes `(draft, ledger)`, and
+  `prompt.MaxReviewSourceChars` is removed.
+- `SECURITY.md` and `docs/ARCHITECTURE.md` state what grounding does not
+  prove (S-L1): a quote found verbatim in its source is not checked to
+  support its claim, so a real sentence attached to an overstated or
+  reversed claim passes. The semantic second gate checks this, but it is
+  opt-in and fails open. Nothing in the code changed.
+- `--engine api:<provider>` refuses a redirect to another scheme, host or
+  port. Go drops `Authorization` when a redirect changes domain, but it
+  forwarded `x-api-key` and, on a 307 or 308, the prompt itself, so a
+  redirecting endpoint could hand the Anthropic key and the source text to
+  a host the user never named. Redirects within the endpoint's own origin
+  are still followed.
+- The release job runs an exact GoReleaser (v2.20.2) instead of any `v2`
+  release, since it holds the Apple signing certificate, and builds
+  without a restored Go cache. Its before-hook checks the module graph
+  (`go mod tidy -diff`, `go mod verify`) instead of rewriting it after
+  review.
+- Release binaries are built with `-trimpath` and the tagged commit's
+  timestamp, so they carry no build-machine paths and an unsigned rebuild
+  of a tag can be compared with the release digest for digest.
+- The docs workflow installs codespell and MkDocs from hash-pinned
+  requirements (`.github/requirements/`, re-pinned by
+  `make requirements`) with `--require-hashes`, as `make docs-lint` and
+  `make manual` now do. The manual it builds is deployed with
+  `id-token: write`, and was built from whatever versions PyPI served
+  that day. Dependabot watches the pins.
+- Scratch files are private to the user. The claim ledger, the raw output
+  of a failed run and its needs-review copy are written `0600`, since they
+  hold text from the user's documents and are not publications. The raw
+  output and the needs-review copy are created exclusively, so a symlink
+  planted at the day's `failed-output.txt` name can no longer redirect the
+  write, and a second failure on the same day takes a numbered name
+  instead of overwriting the first. An existing extraction cache directory
+  is now tightened to `0700`; one that cannot be is not used. Published
+  articles and their provenance stay `0644`, as files meant to be read by
+  whatever publishes them (S-L5).
+- **The manifest records each source relative to itself, not by absolute
+  path (breaking: generated output).** The `sources` of the
+  `com.draftlib.grounding` assertion, which a signed credential covers and
+  which travels with the article, carried the user's home directory and so
+  usually their account name. A source is now recorded slash-separated and
+  relative to the manifest's folder, or by base name where no relative
+  path exists. `--verify` resolves a relative source from the manifest's
+  folder and still reads the absolute paths of older manifests. It also
+  refuses a source that is not a regular file, which used to hang it on a
+  FIFO, or is over 1 GiB, naming the source in the error (S-L6).
+- **A draft whose Markdown would run script on a site is sent back to the
+  writer and never saved (S-M4, breaking: generated output).** Jekyll and
+  kramdown pass raw HTML through, and a claim's quote is verbatim, so a
+  source could put `<script>` in the article. `script`, `iframe`, `object`,
+  `embed`, `style`, `base`, `meta`, `link` and `form` elements, event
+  handler attributes (in HTML or a kramdown `{: }` attribute list), and
+  `javascript:`, `vbscript:` and `data:` URLs, entity-encoded or not, are
+  now a rule violation the retry loop names, as `contains unsafe markup`.
+  The save checks the generated frontmatter too, and a failed run no longer
+  writes a needs-review Markdown copy that carries the markup; the raw
+  `failed-output.txt` keeps it as text. `--review` fails an edit that adds
+  any. `validate.UnsafeMarkup` is the new check, with a fuzz target.
+- **Invisible characters are stripped from source text when it is read
+  (S-L2, breaking: generated output).** Unicode tag characters, bidi
+  embeddings, overrides and isolates, the zero-width space, word joiner and
+  byte-order mark display as nothing but reached the extraction prompt, so
+  a document could carry instructions or reorder text that its reader never
+  saw. Every reader's text now loses them before it is split into sections,
+  so the prompt and quote verification see the same visible text, and a
+  claim's quote is verified against it. The zero-width non-joiner and joiner
+  are kept between two visible non-ASCII characters, where Persian, Indic
+  scripts and emoji sequences need them, and removed elsewhere; directional
+  marks are kept. A resumed claim whose quote held a stripped tag or bidi
+  character no longer verifies and is dropped; the extraction cache is keyed
+  on section text, so a section that changed is extracted afresh.
+- **Text from models and providers reaches the terminal without control
+  characters (S-L8).** Streamed tokens, progress and warning lines, and a
+  failed job's error, in the dashboard and on headless stderr, quote text a
+  model or another program chose, and an escape sequence in it could clear
+  the screen, retitle the window, overwrite a line or set the clipboard.
+  C0 controls other than newline and tab, DEL and C1 controls are now
+  removed before display. Saved files, stdout and `--json` records keep the
+  text as written.
+
+### Fixed
+
+- Two runs of the same paper on the same day no longer share one claim
+  ledger. Each run's ledger name now carries a token drawn for that run
+  (`<date>-<slug>.<token>-verified-claim-ledger.md`), so one run's cleanup
+  no longer deletes the ledger the other is writing from, and the ledger
+  is written by rename, so a concurrent `--resume` never reads a truncated
+  file. `--resume` picks the newest of today's ledgers for the sources,
+  including one under the old name, re-verifies it as before, and writes
+  its own; on success it removes the ledger it consumed unless
+  `--keep-artifacts` is set. `--verify` recognises both names, through the
+  new `pipeline.IsLedgerFor` (A-M5).
+
 ## [0.0.48] - 2026-11-18
 
 ### Added

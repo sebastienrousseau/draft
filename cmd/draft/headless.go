@@ -12,14 +12,30 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/config"
+	"github.com/sebastienrousseau/draft/internal/runes"
 	"github.com/sebastienrousseau/draft/pipeline"
 )
+
+// terminalWriter strips control characters from everything written through
+// it. Headless progress is meant for a person at a terminal, and its warnings
+// and errors quote provider output and model text, which must not be able to
+// drive that terminal. stdout is not wrapped: it carries paths and --json
+// records for programs, which keep the text as it was.
+type terminalWriter struct{ w io.Writer }
+
+func (t terminalWriter) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(t.w, runes.TerminalSafe(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
 
 // runHeadless processes the queue without the Bubble Tea UI. Progress logs go to
 // stderr and each finished draft's path is printed to stdout, so the command
 // composes in scripts and cron jobs. It returns a count of failed jobs.
 func runHeadless(ctx context.Context, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job, stdout, stderr io.Writer) int {
 	failures := 0
+	stderr = terminalWriter{stderr}
 	for i, job := range jobs {
 		fmt.Fprintf(stderr, "[%d/%d] %v\n", i+1, len(jobs), job.Sources)
 		events := make(chan pipeline.Event, 256)
@@ -177,6 +193,7 @@ func phaseMillis(timings []pipeline.PhaseTiming) map[string]int64 {
 // of failed jobs.
 func runHeadlessJSON(ctx context.Context, cfg config.Config, runner *pipeline.Runner, jobs []pipeline.Job, stdout, stderr io.Writer) int {
 	failures := 0
+	stderr = terminalWriter{stderr}
 	enc := json.NewEncoder(stdout)
 	for i, job := range jobs {
 		fmt.Fprintf(stderr, "[%d/%d] %v\n", i+1, len(jobs), job.Sources)

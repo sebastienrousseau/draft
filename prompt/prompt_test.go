@@ -106,18 +106,23 @@ func TestContinueWritingCarriesTheClaims(t *testing.T) {
 }
 
 func TestReviewPrompt(t *testing.T) {
-	long := strings.Repeat("r", MaxReviewSourceChars+100)
-	p := Review(long, "DRAFT-BODY", "LEDGER-CONTENT")
-	if !strings.Contains(p, "DRAFT-BODY") || !strings.Contains(p, "LEDGER-CONTENT") || !strings.Contains(p, "JSON array") {
-		t.Error("review prompt missing draft, ledger, or output spec")
+	long := strings.Repeat("r", MaxDraftChars+100)
+	p := Review(long, "LEDGER-CONTENT")
+	if !strings.Contains(p, "LEDGER-CONTENT") || !strings.Contains(p, "JSON array") {
+		t.Error("review prompt missing ledger or output spec")
 	}
 	// clip applied: a contiguous run of exactly the cap, never one longer.
-	if !strings.Contains(p, strings.Repeat("r", MaxReviewSourceChars)) || strings.Contains(p, strings.Repeat("r", MaxReviewSourceChars+1)) {
-		t.Error("research should be clipped to MaxReviewSourceChars")
+	if !strings.Contains(p, strings.Repeat("r", MaxDraftChars)) || strings.Contains(p, strings.Repeat("r", MaxDraftChars+1)) {
+		t.Error("the draft should be clipped to MaxDraftChars")
 	}
 	// short inputs pass through unclipped (the other clip branch).
-	if !strings.Contains(Review("short research", "d", "l"), "short research") {
-		t.Error("short research should not be clipped")
+	if !strings.Contains(Review("short draft", "l"), "short draft") {
+		t.Error("a short draft should not be clipped")
+	}
+	// The editor is held to the ledger the way the writer is: no source
+	// text, and quotations only from a verified quote.
+	if strings.Contains(p, "SOURCE DOCUMENT") || !strings.Contains(p, "copied exactly from a SOURCE_QUOTE") {
+		t.Error("the review prompt must carry no source text and must restrict quotations")
 	}
 }
 
@@ -132,10 +137,8 @@ func TestPromptsStayValidUTF8WhenClipped(t *testing.T) {
 		if out := ContinueWriting(body, "ledger"); !utf8.ValidString(out) {
 			t.Errorf("ContinueWriting(pad=%d) produced invalid UTF-8", pad)
 		}
-		if out := Review(body, "draft", "ledger"); !utf8.ValidString(out) {
-			t.Errorf("Review(research, pad=%d) produced invalid UTF-8", pad)
-		}
-		if out := Review("research", body, "ledger"); !utf8.ValidString(out) {
+		draft := strings.Repeat("x", pad) + strings.Repeat("字", MaxDraftChars/3+1)
+		if out := Review(draft, "ledger"); !utf8.ValidString(out) {
 			t.Errorf("Review(draft, pad=%d) produced invalid UTF-8", pad)
 		}
 	}

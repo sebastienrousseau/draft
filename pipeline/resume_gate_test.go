@@ -21,7 +21,9 @@ var mergedSections = []pdf.Section{
 	{Label: "b.pdf", Body: "Router-S used 5x fewer FLOPs than the dense baseline."},
 }
 
-// resumeRunner returns a resuming runner and the path its ledger is read from.
+// resumeRunner returns a resuming runner and a path its ledger is read from:
+// the name a ledger had before it carried a run token, which resume still
+// finds.
 func resumeRunner(t *testing.T, engines ...engine.Engine) (*Runner, Job, string, string) {
 	t.Helper()
 	cfg := resumeConfig(t)
@@ -29,7 +31,7 @@ func resumeRunner(t *testing.T, engines ...engine.Engine) (*Runner, Job, string,
 	r := NewRunner(cfg, engines, make(chan Event, 512))
 	job := Job{Sources: []string{"a.pdf", "b.pdf"}}
 	out := t.TempDir()
-	return r, job, out, ledgerPathFor(out, job)
+	return r, job, out, filepath.Join(out, ledgerName(job, ""))
 }
 
 func writeLedger(t *testing.T, path string, recs ...claims.Record) {
@@ -104,7 +106,7 @@ func TestResumeRecordsTheLedgerItUsed(t *testing.T) {
 	if err != nil || len(records) != 1 || dropped != 1 {
 		t.Fatalf("records=%d dropped=%d err=%v; want 1, 1, nil", len(records), dropped, err)
 	}
-	onDisk, err := os.ReadFile(path)
+	onDisk, err := os.ReadFile(r.ledgerPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +116,7 @@ func TestResumeRecordsTheLedgerItUsed(t *testing.T) {
 	if strings.Contains(string(onDisk), gone.SourceQuote) {
 		t.Error("the saved ledger still holds a record the resume dropped")
 	}
-	if r.ledgerPath != path {
-		t.Errorf("ledgerPath = %q, want %q", r.ledgerPath, filepath.Base(path))
+	if r.ledgerPath == path || r.resumedFrom != path {
+		t.Errorf("ledgerPath = %q, resumedFrom = %q; want a new ledger written from %q", r.ledgerPath, r.resumedFrom, filepath.Base(path))
 	}
 }

@@ -71,16 +71,21 @@ func TestStripThinkingWithTags(t *testing.T) {
 	}
 }
 
-func TestUniquePath(t *testing.T) {
+func TestCreatePrivate(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.md")
-	if got := uniquePath(p); got != p {
-		t.Errorf("non-existent path should be returned as-is")
+	if got, err := createPrivate(p, []byte("one")); err != nil || got != p {
+		t.Errorf("a free name should be used as-is: %q, %v", got, err)
 	}
-	os.WriteFile(p, []byte("x"), 0o644)
-	got := uniquePath(p)
-	if got == p || filepath.Base(got) != "a-2.md" {
-		t.Errorf("expected a-2.md, got %q", got)
+	got, err := createPrivate(p, []byte("two"))
+	if err != nil || filepath.Base(got) != "a-2.md" {
+		t.Errorf("expected a-2.md, got %q, %v", got, err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "one" {
+		t.Errorf("the first file was overwritten: %q", b)
+	}
+	if _, err := createPrivate(filepath.Join(dir, "missing", "b.md"), nil); err == nil {
+		t.Error("a missing directory must be an error, not a numbered retry")
 	}
 }
 
@@ -283,7 +288,7 @@ func TestFileSHA256Error(t *testing.T) {
 	}
 }
 
-func TestUniquePathExhausted(t *testing.T) {
+func TestCreatePrivateExhausted(t *testing.T) {
 	dir := t.TempDir()
 	base := filepath.Join(dir, "doc.md")
 	if err := os.WriteFile(base, []byte("x"), 0o644); err != nil {
@@ -295,9 +300,7 @@ func TestUniquePathExhausted(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := uniquePath(base)
-	want := fmt.Sprintf("%s-%d.md", filepath.Join(dir, "doc"), maxStemAttempts+1)
-	if got != want {
-		t.Errorf("uniquePath exhausted: got %s, want %s", got, want)
+	if got, err := createPrivate(base, []byte("y")); err == nil {
+		t.Errorf("createPrivate found a name past the bound: %s", got)
 	}
 }

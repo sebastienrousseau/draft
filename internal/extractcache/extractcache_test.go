@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -188,5 +189,31 @@ func TestIsHexRejectsNonShardNames(t *testing.T) {
 	}
 	if !isHex("a0") {
 		t.Error("isHex(\"a0\") = false")
+	}
+}
+
+// MkdirAll leaves an existing directory's mode alone, so a cache directory
+// made world-readable by something else stayed that way, exposing cached
+// extractions of the user's documents.
+func TestOpenTightensAnExistingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory modes are not modelled on Windows")
+	}
+	dir := filepath.Join(t.TempDir(), "cache")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if Open(dir) == nil {
+		t.Fatal("Open refused a usable directory")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Errorf("cache directory mode = %v, want 0700", perm)
 	}
 }

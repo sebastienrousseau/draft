@@ -232,7 +232,9 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   call fails because you are on a plane, the chain advances to Ollama and
   stays there for the rest of the run.
 - **Verbatim grounding.** Quote-checked claims, numeric cross-checks, and
-  metric-conversion detection. Unverifiable claims are dropped before writing.
+  metric-conversion detection. Unverifiable claims are dropped before writing,
+  and a quotation in the article that no verified source quote contains is
+  reported.
 - **Semantic second gate (opt-in).** `--second-gate` runs each verified claim
   past a local model that judges whether its quote actually *supports* it — the
   one thing verbatim matching cannot check. Strictly additive and fail-open: it
@@ -248,8 +250,10 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   not merely requested.
 - **Surgical review.** `--review` asks for exact find/replace edits, applies
   only the unique non-overlapping ones, and re-checks the rules before saving.
-  An edit that adds a number no verified claim contains is always rejected,
-  whatever `--strict-numbers` says.
+  The editor sees the verified claims and your draft, never the source text.
+  An edit that adds a number no verified claim contains, or a quotation no
+  verified source quote contains, is always rejected, whatever
+  `--strict-numbers` says.
 - **Publish-ready sets.** Body, frontmatter and combined document, written
   side by side and regenerable without losing a single curated field.
 - **Fast where it counts.** A 62-page paper is read and sectioned in ~110 ms
@@ -503,7 +507,11 @@ draft is exactly what the ledger was verified against or has been edited
 since. Point it at any file of a set — the body, the final document, or the
 manifest — and it finds the rest by the day-folder layout. When the sources
 are still on the machine it hashes them too; when they are not, it says so and
-still checks the article. It exits non-zero if the article, the ledger or a
+still checks the article. The manifest records each source relative to its own
+folder, so it does not carry your home directory, and `--verify` resolves it
+from there; a manifest from before 0.0.49 holds absolute paths, which still
+resolve. A source that is not a regular file, or is over 1 GiB, is refused by
+name rather than read. It exits non-zero if the article, the ledger or a
 source no longer matches.
 
 When a signed `.c2pa` credential sits beside the set and `c2patool` is

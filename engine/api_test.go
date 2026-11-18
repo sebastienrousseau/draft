@@ -291,3 +291,76 @@ func TestNewEngineDispatchesAPINames(t *testing.T) {
 		t.Error("NewEngine must not build an unknown api provider")
 	}
 }
+
+// TestAPIRefusesCrossHostRedirect pins S-L7. The standard library drops
+// Authorization on a redirect to another domain but forwards custom headers
+// such as x-api-key, and a 307 or 308 also replays the prompt body. A host
+// reached only by following a redirect must not receive either.
+func TestAPIRefusesCrossHostRedirect(t *testing.T) {
+	for _, tc := range []struct{ name, env, header string }{
+		{"api:anthropic", "ANTHROPIC_API_KEY", "x-api-key"},
+		{"api:openai", "OPENAI_API_KEY", "Authorization"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.env, "secret-key")
+			var leaked string
+			var hits int
+			other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hits++
+				leaked = r.Header.Get(tc.header)
+				io.WriteString(w, `{}`)
+			}))
+			defer other.Close()
+			first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, other.URL+"/v1", http.StatusTemporaryRedirect)
+			}))
+			defer first.Close()
+
+			a := apiEngineTo(t, tc.name, first.URL, config.Config{})
+			_, err := a.Generate(context.Background(), Request{Prompt: "x"})
+			if err == nil || !strings.Contains(err.Error(), "redirect") {
+				t.Errorf("cross-host redirect error = %v, want a refused redirect", err)
+			}
+			if hits != 0 || leaked != "" {
+				t.Errorf("second host got %d request(s), %s = %q", hits, tc.header, leaked)
+			}
+		})
+	}
+}
+
+// TestAPIFollowsSameHostRedirect keeps a redirect within the endpoint's own
+// origin working, since it hands the key to no one new.
+func TestAPIFollowsSameHostRedirect(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "secret-key")
+	var gotKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/old" {
+			http.Redirect(w, r, "/new", http.StatusPermanentRedirect)
+			return
+		}
+		gotKey = r.Header.Get("x-api-key")
+		io.WriteString(w, `{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{}}`)
+	}))
+	defer srv.Close()
+	a := apiEngineTo(t, "api:anthropic", srv.URL+"/old", config.Config{})
+	res, err := a.Generate(context.Background(), Request{Prompt: "x"})
+	if err != nil || res.Text != "ok" || gotKey != "secret-key" {
+		t.Errorf("same-host redirect: text=%q key=%q err=%v", res.Text, gotKey, err)
+	}
+}
+
+// TestSameOriginRedirectCap stops a same-host redirect loop, as the default
+// policy the client replaces would have.
+func TestSameOriginRedirectCap(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "https://api.example/v1", nil)
+	via := make([]*http.Request, maxAPIRedirects)
+	for i := range via {
+		via[i] = r
+	}
+	if err := sameOriginRedirect(r, via); err == nil {
+		t.Error("a request past the redirect limit should be refused")
+	}
+	if err := sameOriginRedirect(r, via[:1]); err != nil {
+		t.Errorf("a first same-origin redirect should be allowed: %v", err)
+	}
+}

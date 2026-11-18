@@ -34,6 +34,23 @@ jobs:
           cache: true
       - name: Install PDF tooling
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Install c2patool (Linux)
+        # The live C2PA tests skip without c2patool, so CI never ran them.
+        # The release binary is pinned by version and SHA-256.
+        if: runner.os == 'Linux'
+        env:
+          C2PATOOL_VERSION: "0.27.23"
+          C2PATOOL_SHA256: "7b8a09f85eeb4c8fe96ce00ffb6985209ebbb05fc39d6c13224a8b33547ba2a4"
+        run: |
+          archive="$RUNNER_TEMP/c2patool.tar.gz"
+          curl -fsSL -o "$archive" "https://github.com/contentauth/c2pa-rs/releases/download/c2patool-v${C2PATOOL_VERSION}/c2patool-v${C2PATOOL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${C2PATOOL_SHA256}  $archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/c2patool"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/c2patool"
+          bin=$(find "$RUNNER_TEMP/c2patool" -type f -name c2patool | head -n 1)
+          test -n "$bin"
+          dirname "$bin" >> "$GITHUB_PATH"
+          "$bin" --version
       - name: Verify formatting
         run: test -z "$(gofmt -s -l .)"
       - name: Vet
@@ -69,8 +86,40 @@ jobs:
       - name: Install PDF tooling (macOS)
         if: runner.os == 'macOS'
         run: brew install poppler
+      - name: Install c2patool (Linux)
+        # The live C2PA tests skip without c2patool, so CI never ran them.
+        # The release binary is pinned by version and SHA-256.
+        if: runner.os == 'Linux'
+        env:
+          C2PATOOL_VERSION: "0.27.23"
+          C2PATOOL_SHA256: "7b8a09f85eeb4c8fe96ce00ffb6985209ebbb05fc39d6c13224a8b33547ba2a4"
+        run: |
+          archive="$RUNNER_TEMP/c2patool.tar.gz"
+          curl -fsSL -o "$archive" "https://github.com/contentauth/c2pa-rs/releases/download/c2patool-v${C2PATOOL_VERSION}/c2patool-v${C2PATOOL_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${C2PATOOL_SHA256}  $archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/c2patool"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/c2patool"
+          bin=$(find "$RUNNER_TEMP/c2patool" -type f -name c2patool | head -n 1)
+          test -n "$bin"
+          dirname "$bin" >> "$GITHUB_PATH"
+          "$bin" --version
+      - name: Install c2patool (macOS)
+        if: runner.os == 'macOS'
+        run: brew install c2patool && c2patool --version
       - name: Test
         run: go test ./...
+      - name: Live C2PA tests ran
+        # A plain go test does not show skips, so an install that broke
+        # would quietly turn these tests off again.
+        if: runner.os != 'Windows'
+        run: |
+          log="$RUNNER_TEMP/c2pa-tests.log"
+          go test -count=1 -v ./internal/c2pa ./cmd/draft ./pipeline > "$log" 2>&1 || { cat "$log"; exit 1; }
+          if grep -E '_test\.go:[0-9]+: c2patool not installed' "$log"; then
+            echo "live C2PA tests skipped: c2patool is not on PATH"
+            exit 1
+          fi
+          grep -E -- '--- PASS: Test[A-Za-z]*(Live|Signature)' "$log"
 
   lint:
     runs-on: ubuntu-latest

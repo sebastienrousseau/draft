@@ -79,6 +79,7 @@ func main() {
 | `ContainsEmoji`    | `func(s string) bool`                                                     | Pictographic or symbol emoji                                   |
 | `EndsSentence`     | `func(tail string) bool`                                                  | Whether trailing text closes on sentence-ending punctuation    |
 | `LooksLikeArticle` | `func(s string) bool`                                                     | Whether a string resembles a Markdown article body             |
+| `UnsafeMarkup`     | `func(md string) []string`                                                | HTML and URLs that would run script on a rendered site         |
 
 ## Errors versus warnings
 
@@ -88,8 +89,16 @@ the pipeline runs both.
 
 `Errors` checks the structural markers from [`rules`](../rules) (a `# ` title
 first, `## ` sections, the post-lead aside, the executive summary), unfilled
-skeleton placeholders, **both** word-count bounds, emoji, and banned words and
-phrases in every inflection.
+skeleton placeholders, **both** word-count bounds, emoji, unsafe markup, and
+banned words and phrases in every inflection.
+
+Unsafe markup is what a Jekyll or kramdown site would run: `script`, `iframe`,
+`object`, `embed`, `style`, `base`, `meta`, `link` and `form` elements, event
+handler attributes in HTML or a kramdown attribute list, and `javascript:`,
+`vbscript:` or `data:` URLs in links, images, reference definitions, autolinks
+and URL attributes, entity-encoded or not. A quote is verbatim, so a source can
+supply any of these; the draft goes back to the writer rather than having the
+quote rewritten.
 
 Both bounds matter: the writing prompt asks for `MinWords`–`MaxWords` and
 `rules` declares that band for a finished draft, so checking only the floor

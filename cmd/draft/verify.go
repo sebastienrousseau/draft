@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/sebastienrousseau/draft/frontmatter"
 	"github.com/sebastienrousseau/draft/internal/brand"
@@ -84,7 +83,9 @@ func loadSet(path string) (report provenance.CheckReport, bodyPath, manifestPath
 	dayRoot := filepath.Dir(filepath.Dir(manifestPath))
 	stem := strings.TrimSuffix(filepath.Base(manifestPath), "-c2pa.json")
 	ledger := findLedger(dayRoot, stem, manifest)
-	report = provenance.CheckArticle(body+"\n", manifest, ledger, resolveSourceDigest)
+	resolve, refused := sourceResolver(manifestPath)
+	report = provenance.CheckArticle(body+"\n", manifest, ledger, resolve)
+	err = refused()
 	return
 }
 
@@ -136,12 +137,7 @@ func ownsLedger(name, stem string, sources []provenance.Source) bool {
 	for i, s := range sources {
 		paths[i] = s.Path
 	}
-	date, ok := strings.CutSuffix(name, "-"+pipeline.LedgerStem(paths)+pipeline.LedgerSuffix)
-	if !ok {
-		return false
-	}
-	_, err := time.Parse("2006-01-02", date)
-	return err == nil
+	return pipeline.IsLedgerFor(name, paths)
 }
 
 // runVerify checks an article against the provenance written beside it and
@@ -235,21 +231,6 @@ func readBodyOrFinal(bodyPath, givenPath string) (string, error) {
 		return strings.TrimSpace(body), nil
 	}
 	return "", fmt.Errorf("cannot read the article body at %s", bodyPath)
-}
-
-// resolveSourceDigest hashes a source file if it is still where the manifest
-// recorded it, so --verify can confirm the inputs as well as the output.
-func resolveSourceDigest(path string) (string, bool) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", false
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", false
-	}
-	return hex.EncodeToString(h.Sum(nil)), true
 }
 
 func printVerifyReport(w io.Writer, path, manifestPath string, r provenance.CheckReport) {

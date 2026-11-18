@@ -55,6 +55,22 @@ func Errors(md string) []string {
 // — so the common case pays nothing for the configurability. A custom style
 // compiles its banned-word matcher on demand.
 func ErrorsWithStyle(md string, style rules.Style) []string {
+	errs := structureErrors(md)
+	if e := lengthError(md, style); e != "" {
+		errs = append(errs, e)
+	}
+	if ContainsEmoji(md) {
+		errs = append(errs, "contains emoji")
+	}
+	if unsafe := UnsafeMarkup(md); len(unsafe) > 0 {
+		errs = append(errs, "contains unsafe markup: "+strings.Join(unsafe, ", "))
+	}
+	return append(errs, vocabularyErrors(md, style)...)
+}
+
+// structureErrors reports the parts of a grounded article's shape that are
+// missing or left as skeleton.
+func structureErrors(md string) []string {
 	var errs []string
 	if !strings.HasPrefix(md, rules.H1Prefix) {
 		errs = append(errs, "body-only mode must start with a Markdown H1")
@@ -71,28 +87,39 @@ func ErrorsWithStyle(md string, style rules.Style) []string {
 	if placeholderPat.MatchString(md) {
 		errs = append(errs, "contains an unfilled skeleton placeholder (title, heading, or thesis)")
 	}
-	// Both bounds, not just the floor. The writing prompt asks for
-	// MinWords–MaxWords and the style declares that as the band for a finished
-	// draft, but only the minimum was ever checked — so a runaway draft was
-	// told one thing and held to another.
-	if w := WordCount(md); w < style.MinWords {
-		errs = append(errs, fmt.Sprintf("article is %d words; minimum is %d", w, style.MinWords))
-	} else if w > style.MaxWords {
-		errs = append(errs, fmt.Sprintf("article is %d words; maximum is %d", w, style.MaxWords))
+	return errs
+}
+
+// lengthError reports a word count outside the style's band, or "".
+//
+// Both bounds, not just the floor. The writing prompt asks for
+// MinWords–MaxWords and the style declares that as the band for a finished
+// draft, but only the minimum was ever checked — so a runaway draft was
+// told one thing and held to another.
+func lengthError(md string, style rules.Style) string {
+	w := WordCount(md)
+	if w < style.MinWords {
+		return fmt.Sprintf("article is %d words; minimum is %d", w, style.MinWords)
 	}
-	if ContainsEmoji(md) {
-		errs = append(errs, "contains emoji")
+	if w > style.MaxWords {
+		return fmt.Sprintf("article is %d words; maximum is %d", w, style.MaxWords)
 	}
-	// Scan the writer's own prose only. Code and quoted spans are exempt
-	// because enforceStyle refuses to rewrite them — attributing different
-	// words to a source is worse than a cliché — and a rule the repair pass
-	// cannot satisfy would otherwise drive an unfixable rewrite loop.
-	//
-	// The spans are located only once something has been found to exonerate.
-	// Locating them costs a scan of the whole document, and the overwhelming
-	// majority of drafts reach here with no banned vocabulary at all — the
-	// repair pass has already removed it — so paying up front made every
-	// clean draft subsidise the rare dirty one.
+	return ""
+}
+
+// vocabularyErrors reports banned words and phrases in the writer's prose.
+//
+// Scan the writer's own prose only. Code and quoted spans are exempt
+// because enforceStyle refuses to rewrite them — attributing different
+// words to a source is worse than a cliché — and a rule the repair pass
+// cannot satisfy would otherwise drive an unfixable rewrite loop.
+//
+// The spans are located only once something has been found to exonerate.
+// Locating them costs a scan of the whole document, and the overwhelming
+// majority of drafts reach here with no banned vocabulary at all — the
+// repair pass has already removed it — so paying up front made every
+// clean draft subsidise the rare dirty one.
+func vocabularyErrors(md string, style rules.Style) []string {
 	lowered := strings.ToLower(md)
 	scanner := defaultBannedScanner
 	bannedPhrases := rules.BannedPhrases
@@ -108,33 +135,44 @@ func ErrorsWithStyle(md string, style rules.Style) []string {
 		}
 	}
 
+	var errs []string
 	if len(wordHits) > 0 || len(phrases) > 0 {
 		// Spans are located in the lowered text so offsets agree: lowercasing
 		// cannot move a quote or a backtick, which are all the delimiters
 		// involved.
 		protected := mdspan.Protected(lowered)
-		var words []string
-		for _, loc := range wordHits {
-			if mdspan.Covers(protected, loc[0]) {
-				continue
-			}
-			words = append(words, lowered[loc[0]:loc[1]])
-		}
-		if len(words) > 0 {
+		if words := unprotectedWords(lowered, wordHits, protected); len(words) > 0 {
 			errs = append(errs, "contains banned words: "+strings.Join(dedupeStrings(words), ", "))
 		}
-		kept := phrases[:0]
-		for _, p := range phrases {
-			if indexOutsideProtected(lowered, p, protected) >= 0 {
-				kept = append(kept, p)
-			}
-		}
-		phrases = kept
+		phrases = unprotectedPhrases(lowered, phrases, protected)
 	}
 	if len(phrases) > 0 {
 		errs = append(errs, "contains banned phrases: "+strings.Join(phrases, ", "))
 	}
 	return errs
+}
+
+// unprotectedWords is the banned-word hits that fall outside a protected span.
+func unprotectedWords(lowered string, hits [][]int, protected [][]int) []string {
+	var words []string
+	for _, loc := range hits {
+		if mdspan.Covers(protected, loc[0]) {
+			continue
+		}
+		words = append(words, lowered[loc[0]:loc[1]])
+	}
+	return words
+}
+
+// unprotectedPhrases is the banned phrases that occur outside a protected span.
+func unprotectedPhrases(lowered string, phrases []string, protected [][]int) []string {
+	kept := phrases[:0]
+	for _, p := range phrases {
+		if indexOutsideProtected(lowered, p, protected) >= 0 {
+			kept = append(kept, p)
+		}
+	}
+	return kept
 }
 
 func wordBoundaryContains(s, term string) bool {

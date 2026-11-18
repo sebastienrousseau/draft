@@ -22,25 +22,25 @@ func TestLedgersDoNotCollideAcrossJobs(t *testing.T) {
 	a := Job{Sources: []string{filepath.Join(dir, "router-s.pdf")}}
 	b := Job{Sources: []string{filepath.Join(dir, "dense-baseline.pdf")}}
 
-	pathA, pathB := ledgerPathFor(dir, a), ledgerPathFor(dir, b)
+	pathA, pathB := ledgerName(a, "0a0a0a0a"), ledgerName(b, "0a0a0a0a")
 	if pathA == pathB {
 		t.Fatalf("two different sources produced the same ledger path: %s", pathA)
 	}
 	for _, p := range []string{pathA, pathB} {
 		if !strings.HasSuffix(p, "-verified-claim-ledger.md") {
-			t.Errorf("unexpected ledger name %q", filepath.Base(p))
+			t.Errorf("unexpected ledger name %q", p)
 		}
 	}
 
 	// A merged job must not collide with a single-source job starting from the
 	// same file.
 	merged := Job{Sources: []string{a.Sources[0], b.Sources[0]}}
-	if ledgerPathFor(dir, merged) == pathA {
+	if ledgerName(merged, "0a0a0a0a") == pathA {
 		t.Error("a merged job collided with a single-source job")
 	}
 
 	// A job with no sources still yields a usable name rather than panicking.
-	if got := ledgerPathFor(dir, Job{}); got == "" {
+	if got := ledgerName(Job{}, ""); got == "" {
 		t.Error("a source-less job produced no ledger path")
 	}
 }

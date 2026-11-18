@@ -23,7 +23,9 @@ allowed to use when it writes the article. The result is checked against house
 rules and against the ledger before it is saved.
 
 The order matters: **verification happens before writing, not after.** A model
-that never sees an unverified fact cannot repeat one.
+that never sees an unverified fact cannot repeat one. `--review` is held to the
+same rule: its editor sees the ledger and the draft, never the section text,
+because an edit may correct a fact.
 
 ## Package graph
 
@@ -101,7 +103,12 @@ pinned by a test.
    ever produce *fewer* claims, never an ungrounded one.
 4. **Nothing rewrites text inside a quotation.** The house-vocabulary repair
    runs only outside code and quoted spans (`internal/mdspan`); rewriting there
-   would attribute words to a source that never wrote them.
+   would attribute words to a source that never wrote them. A quoted span is
+   one in double or single quotes, straight or curly, or guillemets, up to a
+   paragraph break; an apostrophe opens none. The same spans are checked
+   against the verified source quotes (`validate`), so the writer cannot
+   quote words no source wrote without a warning, and a `--review` edit that
+   adds such a quotation is rejected.
 5. **Untrusted text is fenced and never granted tools.** Source documents reach
    an agent in a nonce-delimited block, in an empty working directory, with no
    tool-granting flags.
@@ -110,6 +117,16 @@ pinned by a test.
    All three are staged and flushed before any is renamed into place, and a
    failed save removes the whole set, claim included.
    `TestFailedSaveLeavesNoPartialSet`.
+
+What the invariants do not cover, on purpose: none of them checks that a
+claim *means* what its quote says. Invariant 1 is about wording, so a real
+quote attached to a claim that overstates or reverses it, or a quote that is
+misleading out of context, passes. The semantic second gate
+([ADR 0009](adr/0009-optional-semantic-second-gate.md)) is the only check on
+meaning, and it is opt-in and fails open, so it narrows this gap without
+closing it. This is a residual risk, recorded in
+[SECURITY.md](../SECURITY.md#security-design); a person reviewing the draft
+against the paper is the control for it.
 
 ## The two seams
 

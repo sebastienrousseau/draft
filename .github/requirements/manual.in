@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Sebastien Rousseau
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# The rendered manual. Pinned with hashes in manual.txt by
+# `make requirements`; the docs workflow deploys what these build.
+mkdocs
+mkdocs-material

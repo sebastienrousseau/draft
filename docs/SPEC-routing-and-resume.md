@@ -199,6 +199,13 @@ keep only the last one. This must be fixed before resume can key on it.
 **Fix:** `<date>-<slug of the first source stem>-verified-claim-ledger.md`,
 reusing the existing `slugify`. Also add a `TestLedgersDoNotCollideAcrossJobs`.
 
+**Since 0.0.49** the name also carries a token drawn once per run,
+`<date>-<slug>.<token>-verified-claim-ledger.md`, and the ledger is written by
+rename. Two runs of one paper on one day used to share a file, and the first
+to succeed deleted the ledger the other was still using. Resume takes the
+newest of today's ledgers for the sources (the untokened name included),
+re-verifies it as below, and writes its own.
+
 ### Design
 
 ```text

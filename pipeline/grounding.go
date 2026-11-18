@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/sebastienrousseau/draft/claims"
 	"github.com/sebastienrousseau/draft/engine"
@@ -56,8 +55,12 @@ func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Se
 		return r.extractClaims(ctx, job, sections, outputDir, xchain)
 	}
 
-	ledgerPath := ledgerPathFor(outputDir, job)
-	data, err := os.ReadFile(ledgerPath)
+	ledgerPath, found := resumableLedger(outputDir, job)
+	var data []byte
+	err := os.ErrNotExist
+	if found {
+		data, err = os.ReadFile(ledgerPath)
+	}
 	if err != nil {
 		// No ledger to resume from is not an error: fall through to a normal
 		// run rather than refusing to work.
@@ -79,7 +82,10 @@ func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Se
 	if dropped > 0 {
 		r.warn(fmt.Sprintf("dropped %d resumed claim(s) the sources no longer support", dropped))
 	}
-	return r.finishLedger(ctx, ledgerPath, records, dropped)
+	// The run writes the ledger it uses under its own name rather than
+	// rewriting the one it read, which another resume may be reading too.
+	r.resumedFrom = ledgerPath
+	return r.finishLedger(ctx, r.ownLedgerPath(outputDir, job), records, dropped)
 }
 
 // finishLedger is the end of the claims gate, shared by a fresh extraction and
@@ -97,68 +103,6 @@ func (r *Runner) finishLedger(ctx context.Context, path string, records []claims
 	records = r.secondGate(ctx, records)
 	r.saveLedger(path, records, dropped)
 	return records, dropped, nil
-}
-
-// saveLedger writes the ledger the article is about to be written from and
-// records its digest for provenance. A resumed run rewrites the file too:
-// the records it kept may be fewer than the file held, and the manifest's
-// ledger_sha256 must name the ledger that was used, not the one on disk.
-//
-// Report what actually happened. Logging "claims saved" unconditionally
-// after a discarded write tells the user a fact-checking artefact exists
-// when it may not.
-func (r *Runner) saveLedger(path string, records []claims.Record, dropped int) {
-	text := claims.RenderLedger(records, dropped) + "\n"
-	r.ledgerDigest = sha256Hex(text)
-	r.ledgerPath = path
-	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
-		r.ledgerPath = ""
-		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
-		return
-	}
-	r.log("claims saved to " + shortPath(r.cfg, path))
-}
-
-// ledgerPathFor names the verified-claim ledger for one job.
-//
-// The name is derived from the job's sources, not just the date. A date-only
-// name meant a second paper drafted the same day silently overwrote the first
-// one's ledger — losing the fact-checking artefact --keep-artifacts exists to
-// preserve, and leaving nothing for --resume to key on. The source count is
-// included so a --merge job cannot collide with a single-source job that
-// happens to start from the same file.
-func ledgerPathFor(outputDir string, job Job) string {
-	return filepath.Join(outputDir, time.Now().Format("2006-01-02")+"-"+LedgerStem(job.Sources)+LedgerSuffix)
-}
-
-// LedgerSuffix ends every verified-claim ledger's file name.
-const LedgerSuffix = "-verified-claim-ledger.md"
-
-// LedgerStem is the part of a ledger's name, between the date and
-// LedgerSuffix, that identifies the job's sources. It is exported so --verify
-// can tell a set's own ledger from another paper's in the same day folder.
-func LedgerStem(sources []string) string {
-	stem := "sources"
-	if len(sources) > 0 {
-		base := filepath.Base(sources[0])
-		stem = slugify(strings.TrimSuffix(base, filepath.Ext(base)))
-	}
-	if len(sources) > 1 {
-		stem = fmt.Sprintf("%s-plus-%d", stem, len(sources)-1)
-	}
-	return stem
-}
-
-// cleanupArtifacts removes the scratch claim ledger after a successful draft so
-// the dated folder holds only finished articles. The --keep-artifacts flag
-// preserves it for fact-checking.
-func (r *Runner) cleanupArtifacts() {
-	if r.cfg.KeepArtifacts || r.ledgerPath == "" {
-		return
-	}
-	if err := os.Remove(r.ledgerPath); err == nil {
-		r.log("cleaned up claim ledger (use --keep-artifacts to keep it)")
-	}
 }
 
 // sections reads and splits every source file. A source that cannot be read is
@@ -214,8 +158,6 @@ func (r *Runner) sections(ctx context.Context, sources []string) ([]pdf.Section,
 // fails a parallel call is retried through the chain, so a mid-run provider drop
 // still degrades to Ollama.
 func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Section, outputDir string, xchain *chainState) ([]claims.Record, int, error) {
-	ledgerPath := ledgerPathFor(outputDir, job)
-	r.ledgerPath = ledgerPath
 	raw := make([]string, len(sections))
 
 	r.cacheHits.Store(0)
@@ -274,7 +216,7 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	}
 
 	records, dropped := r.assembleRecords(sections, raw)
-	return r.finishLedger(ctx, ledgerPath, records, dropped)
+	return r.finishLedger(ctx, r.ownLedgerPath(outputDir, job), records, dropped)
 }
 
 // ollamaExtractConcurrency caps how many extraction calls the local backend runs
