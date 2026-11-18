@@ -117,6 +117,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 type options struct {
 	flags                                                    config.Flags
 	showVersion, headless, jsonOut, dryRun                   bool
+	requireSignature                                         bool
 	clearCache, doctor, manPage, trustConfig                 bool
 	reviewPath, frontmatterPath, completionShell, verifyPath string
 	attestPath, reviewedBy, seoPath                          string
@@ -154,6 +155,7 @@ func newFlagSet(o *options, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&o.headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&o.jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&o.verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
+	fs.BoolVar(&o.requireSignature, "require-signature", false, "with --verify: fail a set that has no valid signed credential")
 	fs.StringVar(&o.seoPath, "seo", "", "check final articles against Google Search guidance, and exit")
 	fs.StringVar(&o.attestPath, "attest", "", "record that --reviewed-by reviewed an article as it now stands, and exit")
 	fs.StringVar(&o.reviewedBy, "reviewed-by", "", "with --attest: the person taking editorial responsibility")
@@ -195,9 +197,9 @@ func runInfo(o options, stdout, stderr io.Writer) (code int, done bool) {
 func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 	switch {
 	case o.verifyPath != "" && o.jsonOut:
-		return runVerifyJSON(o.verifyPath, stdout, stderr), true
+		return runVerifyJSON(o.verifyPath, verifyOptions{requireSignature: o.requireSignature}, stdout, stderr), true
 	case o.verifyPath != "":
-		return runVerify(o.verifyPath, stdout, stderr), true
+		return runVerify(o.verifyPath, verifyOptions{requireSignature: o.requireSignature}, stdout, stderr), true
 	case o.seoPath != "":
 		return runSEO(o, stdout, stderr), true
 	case o.attestPath != "":
@@ -406,6 +408,7 @@ var flagHelp = [][2]string{
 	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
 	{"--verify <file>", "check an article against its provenance, and exit"},
+	{"--require-signature", "with --verify: fail a set with no valid signed credential"},
 	{"--seo <file>...", "check final articles against Google Search guidance, and exit"},
 	{"--attest <file>", "record a human review of an article as it stands, and exit"},
 	{"--reviewed-by <id>", "with --attest: who takes editorial responsibility"},
@@ -424,17 +427,23 @@ var flagHelp = [][2]string{
 // usage prints the branded help: the logo and wordmark, then coral section
 // headings over the reference text. Colour is dropped automatically when the
 // output is not a terminal, and DRAFT_SHOW_LOGO=0 suppresses the logo.
-func usage(w io.Writer) {
-	head := func(s string) string { return brand.Title.Render(s) }
-	flag := func(s string) string { return brand.Accent.Render(s) }
-	dim := func(s string) string { return brand.Help.Render(s) }
-
+// usageBanner prints the logo, or the wordmark when the logo is off, and the
+// one-line description that opens --help.
+func usageBanner(w io.Writer) {
 	if brand.ShowLogo() {
 		fmt.Fprint(w, brand.Logo(false))
 	} else {
 		fmt.Fprint(w, "  "+brand.Accent.Render(brand.Wordmark)+"  "+brand.Subtle.Render(brand.Tagline)+"\n\n")
 	}
-	fmt.Fprintf(w, "  %s\n\n", dim("draft "+version+" — research PDFs into grounded Markdown drafts"))
+	fmt.Fprintf(w, "  %s\n\n", brand.Help.Render("draft "+version+" — research PDFs into grounded Markdown drafts"))
+}
+
+func usage(w io.Writer) {
+	head := func(s string) string { return brand.Title.Render(s) }
+	flag := func(s string) string { return brand.Accent.Render(s) }
+	dim := func(s string) string { return brand.Help.Render(s) }
+
+	usageBanner(w)
 
 	fmt.Fprintf(w, "%s\n  draft [flags] <source> [more-sources...]\n\n", head("USAGE"))
 	fmt.Fprintf(w, "  %s\n  %s\n\n",
@@ -471,25 +480,13 @@ func usage(w io.Writer) {
 	}
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "%s\n", head("ENVIRONMENT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n\n",
-		dim("DRAFT_ENGINE, DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL,"),
-		dim("DRAFT_EXTRACT_MODEL, DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT,"),
-		dim("DRAFT_WRITE_RETRIES, DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY,"),
-		dim("DRAFT_DRAFTS_DIR, DRAFT_SOURCES_DIR, DRAFT_STRICT_NUMBERS,"),
-		dim("DRAFT_CACHE_DIR, DRAFT_NO_CACHE, DRAFT_CONFIG, DRAFT_NO_CONFIG,"),
-		dim("DRAFT_SITE_* (publisher identity), DRAFT_SHOW_LOGO=0, OLLAMA_HOST"))
-
-	fmt.Fprintf(w, "%s\n", head("CONFIG"))
-	fmt.Fprintf(w, "  %s\n  %s\n\n",
-		dim("~/.config/draft/config.toml (user), or a draft.toml (project) once trusted with"),
-		dim("--trust-config, sets defaults. Environment variables and flags override it."))
-
-	fmt.Fprintf(w, "%s\n", head("OUTPUT"))
-	fmt.Fprintf(w, "  %s\n  %s\n  %s\n\n",
-		dim("Each draft is saved as a set under ~/Drop/Drafts/YYYY-MM-DD/:"),
-		dim("source/<stem>-body.md, yaml/<stem>-frontmatter.yaml, final/<stem>-final.md."),
-		dim("Scratch files are removed unless --keep-artifacts."))
+	for _, s := range helpSections {
+		fmt.Fprintf(w, "%s\n", head(s.title))
+		for _, line := range s.lines {
+			fmt.Fprintf(w, "  %s\n", dim(line))
+		}
+		fmt.Fprintln(w)
+	}
 
 	fmt.Fprintf(w, "%s\n  %s\n\n", head("REQUIREMENTS"),
 		dim("pdftotext (Poppler) for PDFs, textutil for DOCX, plus either a session CLI (online) or a running Ollama server (offline).\n  "+

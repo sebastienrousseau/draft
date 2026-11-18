@@ -14,11 +14,13 @@
 // hold a subprocess open forever.
 //
 // The pool is generic over a Session — anything that can report whether it is
-// still alive and can be closed — so it is exercised in tests with a fake, and
-// the engine's ACP agent connection plugs in behind a small adapter. Wiring it
-// into the ACP engine, and validating the lifecycle against a live agent, is a
-// separate step; this package is the concurrency core, complete and tested on
-// its own.
+// still alive and can be closed — so it is exercised in tests with a fake. The
+// engine's ACP agent connection satisfies it directly and is pooled through it
+// by the ACP engine.
+//
+// Lock order is entry before pool, never the reverse: Get holds an entry's
+// lock across a slow start and then consults the pool map, so anything that
+// held the pool lock while waiting for an entry would deadlock against it.
 package sessionpool
 
 import (
@@ -28,8 +30,7 @@ import (
 )
 
 // Session is a reusable, closable backend process. draft's ACP agent
-// connection satisfies it behind an adapter (its alive/close become
-// Alive/Close).
+// connection satisfies it.
 type Session interface {
 	// Alive reports whether the session is still usable. A process that has
 	// exited returns false, and the pool starts a replacement.
@@ -90,12 +91,29 @@ func New(idle time.Duration, opts ...Option) *Pool {
 // matching Release, so it cannot be reaped while a caller holds it. A start
 // error is returned and leaves the key with no live session.
 func (p *Pool) Get(ctx context.Context, key string, start StartFunc) (Session, error) {
-	e := p.entryFor(key)
+	for {
+		e := p.entryFor(key)
 
-	// Hold only this key's lock across the (possibly slow) start, so other
-	// keys are unaffected and concurrent borrowers of this key share one start.
-	e.mu.Lock()
-	defer e.mu.Unlock()
+		// Hold only this key's lock across the (possibly slow) start, so other
+		// keys are unaffected and concurrent borrowers of this key share one
+		// start.
+		e.mu.Lock()
+		// Reap or CloseAll may have dropped this entry between the lookup and
+		// the lock. A session started on a dropped entry is in no map, so
+		// nothing would ever reap or close it: look the key up again.
+		if !p.current(key, e) {
+			e.mu.Unlock()
+			continue
+		}
+		sess, err := p.borrow(ctx, e, start)
+		e.mu.Unlock()
+		return sess, err
+	}
+}
+
+// borrow marks e in use, first replacing its session if there is none or it
+// has died. The caller holds e.mu.
+func (p *Pool) borrow(ctx context.Context, e *entry, start StartFunc) (Session, error) {
 	if e.sess == nil || !e.sess.Alive() {
 		if e.sess != nil {
 			_ = e.sess.Close()
@@ -110,6 +128,13 @@ func (p *Pool) Get(ctx context.Context, key string, start StartFunc) (Session, e
 	e.inUse++
 	e.lastUsed = p.now()
 	return e.sess, nil
+}
+
+// current reports whether e is still the map's entry for key.
+func (p *Pool) current(key string, e *entry) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.entries[key] == e
 }
 
 // Release returns a session borrowed with Get. After the last borrower
@@ -133,21 +158,29 @@ func (p *Pool) Release(key string) {
 // Reap closes and drops every session that is not in use and has been idle for
 // at least the pool's idle interval. It returns how many it closed. Call it
 // periodically (a ticker) to bound how long an unused process lingers.
+//
+// An entry whose lock is held is skipped rather than waited for: someone is
+// borrowing it or starting its session, so it is not idle, and waiting would
+// stall every Reap caller behind a start that can take minutes.
 func (p *Pool) Reap() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	reaped := 0
-	for key, e := range p.entries {
-		e.mu.Lock()
+	var doomed []Session
+	for key, e := range p.snapshot() {
+		if !e.mu.TryLock() {
+			continue
+		}
 		if e.sess != nil && e.inUse == 0 && p.now().Sub(e.lastUsed) >= p.idle {
-			_ = e.sess.Close()
+			doomed = append(doomed, e.sess)
 			e.sess = nil
-			delete(p.entries, key)
-			reaped++
+			p.drop(key, e)
 		}
 		e.mu.Unlock()
 	}
-	return reaped
+	// Close outside every lock: closing an agent waits for its process to
+	// exit, and nothing else should queue behind that.
+	for _, s := range doomed {
+		_ = s.Close()
+	}
+	return len(doomed)
 }
 
 // CloseAll closes every live session and empties the pool, regardless of idle
@@ -155,24 +188,28 @@ func (p *Pool) Reap() int {
 // borrowing when it runs, but it does not wait for borrowers.
 func (p *Pool) CloseAll() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	for key, e := range p.entries {
+	all := p.entries
+	p.entries = map[string]*entry{}
+	p.mu.Unlock()
+
+	var doomed []Session
+	for _, e := range all {
 		e.mu.Lock()
 		if e.sess != nil {
-			_ = e.sess.Close()
+			doomed = append(doomed, e.sess)
 			e.sess = nil
 		}
 		e.mu.Unlock()
-		delete(p.entries, key)
+	}
+	for _, s := range doomed {
+		_ = s.Close()
 	}
 }
 
 // Len reports how many keys currently hold a live session.
 func (p *Pool) Len() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	n := 0
-	for _, e := range p.entries {
+	for _, e := range p.snapshot() {
 		e.mu.Lock()
 		if e.sess != nil {
 			n++
@@ -180,6 +217,28 @@ func (p *Pool) Len() int {
 		e.mu.Unlock()
 	}
 	return n
+}
+
+// snapshot copies the entry map, so callers can visit entries without holding
+// the pool lock while they take an entry's.
+func (p *Pool) snapshot() map[string]*entry {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make(map[string]*entry, len(p.entries))
+	for k, e := range p.entries {
+		out[k] = e
+	}
+	return out
+}
+
+// drop removes e from the map if it is still the entry for key. The caller
+// holds e.mu, which is the permitted order.
+func (p *Pool) drop(key string, e *entry) {
+	p.mu.Lock()
+	if p.entries[key] == e {
+		delete(p.entries, key)
+	}
+	p.mu.Unlock()
 }
 
 // entryFor returns the entry for key, creating an empty one under the pool

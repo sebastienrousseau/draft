@@ -6,6 +6,104 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- `--verify --json` prints a record for a set it cannot load, with
+  `verified: false` and an `error` field, instead of printing nothing on
+  stdout. A program reading the record no longer has to tell "unverified"
+  from "no output". `error` is an addition within
+  `draft.verification-record/v1`.
+- `--require-signature`, with `--verify`, fails a set that has no valid,
+  bound signed credential, or whose credential could not be checked because
+  `c2patool` is not installed. Without it an unsigned set still verifies on
+  its digests. `--verify --json` records it as `signature.required`, and
+  `provenance.SignatureState.Acceptable` is the verdict both use.
+
+### Security
+
+- `--resume` now verifies a saved ledger to the same standard as a fresh
+  run. Each record is checked against one section rather than all of them
+  joined, so a quote running from the end of one section, or one merged
+  paper, into the start of the next no longer passes while occurring in no
+  source. The resumed records then go through de-duplication and the
+  opt-in second gate, which resume used to skip, and the ledger is
+  rewritten with the records actually kept, so the manifest's
+  `ledger_sha256` names it; a resumed run used to record no digest.
+  `claims.ParseLedgerSections` is the new per-section reader.
+- A claim's numbers are checked against its quote more strictly. Every
+  comma used to be dropped, so a European decimal `1,5` in a quote grounded
+  the claim `15`, and a citation list `[1,2,3]` grounded `123`; only a
+  well-formed Western (`1,000,000`) or Indian (`10,00,000`) thousands group
+  now loses its commas. Digits in other scripts, such as Arabic-Indic or
+  Devanagari, are read as numbers instead of being skipped, so a claim
+  written in them no longer escapes the check. The same reading applies to
+  the article's number check and to attribution.
+- `--review` always rejects an edit that adds a number no verified claim
+  contains, whatever `--strict-numbers` says. "Factual correction" is an
+  allowed edit reason, so an invented figure could otherwise reach your file.
+  Review compares the draft before and after the edit, number by number, so
+  a figure already in the draft is reported, not enforced, and the noise that
+  keeps `--strict-numbers` opt-in for a whole article does not arise.
+- `--verify` reports a signing certificate as trusted only when `c2patool`
+  says it is, by the `signingCredential.trusted` code or the overall state
+  `Trusted`. A report that validated the signature and said nothing about
+  the certificate, as `c2patool` does with no trust list, was shown as
+  "valid and trusted".
+- `--verify` fails a signed credential that does not vouch for the manifest
+  beside the article. The signature covers the article's bytes, but the
+  source and ledger digests, the review and the AI disclosure live in the
+  unsigned manifest, so any of them could be rewritten, or a review by
+  anyone added, while the signature still verified as "valid and trusted".
+  draft's three assertions must now equal the copies the credential signed,
+  which `c2patool` stores verbatim. The reason is shown, and recorded as
+  `signature.unbound` in `--verify --json`, an addition within v1.
+  Credentials draft has signed, before this release as well, still verify.
+- **A signed manifest records `signed: true` in its grounding assertion
+  (breaking: generated output)**, and
+  `--verify` fails a set whose manifest records a credential with none
+  beside it. Deleting the `.c2pa` file used to turn a signed set into one
+  that verified as never signed. Signing at run time and `--attest` both
+  write the marked manifest and the credential together, or neither, and
+  `--verify --json` gains `signature.expected`, an addition within v1.
+  Manifests written unsigned are unchanged, and a set signed before this
+  release still verifies as it did.
+
+### Fixed
+
+- A claim whose `TYPE` is `none` is kept with no type, instead of being
+  dropped. The extraction prompt tells the model to write `none` for a
+  field that does not apply, so doing as asked cost a verified claim, on
+  both the text and the JSON path. `STRENGTH: none` is still dropped: an
+  empty strength reaches the writer as no hedge, so a hedged claim would
+  read as settled.
+- ACP sessions: a call that looked up its agent session just as the idle
+  reaper or shutdown dropped it started a new agent no one would ever close,
+  leaving the process running after draft exited. The reaper also waited
+  behind an agent that was still starting, which can take minutes; it now
+  skips a session in use and closes agents outside its locks.
+- A provider that hits its own per-call timeout now fails over to the next
+  engine. The chain stopped on any error that wrapped
+  `context.DeadlineExceeded`, which an ACP agent's own timeout does, so one
+  hung agent ended the run with engines still untried. Only the caller's
+  own cancellation or deadline stops the chain now.
+- A provider CLI that times out, or whose run is cancelled, now fails with
+  an error wrapping `context.DeadlineExceeded` or `context.Canceled`
+  instead of the killed process's `signal: killed`, so a library caller can
+  tell a timeout from a broken provider with `errors.Is`.
+- An `ollama serve` that draft starts is put in a process group of its own,
+  on Unix, so pressing Ctrl-C to stop draft no longer stops the server it
+  left running for the next run.
+- `--num-ctx` and `--num-predict` are held to the same bounds as
+  `DRAFT_NUM_CTX` and `DRAFT_NUM_PREDICT` (512 and 1024 up to 1,048,576). A
+  value outside them, including a negative one, is ignored with a warning
+  instead of being sent to Ollama as asked.
+- `--help` lists every environment variable draft reads; eleven were
+  missing, among them `DRAFT_READER`, `DRAFT_STYLE`, `DRAFT_CALL_TIMEOUT`,
+  the per-stage `*_ENGINE` variables and the `DRAFT_C2PA_*` signing keys.
+  The manpage now prints the same list instead of its own copy, which
+  lacked three. A test reads the names from `config` and checks `--help`,
+  the manpage and the README against them.
+
 ## [0.0.47] - 2026-11-17
 
 ### Added

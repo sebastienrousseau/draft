@@ -88,6 +88,28 @@ func TestReviewAcceptsAGroundedEdit(t *testing.T) {
 	}
 }
 
+// --strict-numbers is off by default because the check is noisy on a whole
+// article. Review judges only what an edit introduced, so the noise is gone,
+// and an edit marked "factual correction" that invents a figure must not
+// reach the user's file whatever the flag says.
+func TestReviewRejectsAnInventedNumberWithoutStrictNumbers(t *testing.T) {
+	cfg := testConfig(t)
+	if cfg.StrictNumbers {
+		t.Fatal("fixture is wrong: the test is about the default policy")
+	}
+	draft := writeDraft(t)
+	eng := &fakeEngine{name: "fake", editResponse: editsJSON(t, surgicalEdit{
+		Find:    "The system reached a score on the test set.",
+		Replace: "The system reached a score on 9,400 test items.",
+		Reason:  "factual correction",
+	})}
+
+	_, errText, _ := drain(t, cfg, []engine.Engine{eng}, Job{Sources: []string{writeSource(t)}, ReviewPath: draft})
+	if !strings.Contains(errText, "numbers not found in any claim") {
+		t.Fatalf("an edit inventing a number was not rejected: %q", errText)
+	}
+}
+
 // Both write paths must run both gates. This is the parity assertion that
 // would have caught the review path skipping Faithfulness in the first place:
 // any article the write path would reject must also be rejected on review.

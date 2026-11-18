@@ -24,7 +24,13 @@ type Record struct {
 var (
 	blockSep     = regexp.MustCompile(`(?m)^---\s*$`)
 	danglingTail = regexp.MustCompile(`(?i)(?:,|;|\b(?:and|or|but|the|a|an|of|to|in|for|with|that|which|is|are|was|were))\s*$`)
-	numberPat    = regexp.MustCompile(`\d+(?:[.,]\d+)*`)
+	// numberPat uses \p{Nd} rather than \d, which is ASCII-only in RE2: a
+	// claim written in another script's digits would otherwise carry no
+	// numbers at all and skip the check that its numbers are in its quote.
+	numberPat = regexp.MustCompile(`\p{Nd}+(?:[.,]\p{Nd}+)*`)
+	// thousandsPat is a number whose commas only group digits — Western
+	// (1,000,000) or Indian (10,00,000) — and so may be dropped.
+	thousandsPat = regexp.MustCompile(`^(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?:\.\d+)?$`)
 	spacePat     = regexp.MustCompile(`\s+`)
 )
 
@@ -67,6 +73,7 @@ func Parse(text, source string) (records []Record, dropped int) {
 // is refused outright: see singleLine.
 func verifyOrRepair(rec Record, source string) (Record, bool) {
 	rec = singleLine(rec)
+	rec.Type = optional(rec.Type)
 	if spellsField(rec.Claim) {
 		return Record{}, false
 	}
@@ -79,6 +86,21 @@ func verifyOrRepair(rec Record, source string) (Record, bool) {
 		}
 	}
 	return Record{}, false
+}
+
+// optional returns "" for a TYPE the model marked as not applying. The
+// extraction prompt asks for "none" when a field does not apply, and Verify
+// accepts only an empty TYPE or a known one, so doing as asked used to cost
+// the whole claim.
+//
+// STRENGTH is deliberately not given the same reading: an empty strength
+// reaches the writer as no hedge at all, so a hedged claim marked "none"
+// would be written as settled. Dropping it is the safe failure.
+func optional(s string) string {
+	if strings.EqualFold(strings.TrimSpace(s), "none") {
+		return ""
+	}
+	return s
 }
 
 // ParseLedger reads back a ledger previously written by RenderLedger,
@@ -101,6 +123,44 @@ func ParseLedger(ledger, source string) (records []Record, dropped int) {
 		return nil, 0
 	}
 	return Parse(ledger[i:], source)
+}
+
+// ParseLedgerSections is ParseLedger against sources kept apart: a record is
+// kept when its quote verifies in any one section.
+//
+// Verifying against the sections joined together is weaker than a fresh run,
+// which verifies each section's claims against that section alone.
+// Normalisation folds the separator between two sections into a space, so a
+// quote running from the end of one into the start of the next is found in
+// the joined text while occurring in no source.
+func ParseLedgerSections(ledger string, sections []string) (records []Record, dropped int) {
+	i := strings.Index(ledger, "CLAIM:")
+	if i < 0 {
+		// An empty ledger renders as a header and "NONE"; see ParseLedger.
+		return nil, 0
+	}
+	for _, block := range blockSep.Split(ledger[i:], -1) {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+		if rec, ok := firstSupporting(block, sections); ok {
+			records = append(records, rec)
+			continue
+		}
+		dropped++
+	}
+	return records, dropped
+}
+
+// firstSupporting verifies one ledger block against each section in turn and
+// returns the record from the first that supports it.
+func firstSupporting(block string, sections []string) (Record, bool) {
+	for _, s := range sections {
+		if recs, _ := Parse(block, s); len(recs) == 1 {
+			return recs[0], true
+		}
+	}
+	return Record{}, false
 }
 
 // Dedupe removes records whose normalised claim text has already been seen.

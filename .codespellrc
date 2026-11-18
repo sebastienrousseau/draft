@@ -15,6 +15,9 @@
 #                software English; codespell prefers "unparsable".
 #   mesure       French, in a deliberately multibyte UTF-8 preview test
 #                ("mesure très précise").
+#   nd           the Unicode decimal-digit category in claims.numberPat's
+#                \p{Nd}; \d is ASCII-only in RE2, so other scripts' digits
+#                would escape the number check.
 [codespell]
-ignore-words-list = rouge,wont,cant,isnt,arent,dont,unparseable,mesure
+ignore-words-list = rouge,wont,cant,isnt,arent,dont,unparseable,mesure,nd
 skip = ./.git,./.gen,./node_modules,./bin,./build,./coverage.out,./coverage.filtered.out,./go.sum,*.pdf,./claims/testdata,./claims/testdata/corpus,./internal/pdf/testdata,./.crush

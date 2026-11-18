@@ -215,12 +215,8 @@ func Load(flags Flags) Config {
 	if flags.Model != "" {
 		c.Model = flags.Model
 	}
-	if flags.ContextLength > 0 {
-		c.ContextLength = flags.ContextLength
-	}
-	if flags.PredictLength > 0 {
-		c.PredictLength = flags.PredictLength
-	}
+	c.ContextLength = flagInt(warn, "--num-ctx", flags.ContextLength, c.ContextLength, 512, maxContextLen)
+	c.PredictLength = flagInt(warn, "--num-predict", flags.PredictLength, c.PredictLength, 1024, maxPredictLen)
 	if d := strings.TrimSpace(flags.DraftsDir); d != "" {
 		c.DraftsDir = absDir(warn, "--out", expandHome(d, home))
 	}
@@ -438,6 +434,22 @@ func envInt(warn func(string, ...any), name string, fallback, minValue, maxValue
 	if v < minValue || v > maxValue {
 		warn("%s=%d is outside [%d, %d]; using %d", name, v, minValue, maxValue, fallback)
 		return fallback
+	}
+	return v
+}
+
+// flagInt applies a numeric flag over the value already resolved from the
+// environment or default, under the same bounds envInt enforces: a flag is
+// no more trustworthy than a variable, and an unclamped --num-ctx could ask
+// Ollama for an allocation the machine cannot make. Zero means the flag was
+// not passed, because that is the zero value the flag package leaves.
+func flagInt(warn func(string, ...any), name string, v, current, minValue, maxValue int) int {
+	if v == 0 {
+		return current
+	}
+	if v < minValue || v > maxValue {
+		warn("%s=%d is outside [%d, %d]; using %d", name, v, minValue, maxValue, current)
+		return current
 	}
 	return v
 }

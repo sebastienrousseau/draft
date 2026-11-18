@@ -65,20 +65,18 @@ func locateSet(path string) (bodyPath, manifestPath string, err error) {
 // is still present), and runs the digest checks. A load failure is reported to
 // stderr and ok is false. It is shared by the human and JSON verify paths so
 // both check exactly the same thing.
-func loadSet(path string, stderr io.Writer) (report provenance.CheckReport, bodyPath, manifestPath string, ok bool) {
-	bodyPath, manifestPath, err := locateSet(path)
+func loadSet(path string) (report provenance.CheckReport, bodyPath, manifestPath string, err error) {
+	bodyPath, manifestPath, err = locateSet(path)
 	if err != nil {
-		fmt.Fprintln(stderr, "draft:", err)
 		return
 	}
 	body, err := readBodyOrFinal(bodyPath, path)
 	if err != nil {
-		fmt.Fprintln(stderr, "draft:", err)
 		return
 	}
 	manifest, err := os.ReadFile(manifestPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "draft: no manifest for this article (%s); it was written before provenance existed, or the file was moved out of its set\n", filepath.Base(manifestPath))
+		err = fmt.Errorf("no manifest for this article (%s); it was written before provenance existed, or the file was moved out of its set", filepath.Base(manifestPath))
 		return
 	}
 	// The ledger is normally cleaned up after a successful run, so its digest
@@ -87,7 +85,6 @@ func loadSet(path string, stderr io.Writer) (report provenance.CheckReport, body
 	stem := strings.TrimSuffix(filepath.Base(manifestPath), "-c2pa.json")
 	ledger := findLedger(dayRoot, stem, manifest)
 	report = provenance.CheckArticle(body+"\n", manifest, ledger, resolveSourceDigest)
-	ok = true
 	return
 }
 
@@ -150,9 +147,17 @@ func ownsLedger(name, stem string, sources []provenance.Source) bool {
 // runVerify checks an article against the provenance written beside it and
 // prints a human report, returning 0 when the article still matches its
 // manifest and 1 when it does not or a file is missing.
-func runVerify(path string, stdout, stderr io.Writer) int {
-	report, bodyPath, manifestPath, ok := loadSet(path, stderr)
-	if !ok {
+// verifyOptions are the --verify settings beyond the path.
+type verifyOptions struct {
+	// requireSignature fails a set that carries no valid, bound credential,
+	// or one that could not be checked here.
+	requireSignature bool
+}
+
+func runVerify(path string, opts verifyOptions, stdout, stderr io.Writer) int {
+	report, bodyPath, manifestPath, err := loadSet(path)
+	if err != nil {
+		fmt.Fprintln(stderr, "draft:", err)
 		return 1
 	}
 	printVerifyReport(stdout, path, manifestPath, report)
@@ -166,7 +171,7 @@ func runVerify(path string, stdout, stderr io.Writer) int {
 	// When a signed credential sits beside the set, validate its signature too,
 	// binding it to the body file the manifest was computed over.
 	sigOK := true
-	if sig := signatureFor(bodyPath, manifestPath); sig != nil {
+	if sig := signatureFor(bodyPath, manifestPath, report.Grounding.Signed, opts.requireSignature); sig != nil {
 		sigOK = printSignatureReport(stdout, sig)
 	}
 
@@ -187,14 +192,19 @@ func runVerify(path string, stdout, stderr io.Writer) int {
 // machine-readable form of --verify — to stdout, exiting 0 when the record's
 // verdict is verified. It is the stable seam a program (CI, a hosted verifier)
 // consumes: bring your own artifact, verify anywhere.
-func runVerifyJSON(path string, stdout, stderr io.Writer) int {
-	report, bodyPath, manifestPath, ok := loadSet(path, stderr)
-	if !ok {
+func runVerifyJSON(path string, opts verifyOptions, stdout, stderr io.Writer) int {
+	report, bodyPath, manifestPath, err := loadSet(path)
+	if err != nil {
+		// A program reading the record must not have to tell "unverified"
+		// from "no output": a set that cannot be loaded is a record too.
+		fmt.Fprintln(stderr, "draft:", err)
+		b, _ := json.MarshalIndent(provenance.VerificationRecord{Kind: provenance.RecordKind, Error: err.Error()}, "", "  ")
+		fmt.Fprintln(stdout, string(b))
 		return 1
 	}
 	var sig *provenance.SignatureState
 	if len(report.Problems) == 0 {
-		sig = signatureFor(bodyPath, manifestPath)
+		sig = signatureFor(bodyPath, manifestPath, report.Grounding.Signed, opts.requireSignature)
 	}
 	record := provenance.NewVerificationRecord(report, sig)
 	b, err := json.MarshalIndent(record, "", "  ")
@@ -338,26 +348,45 @@ func printReview(w io.Writer, r provenance.CheckReport) {
 }
 
 // signatureFor validates a detached C2PA credential beside the set, if one is
-// present, and returns its state. It returns nil when no credential accompanies
-// the article. When c2patool is not installed the credential is reported as
-// present-but-unchecked rather than failed: the digest checks still stand, and
-// a verifier that can check the signature still can.
-func signatureFor(bodyPath, manifestPath string) *provenance.SignatureState {
+// present, and returns its state. It returns nil when no credential
+// accompanies the article and the manifest records none; a recorded
+// credential that has gone is reported missing. When c2patool is not
+// installed the credential is reported as present-but-unchecked rather than
+// failed: the digest checks still stand, and a verifier that can check the
+// signature still can.
+func signatureFor(bodyPath, manifestPath string, expected, required bool) *provenance.SignatureState {
 	sc, err := os.ReadFile(sidecarPath(manifestPath))
 	if err != nil {
-		return nil
+		if !expected && !required {
+			return nil
+		}
+		// A credential the manifest records, or the caller requires, is not
+		// there: checked, and not valid.
+		return &provenance.SignatureState{Checked: true, State: "missing", Expected: expected, Required: required}
 	}
 	if !c2paAvail() {
-		return &provenance.SignatureState{Present: true, State: "unchecked: c2patool not installed"}
+		return &provenance.SignatureState{Present: true, State: "unchecked: c2patool not installed", Expected: expected, Required: required}
 	}
 	rep, err := c2paVerify(context.Background(), bodyPath, sc)
 	if err != nil {
-		return &provenance.SignatureState{Present: true, Checked: true, State: "error: " + err.Error()}
+		return &provenance.SignatureState{Present: true, Checked: true, State: "error: " + err.Error(), Expected: expected, Required: required}
 	}
-	return &provenance.SignatureState{
+	st := &provenance.SignatureState{
 		Present: true, Checked: true, Valid: rep.SignatureValid, Trusted: rep.Trusted, State: rep.State,
-		Uncovered: rep.Uncovered,
+		Uncovered: rep.Uncovered, Expected: expected, Required: required,
 	}
+	// The signature covers the article bytes; the evidence about them is in
+	// the unsigned manifest, so the credential must have signed that too.
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		st.Unbound = "the manifest cannot be read"
+	} else {
+		st.Unbound = provenance.Unbound(manifest, rep.Assertions)
+	}
+	if st.Unbound != "" {
+		st.Valid = false
+	}
+	return st
 }
 
 // printSignatureReport prints a SIGNATURE section for a credential's state and
@@ -366,25 +395,45 @@ func signatureFor(bodyPath, manifestPath string) *provenance.SignatureState {
 // as such; a present-but-unchecked credential is noted but not a failure; only
 // a checked-and-invalid signature fails.
 func printSignatureReport(w io.Writer, sig *provenance.SignatureState) bool {
-	dim := func(s string) string { return brand.Help.Render(s) }
-	row := func(status, label, detail string) { fmt.Fprintf(w, "  %-3s %-20s %s\n", status, label, dim(detail)) }
 	fmt.Fprintf(w, "\n%s\n", brand.Title.Render("SIGNATURE"))
-	switch {
-	case !sig.Checked:
-		row("--", "credential", "signed credential present; install c2patool to verify its signature")
-		return true
-	case sig.Uncovered != "":
-		row("!!", "signature", "INVALID — "+sig.Uncovered)
-		return false
-	case !sig.Valid:
-		row("!!", "signature", "INVALID — the credential does not match this article")
-		return false
-	case sig.Trusted:
-		row("ok", "signature", "valid and trusted")
-	default:
-		row("--", "signature", "valid; signing certificate not in a known trust list (e.g. a development certificate)")
+	status, label, detail := signatureRow(sig)
+	fmt.Fprintf(w, "  %-3s %-20s %s\n", status, label, brand.Help.Render(detail))
+	return sig.Acceptable()
+}
+
+// signatureRow is the SIGNATURE line for a credential's state.
+func signatureRow(sig *provenance.SignatureState) (status, label, detail string) {
+	if status, label, detail, ok := credentialRow(sig); ok {
+		return status, label, detail
 	}
-	return true
+	switch {
+	case sig.Uncovered != "":
+		return "!!", "signature", "INVALID — " + sig.Uncovered
+	case sig.Unbound != "":
+		return "!!", "binding", "INVALID — the credential does not vouch for this manifest: " + sig.Unbound
+	case !sig.Valid:
+		return "!!", "signature", "INVALID — the credential does not match this article"
+	case sig.Trusted:
+		return "ok", "signature", "valid and trusted"
+	default:
+		return "--", "signature", "valid; signing certificate not in a known trust list (e.g. a development certificate)"
+	}
+}
+
+// credentialRow is the SIGNATURE line for a credential that is missing or
+// was not checked, and ok is false for one that was.
+func credentialRow(sig *provenance.SignatureState) (status, label, detail string, ok bool) {
+	switch {
+	case !sig.Present && sig.Expected:
+		return "!!", "credential", "MISSING — the manifest records a signed credential, but none is beside the article", true
+	case !sig.Present:
+		return "!!", "credential", "none — --require-signature needs a valid signed credential", true
+	case !sig.Checked && sig.Required:
+		return "!!", "credential", "present but unchecked; --require-signature needs c2patool to verify it", true
+	case !sig.Checked:
+		return "--", "credential", "signed credential present; install c2patool to verify its signature", true
+	}
+	return "", "", "", false
 }
 
 func shortHash(h string) string {

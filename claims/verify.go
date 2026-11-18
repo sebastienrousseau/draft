@@ -68,12 +68,62 @@ func Verify(rec Record, source string) (bool, string) {
 
 // Numbers returns the distinct numeric tokens in s, with thousands separators
 // stripped so "1,000" and "1000" compare equal.
+//
+// Only a well-formed thousands group loses its commas. Stripping every comma
+// let a European decimal "1,5" ground the claim "15" and a citation list
+// "[1,2,3]" ground "123". Digits from other scripts are folded to ASCII, so
+// a claim written in them is checked rather than skipped.
 func Numbers(s string) map[string]bool {
 	out := map[string]bool{}
 	for _, n := range numberPat.FindAllString(s, -1) {
-		out[strings.ReplaceAll(n, ",", "")] = true
+		out[canonNumber(n)] = true
 	}
 	return out
+}
+
+func canonNumber(n string) string {
+	n = asciiDigits(n)
+	if thousandsPat.MatchString(n) {
+		return strings.ReplaceAll(n, ",", "")
+	}
+	return n
+}
+
+// asciiDigits maps every decimal digit, in any script, to its ASCII form and
+// leaves other characters alone.
+func asciiDigits(s string) string {
+	return strings.Map(func(r rune) rune {
+		if d := digitValue(r); d >= 0 {
+			return '0' + rune(d)
+		}
+		return r
+	}, s)
+}
+
+// digitRanges lists every run of decimal digits. Go has no function giving a
+// digit's value, but Unicode lays each script's digits out as a contiguous
+// run of ten starting at zero, so a digit's value is its offset into its run,
+// modulo ten for runs the table merges. TestDigitRangesAreRunsOfTen holds the
+// table to that shape.
+var digitRanges = func() [][2]rune {
+	var out [][2]rune
+	for _, r := range unicode.Digit.R16 {
+		out = append(out, [2]rune{rune(r.Lo), rune(r.Hi)})
+	}
+	for _, r := range unicode.Digit.R32 {
+		out = append(out, [2]rune{rune(r.Lo), rune(r.Hi)})
+	}
+	return out
+}()
+
+// digitValue returns the value of a decimal digit, or -1 for anything else.
+func digitValue(r rune) int {
+	for _, rg := range digitRanges {
+		if r >= rg[0] && r <= rg[1] {
+			return int(r-rg[0]) % 10
+		}
+	}
+	return -1
 }
 
 func quoteInSource(quote, source string) bool {

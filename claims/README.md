@@ -77,15 +77,15 @@ STRENGTH: demonstrated
 
 ## API
 
-| Symbol               | Signature                                                   | Purpose                                                                                    |
-| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `Record`             | `struct{ Claim, SourceQuote, Type, Strength string }`       | One verified fact plus the verbatim span supporting it                                     |
-| `Parse`              | `func(text, source string) (records []Record, dropped int)` | Reads one section's extraction output, keeping only records whose quotes verify            |
-| `Verify`             | `func(rec Record, source string) (bool, string)`            | Reports whether a record is trustworthy and, when not, why                                 |
-| `Dedupe`             | `func(records []Record) []Record`                           | Removes records whose normalised claim text was already seen                               |
-| `RenderLedger`       | `func(records []Record, dropped int) string`                | Full, human-readable ledger                                                                |
-| `RenderPromptLedger` | `func(records []Record, maxClaims, maxChars int) string`    | Compact ledger for the writing model, capped by count and characters                       |
-| `Numbers`            | `func(s string) map[string]bool`                            | Distinct numeric tokens, thousands separators stripped so `1,000` and `1000` compare equal |
+| Symbol               | Signature                                                   | Purpose                                                                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Record`             | `struct{ Claim, SourceQuote, Type, Strength string }`       | One verified fact plus the verbatim span supporting it                                                                                                                                     |
+| `Parse`              | `func(text, source string) (records []Record, dropped int)` | Reads one section's extraction output, keeping only records whose quotes verify                                                                                                            |
+| `Verify`             | `func(rec Record, source string) (bool, string)`            | Reports whether a record is trustworthy and, when not, why                                                                                                                                 |
+| `Dedupe`             | `func(records []Record) []Record`                           | Removes records whose normalised claim text was already seen                                                                                                                               |
+| `RenderLedger`       | `func(records []Record, dropped int) string`                | Full, human-readable ledger                                                                                                                                                                |
+| `RenderPromptLedger` | `func(records []Record, maxClaims, maxChars int) string`    | Compact ledger for the writing model, capped by count and characters                                                                                                                       |
+| `Numbers`            | `func(s string) map[string]bool`                            | Distinct numeric tokens in any script's digits, folded to ASCII; a well-formed thousands group loses its commas so `1,000` and `1000` compare equal, while `1,5` and `[1,2,3]` keep theirs |
 
 ## The verification gate
 

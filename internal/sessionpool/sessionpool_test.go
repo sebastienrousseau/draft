@@ -314,3 +314,126 @@ func TestConcurrentGetReleaseReap(t *testing.T) {
 		t.Errorf("Len = %d after shutdown, want 0", p.Len())
 	}
 }
+
+// A Get that looked its entry up just before CloseAll (or Reap) dropped it
+// must not start a session on the dropped entry: that session would be in no
+// map, so nothing would ever close it.
+func TestGetDoesNotStartOnADroppedEntry(t *testing.T) {
+	start, _, _ := starter()
+	p := New(time.Hour)
+	ctx := context.Background()
+
+	// Hold the entry's lock so the Get below parks after its lookup, then
+	// let CloseAll drop the entry from under it.
+	e := p.entryFor("a")
+	e.mu.Lock()
+	got := make(chan Session, 1)
+	go func() {
+		s, err := p.Get(ctx, "a", start)
+		if err != nil {
+			t.Errorf("Get: %v", err)
+		}
+		got <- s
+	}()
+	time.Sleep(50 * time.Millisecond) // let Get reach e.mu.Lock
+	closed := make(chan struct{})
+	go func() { p.CloseAll(); close(closed) }()
+	time.Sleep(50 * time.Millisecond) // let CloseAll swap the map out
+	e.mu.Unlock()
+	<-closed
+	s := <-got
+
+	if p.Len() != 1 {
+		t.Fatalf("Len = %d after Get returned, want 1: the session was started on a dropped entry", p.Len())
+	}
+	p.CloseAll()
+	if c := s.(*fakeSession).closes.Load(); c != 1 {
+		t.Errorf("the borrowed session was closed %d times by shutdown, want 1", c)
+	}
+}
+
+// Reap must not queue behind a start in progress: a cold agent can take
+// minutes to come up, and every Reap caller would stall with it.
+func TestReapDoesNotWaitForASlowStart(t *testing.T) {
+	p := New(0)
+	ctx := context.Background()
+	release := make(chan struct{})
+	started := make(chan struct{})
+	go func() {
+		_, _ = p.Get(ctx, "slow", func(context.Context) (Session, error) {
+			close(started)
+			<-release
+			return newFake(), nil
+		})
+	}()
+	<-started
+	done := make(chan int, 1)
+	go func() { done <- p.Reap() }()
+	select {
+	case n := <-done:
+		if n != 0 {
+			t.Errorf("Reap closed %d sessions mid-start, want 0", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("Reap blocked behind a session start")
+	}
+	close(release)
+}
+
+// Every session the pool starts must be closed exactly once by the time the
+// pool is shut down, however Get, Release, Reap and CloseAll interleave: a
+// session closed zero times is a leaked agent process. Run with -race.
+func TestStressNoSessionLeakedOrClosedTwice(t *testing.T) {
+	start, _, made := starter()
+	p := New(0)
+	ctx := context.Background()
+
+	stop := make(chan struct{})
+	var bg sync.WaitGroup
+	for _, fn := range []func(){func() { p.Reap() }, p.CloseAll, func() { _ = p.Len() }} {
+		bg.Add(1)
+		go func(fn func()) {
+			defer bg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					fn()
+				}
+			}
+		}(fn)
+	}
+
+	var wg sync.WaitGroup
+	for g := 0; g < 32; g++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			key := []string{"a", "b"}[id%2]
+			for i := 0; i < 200; i++ {
+				s, err := p.Get(ctx, key, start)
+				if err != nil {
+					t.Errorf("Get: %v", err)
+					return
+				}
+				// CloseAll may close a borrowed session by design; it must
+				// still never close one twice.
+				if s.(*fakeSession).closes.Load() > 1 {
+					t.Error("a session was closed more than once")
+				}
+				p.Release(key)
+			}
+		}(g)
+	}
+	wg.Wait()
+	close(stop)
+	bg.Wait()
+	p.CloseAll()
+
+	for i, f := range *made {
+		if c := f.closes.Load(); c != 1 {
+			t.Errorf("session %d of %d was closed %d times, want exactly 1", i, len(*made), c)
+		}
+	}
+}

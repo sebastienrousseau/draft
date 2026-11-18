@@ -248,6 +248,8 @@ a `pipeline.PhaseEvent` as it starts and finishes.
   not merely requested.
 - **Surgical review.** `--review` asks for exact find/replace edits, applies
   only the unique non-overlapping ones, and re-checks the rules before saving.
+  An edit that adds a number no verified claim contains is always rejected,
+  whatever `--strict-numbers` says.
 - **Publish-ready sets.** Body, frontmatter and combined document, written
   side by side and regenerable without losing a single curated field.
 - **Fast where it counts.** A 62-page paper is read and sectioned in ~110 ms
@@ -380,38 +382,39 @@ the run log.
 draft [flags] <source> [more-sources...]
 ```
 
-| Flag                   | Description                                               |
-| ---------------------- | --------------------------------------------------------- |
-| `--engine <mode>`      | `auto` (default), `ollama`, or a provider name            |
-| `--model <name>`       | Session-provider model override (e.g. `opus`)             |
-| `--experimental`       | Let auto mode use experimental providers                  |
-| `--strict-numbers`     | Fail a draft carrying a number found in no verified claim |
-| `--out <dir>`          | Directory to write drafts into (default `~/Drop/Drafts`)  |
-| `--sources-dir <dir>`  | Directory bare filenames resolve against                  |
-| `--no-cache`           | Re-extract instead of reusing cached claims               |
-| `--clear-cache`        | Delete every cached claim extraction and exit             |
-| `--doctor`             | Check that this machine can run draft, and exit           |
-| `--num-ctx <n>`        | Ollama context window (default `8192`)                    |
-| `--num-predict <n>`    | Ollama max output tokens (default `6000`)                 |
-| `--force-new`          | Draft even if today's folder already has one              |
-| `--merge`              | Combine all sources into one draft                        |
-| `--resume`             | Reuse a verified claim ledger from an earlier attempt     |
-| `--dry-run`            | Report what a run would do, without calling a model       |
-| `--extract-engine <m>` | Backend for claim extraction (default: `--engine`)        |
-| `--write-engine <m>`   | Backend for writing the article (default: `--engine`)     |
-| `--review <draft>`     | Enhance an existing draft with surgical edits             |
-| `--frontmatter <f>`    | Regenerate frontmatter + final document from an article   |
-| `--verify <f>`         | Check an article against its provenance, and exit         |
-| `--seo <f>...`         | Check final articles against Google Search guidance       |
-| `--attest <f>`         | Record a human review of the article as it stands         |
-| `--reviewed-by <id>`   | With `--attest`: who takes editorial responsibility       |
-| `--combine <f>`        | Alias for `--frontmatter`                                 |
-| `--keep-artifacts`     | Keep the claim ledger beside a successful draft           |
-| `--print`              | Run without the TUI; print draft paths to stdout          |
-| `--json`               | Run without the TUI; one JSON object per job on stdout    |
-| `--completion <sh>`    | Print a completion script: `bash`, `zsh`, or `fish`       |
-| `--version`            | Print version and exit                                    |
-| `-h, --help`           | Show help                                                 |
+| Flag                   | Description                                                 |
+| ---------------------- | ----------------------------------------------------------- |
+| `--engine <mode>`      | `auto` (default), `ollama`, or a provider name              |
+| `--model <name>`       | Session-provider model override (e.g. `opus`)               |
+| `--experimental`       | Let auto mode use experimental providers                    |
+| `--strict-numbers`     | Fail a draft carrying a number found in no verified claim   |
+| `--out <dir>`          | Directory to write drafts into (default `~/Drop/Drafts`)    |
+| `--sources-dir <dir>`  | Directory bare filenames resolve against                    |
+| `--no-cache`           | Re-extract instead of reusing cached claims                 |
+| `--clear-cache`        | Delete every cached claim extraction and exit               |
+| `--doctor`             | Check that this machine can run draft, and exit             |
+| `--num-ctx <n>`        | Ollama context window (default `8192`)                      |
+| `--num-predict <n>`    | Ollama max output tokens (default `6000`)                   |
+| `--force-new`          | Draft even if today's folder already has one                |
+| `--merge`              | Combine all sources into one draft                          |
+| `--resume`             | Reuse a verified claim ledger from an earlier attempt       |
+| `--dry-run`            | Report what a run would do, without calling a model         |
+| `--extract-engine <m>` | Backend for claim extraction (default: `--engine`)          |
+| `--write-engine <m>`   | Backend for writing the article (default: `--engine`)       |
+| `--review <draft>`     | Enhance an existing draft with surgical edits               |
+| `--frontmatter <f>`    | Regenerate frontmatter + final document from an article     |
+| `--verify <f>`         | Check an article against its provenance, and exit           |
+| `--require-signature`  | With `--verify`, fail a set with no valid signed credential |
+| `--seo <f>...`         | Check final articles against Google Search guidance         |
+| `--attest <f>`         | Record a human review of the article as it stands           |
+| `--reviewed-by <id>`   | With `--attest`: who takes editorial responsibility         |
+| `--combine <f>`        | Alias for `--frontmatter`                                   |
+| `--keep-artifacts`     | Keep the claim ledger beside a successful draft             |
+| `--print`              | Run without the TUI; print draft paths to stdout            |
+| `--json`               | Run without the TUI; one JSON object per job on stdout      |
+| `--completion <sh>`    | Print a completion script: `bash`, `zsh`, or `fish`         |
+| `--version`            | Print version and exit                                      |
+| `-h, --help`           | Show help                                                   |
 
 `--claude-model` is a deprecated alias for `--model`. It still parses, is
 absent from `draft --help`, and may be removed in a future release.
@@ -508,7 +511,12 @@ installed, `--verify` also validates its signature and trust chain: an altered
 article fails, and a development certificate is reported as valid-but-untrusted
 rather than failed. A credential whose data hash excludes any part of the
 article fails even when `c2patool` accepts it: excluding the whole file is
-how a signature over nothing still validates. Add `--json` to emit a portable
+how a signature over nothing still validates. So does one that does not vouch
+for the manifest beside the article: the source and ledger digests, the review
+and the AI disclosure must match the copies the credential signed, or they
+could be rewritten under a signature that still verifies. A signed manifest
+records that it was signed, so a credential deleted later fails `--verify`
+instead of leaving a set that reads as never signed. Add `--json` to emit a portable
 `draft.verification-record/v1` receipt instead of the human report — the
 article digest and whether it matches, the grounding summary, the source and
 signature state, and the overall verdict — for a script, a CI gate, or an

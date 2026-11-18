@@ -22,7 +22,15 @@ import (
 // time rather than shipping a stale artefact.
 func writeManPage(w io.Writer, version string, now time.Time) error {
 	b := &strings.Builder{}
+	manIntro(b, version, now)
+	manEngine(b)
+	manReference(b)
+	_, err := io.WriteString(w, b.String())
+	return err
+}
 
+// manIntro writes the title through OPTIONS: what draft is and how to call it.
+func manIntro(b *strings.Builder, version string, now time.Time) {
 	fmt.Fprintf(b, ".TH DRAFT 1 %q %q \"User Commands\"\n",
 		now.Format("2006-01-02"), "draft "+version)
 
@@ -52,7 +60,10 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 	for _, f := range flagHelp {
 		fmt.Fprintf(b, ".TP\n.B %s\n%s\n", roff(f[0]), roff(f[1]))
 	}
+}
 
+// manEngine writes ENGINE and EXAMPLES: how a backend is chosen, then use.
+func manEngine(b *strings.Builder) {
 	section(b, "ENGINE",
 		roff("In auto mode (the default) draft uses the first installed agent CLI, in this "+
 			"preference order:")+"\n.PP\n"+
@@ -76,18 +87,15 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 	for _, ex := range usageExamples {
 		fmt.Fprintf(b, ".TP\n.B %s\n%s\n", roff(ex[0]), roff(capitalise(ex[1])))
 	}
+}
 
+// manReference writes ENVIRONMENT through SEE ALSO: the reference sections.
+func manReference(b *strings.Builder) {
 	section(b, "ENVIRONMENT",
 		roff("Flags beat environment variables, which beat defaults. Every numeric "+
 			"variable is clamped at both ends; an out-of-range value is reported on "+
 			"stderr rather than silently ignored.")+"\n.PP\n"+
-			roff("DRAFT_ENGINE, DRAFT_EXTRACT_ENGINE, DRAFT_WRITE_ENGINE, DRAFT_EDIT_ENGINE, "+
-				"DRAFT_MODEL_SESSION, DRAFT_MODEL, DRAFT_WRITE_MODEL, DRAFT_EXTRACT_MODEL, "+
-				"DRAFT_EDIT_MODEL, DRAFT_NUM_CTX, DRAFT_NUM_PREDICT, DRAFT_WRITE_RETRIES, "+
-				"DRAFT_MAX_CONTINUE, DRAFT_EXTRACT_CONCURRENCY, DRAFT_CALL_TIMEOUT, "+
-				"DRAFT_EXPERIMENTAL, DRAFT_STRICT_NUMBERS, DRAFT_DRAFTS_DIR, "+
-				"DRAFT_SOURCES_DIR, DRAFT_CACHE_DIR, DRAFT_NO_CACHE, DRAFT_SHOW_LOGO, "+
-				"DRAFT_SITE_*, OLLAMA_HOST."))
+			roff(strings.Join(helpLines("ENVIRONMENT"), " ")+"."))
 
 	section(b, "FILES",
 		".TP\n.I ~/Drop/Drafts/YYYY-MM-DD/\n"+
@@ -126,9 +134,6 @@ func writeManPage(w io.Writer, version string, now time.Time) error {
 	section(b, "SEE ALSO",
 		roff("Project documentation: https://draftlib.com")+"\n.PP\n"+
 			roff("Source and issue tracker: https://github.com/sebastienrousseau/draft"))
-
-	_, err := io.WriteString(w, b.String())
-	return err
 }
 
 func section(b *strings.Builder, name, body string) {

@@ -171,3 +171,59 @@ func TestSignAndVerifyLive(t *testing.T) {
 		t.Error("a credential must not verify against a different article")
 	}
 }
+
+// Trust is only ever positively asserted. A report that validates the
+// signature but says nothing about the certificate, as a c2patool run with
+// no trust list does, must not be read as trusted; one that reports
+// signingCredential.trusted, or the overall state Trusted, is.
+func TestParseReportTrustIsOnlyPositive(t *testing.T) {
+	report := func(state, extra string) string {
+		return `{
+      "active_manifest": "m",
+      "manifests": {"m": {"assertion_store": {"c2pa.hash.data": {"alg": "sha256"}}}},
+      "validation_state": "` + state + `",
+      "validation_results": {"activeManifest": {"success": [
+        {"code": "claimSignature.validated"},
+        {"code": "assertion.dataHash.match"}` + extra + `
+      ], "failure": []}}
+    }`
+	}
+	cases := []struct {
+		name, state, extra string
+		want               bool
+	}{
+		{"silent on trust", "Valid", "", false},
+		{"trusted code", "Valid", `, {"code": "signingCredential.trusted"}`, true},
+		{"trusted state", "Trusted", "", true},
+	}
+	for _, c := range cases {
+		rep, err := parseReport(report(c.state, c.extra))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !rep.SignatureValid {
+			t.Errorf("%s: a validated signature must be reported valid", c.name)
+		}
+		if rep.Trusted != c.want {
+			t.Errorf("%s: Trusted = %v, want %v", c.name, rep.Trusted, c.want)
+		}
+	}
+}
+
+// The active manifest's assertion store is exposed, so a caller can check
+// what the credential signed.
+func TestParseReportExposesSignedAssertions(t *testing.T) {
+	out := `{
+      "active_manifest": "m",
+      "manifests": {"m": {"assertion_store": {"c2pa.hash.data": {"alg": "sha256"}, "com.draftlib.grounding": {"schema": 1}}}},
+      "validation_state": "Valid",
+      "validation_results": {"activeManifest": {"success": [{"code": "claimSignature.validated"}, {"code": "assertion.dataHash.match"}], "failure": []}}
+    }`
+	rep, err := parseReport(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(rep.Assertions["com.draftlib.grounding"]); got != `{"schema": 1}` {
+		t.Errorf("grounding assertion = %q", got)
+	}
+}

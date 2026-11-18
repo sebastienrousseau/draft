@@ -353,6 +353,11 @@ type Grounding struct {
 	Attributed                     int      `json:"attributed"`
 	Unattributed                   int      `json:"unattributed"`
 	SentencesWithUngroundedNumbers int      `json:"sentences_with_ungrounded_numbers"`
+	// Signed records that a signed credential was issued for this manifest,
+	// so a credential deleted later reads as missing, not as a set that was
+	// never signed. Set by MarkSigned; omitted when false, so an unsigned
+	// manifest is unchanged.
+	Signed bool `json:"signed,omitempty"`
 }
 
 // digitalSourceType is the IPTC term for content produced by a trained

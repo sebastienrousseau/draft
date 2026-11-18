@@ -41,10 +41,12 @@ const (
 // already succeeded.
 //
 // The reused ledger is re-verified against the freshly sectioned sources rather
-// than taken on trust. Resume therefore cannot weaken grounding: if a source
-// changed underneath, the records it no longer supports are dropped here, and a
-// wholly changed source resumes to an empty ledger that fails the write phase
-// honestly instead of producing an ungrounded draft.
+// than taken on trust, and to the same standard a fresh run applies: each
+// record against one section, then the second gate when it is enabled.
+// Resume therefore cannot weaken grounding: if a source changed underneath,
+// the records it no longer supports are dropped here, and a wholly changed
+// source falls back to a fresh extraction; a run that still verifies nothing
+// stops with ErrNoVerifiedClaims before anything is written.
 //
 // xchain is the resolved extraction chain, passed in explicitly so the
 // grounding phase never reaches into the Runner's per-kind chain map: the gate
@@ -63,22 +65,58 @@ func (r *Runner) resumeOrExtract(ctx context.Context, job Job, sections []pdf.Se
 		return r.extractClaims(ctx, job, sections, outputDir, xchain)
 	}
 
-	var corpus strings.Builder
-	for _, s := range sections {
-		corpus.WriteString(s.Body + "\n\n")
+	bodies := make([]string, len(sections))
+	for i, s := range sections {
+		bodies[i] = s.Body
 	}
-	records, dropped := claims.ParseLedger(string(data), corpus.String())
+	records, dropped := claims.ParseLedgerSections(string(data), bodies)
 	if len(records) == 0 {
 		r.warn("the saved ledger no longer verifies against these sources; extracting afresh")
 		return r.extractClaims(ctx, job, sections, outputDir, xchain)
 	}
 
-	r.ledgerPath = ledgerPath
 	r.log(fmt.Sprintf("resumed %d claim(s) from %s", len(records), shortPath(r.cfg, ledgerPath)))
 	if dropped > 0 {
 		r.warn(fmt.Sprintf("dropped %d resumed claim(s) the sources no longer support", dropped))
 	}
+	return r.finishLedger(ctx, ledgerPath, records, dropped)
+}
+
+// finishLedger is the end of the claims gate, shared by a fresh extraction and
+// a resume so the two cannot drift: de-duplication, the opt-in second gate,
+// then the ledger write. It cannot fail the run; a ledger that will not save
+// is a warning.
+func (r *Runner) finishLedger(ctx context.Context, path string, records []claims.Record, dropped int) ([]claims.Record, int, error) {
+	if deduped := claims.Dedupe(records); len(deduped) != len(records) {
+		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
+		records = deduped
+	}
+	// Opt-in semantic second pass: a model judges whether each verified quote
+	// actually supports its claim. Off by default and fail-open, so it can only
+	// tighten the ledger, never weaken it.
+	records = r.secondGate(ctx, records)
+	r.saveLedger(path, records, dropped)
 	return records, dropped, nil
+}
+
+// saveLedger writes the ledger the article is about to be written from and
+// records its digest for provenance. A resumed run rewrites the file too:
+// the records it kept may be fewer than the file held, and the manifest's
+// ledger_sha256 must name the ledger that was used, not the one on disk.
+//
+// Report what actually happened. Logging "claims saved" unconditionally
+// after a discarded write tells the user a fact-checking artefact exists
+// when it may not.
+func (r *Runner) saveLedger(path string, records []claims.Record, dropped int) {
+	text := claims.RenderLedger(records, dropped) + "\n"
+	r.ledgerDigest = sha256Hex(text)
+	r.ledgerPath = path
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		r.ledgerPath = ""
+		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
+		return
+	}
+	r.log("claims saved to " + shortPath(r.cfg, path))
 }
 
 // ledgerPathFor names the verified-claim ledger for one job.
@@ -236,26 +274,7 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	}
 
 	records, dropped := r.assembleRecords(sections, raw)
-	if deduped := claims.Dedupe(records); len(deduped) != len(records) {
-		r.log(fmt.Sprintf("removed %d duplicate claim(s)", len(records)-len(deduped)))
-		records = deduped
-	}
-	// Opt-in semantic second pass: a model judges whether each verified quote
-	// actually supports its claim. Off by default and fail-open, so it can only
-	// tighten the ledger, never weaken it.
-	records = r.secondGate(ctx, records)
-	// Report what actually happened. Logging "claims saved" unconditionally
-	// after a discarded write tells the user a fact-checking artefact exists
-	// when it may not.
-	ledgerText := claims.RenderLedger(records, dropped) + "\n"
-	r.ledgerDigest = sha256Hex(ledgerText)
-	if err := os.WriteFile(ledgerPath, []byte(ledgerText), 0o644); err != nil {
-		r.ledgerPath = ""
-		r.warn(fmt.Sprintf("could not save the claim ledger: %v", err))
-	} else {
-		r.log("claims saved to " + shortPath(r.cfg, ledgerPath))
-	}
-	return records, dropped, nil
+	return r.finishLedger(ctx, ledgerPath, records, dropped)
 }
 
 // ollamaExtractConcurrency caps how many extraction calls the local backend runs

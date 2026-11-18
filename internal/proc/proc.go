@@ -29,6 +29,14 @@ func Bound(cmd *exec.Cmd) {
 	cmd.Cancel = func() error { return Kill(cmd) }
 }
 
+// Detach puts cmd in a process group of its own, where the platform has
+// them, without bounding it. It is for a process meant to outlive draft: a
+// terminal delivers Ctrl-C to the whole foreground process group, so a child
+// left in draft's group is interrupted along with it. Call it before Start.
+func Detach(cmd *exec.Cmd) {
+	isolate(cmd)
+}
+
 // Kill kills cmd's process and, where the platform allows, everything it
 // started. It is a no-op for a command that never started.
 func Kill(cmd *exec.Cmd) error {

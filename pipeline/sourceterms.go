@@ -26,6 +26,6 @@ func (r *Runner) adoptSourceTerms(style rules.Style, records []claims.Record) ru
 // what its edit introduced.
 func (r *Runner) reviewViolationsBoth(before, after string, records []claims.Record) (b, a []string) {
 	style := r.adoptSourceTerms(r.cfg.Style, records)
-	return reviewViolations(before, records, style, r.validateOptions()),
-		reviewViolations(after, records, style, r.validateOptions())
+	return reviewViolations(before, records, style, r.reviewOptions()),
+		reviewViolations(after, records, style, r.reviewOptions())
 }

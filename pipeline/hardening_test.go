@@ -6,6 +6,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -206,5 +207,46 @@ func TestDoneEventCarriesTimings(t *testing.T) {
 		if tm.Status != "done" {
 			t.Errorf("phase %q status = %q, want done", tm.Name, tm.Status)
 		}
+	}
+}
+
+// An engine that hits its own per-call timeout reports a wrapped
+// context.DeadlineExceeded while the run itself is still live. That is a hung
+// backend, not an abandoned run, so the next engine must be tried.
+func TestGenerateFailsOverWhenAnEngineTimesOutOnItsOwn(t *testing.T) {
+	hung := funcEngine{name: "hung", gen: func(context.Context, engine.Request) (engine.Result, error) {
+		return engine.Result{}, fmt.Errorf("hung: %w", context.DeadlineExceeded)
+	}}
+	fallback := funcEngine{name: "fallback", gen: func(context.Context, engine.Request) (engine.Result, error) {
+		return engine.Result{Text: "answered"}, nil
+	}}
+	r := NewRunner(config.Config{}, []engine.Engine{hung, fallback}, make(chan Event, 64))
+
+	res, err := r.generate(context.Background(), engine.Request{Kind: engine.KindWrite})
+	if err != nil || res.Text != "answered" {
+		t.Fatalf("an engine's own timeout must fail over: res=%q err=%v", res.Text, err)
+	}
+}
+
+// The caller cancelling during a call still stops the walk: failing over
+// would retry work the caller has abandoned.
+func TestGenerateStopsWhenTheCallerCancelsMidCall(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	called := false
+	first := funcEngine{name: "first", gen: func(context.Context, engine.Request) (engine.Result, error) {
+		cancel()
+		return engine.Result{}, fmt.Errorf("first: %w", context.Canceled)
+	}}
+	second := funcEngine{name: "second", gen: func(context.Context, engine.Request) (engine.Result, error) {
+		called = true
+		return engine.Result{Text: "answered"}, nil
+	}}
+	r := NewRunner(config.Config{}, []engine.Engine{first, second}, make(chan Event, 64))
+
+	if _, err := r.generate(ctx, engine.Request{Kind: engine.KindWrite}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if called {
+		t.Error("the chain failed over after the caller gave up")
 	}
 }

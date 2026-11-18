@@ -45,8 +45,24 @@ func TestViolationMessageShapesAreStable(t *testing.T) {
 		if got == "" {
 			t.Fatalf("no banned-word violation produced for %q", rules.BannedWords[0])
 		}
-		if !bannedListPat.MatchString(got) {
-			t.Errorf("banned-word message %q no longer matches %s", got, bannedListPat)
+		if !listMessagePat.MatchString(got) {
+			t.Errorf("banned-word message %q no longer matches %s", got, listMessagePat)
+		}
+	})
+
+	t.Run("ungrounded numbers", func(t *testing.T) {
+		errs, _ := validate.FaithfulnessWithOptions("# T\n\nIt took 41 and 77 runs.", nil, validate.Options{StrictNumbers: true})
+		var got string
+		for _, e := range errs {
+			if strings.HasPrefix(e, "numbers not found") {
+				got = e
+			}
+		}
+		if got == "" {
+			t.Fatal("no ungrounded-number violation produced")
+		}
+		if keys := violationKeys(got); len(keys) != 2 {
+			t.Errorf("number message %q no longer splits into one key per number: %v", got, keys)
 		}
 	})
 }
@@ -126,6 +142,18 @@ func TestNewViolations(t *testing.T) {
 			before: []string{"contains banned words: leverage"},
 			after:  []string{"contains banned words: leverage"},
 			want:   nil,
+		},
+		{
+			name:   "removing one pre-existing number is not blamed for the rest",
+			before: []string{"numbers not found in any claim: 41, 77"},
+			after:  []string{"numbers not found in any claim: 77"},
+			want:   nil,
+		},
+		{
+			name:   "an added number is caught despite a pre-existing one",
+			before: []string{"numbers not found in any claim: 77"},
+			after:  []string{"numbers not found in any claim: 77, 9400"},
+			want:   []string{"numbers not found in any claim: 77, 9400"},
 		},
 		{
 			name:   "going from under to over length is a new problem",

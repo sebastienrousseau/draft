@@ -619,7 +619,7 @@ func TestUnknownReaderIsRejected(t *testing.T) {
 func TestRunVerifyJSONViaRun(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing-final.md")
 	var wantOut, wantErr, out, errb strings.Builder
-	want := runVerifyJSON(missing, &wantOut, &wantErr)
+	want := runVerifyJSON(missing, verifyOptions{}, &wantOut, &wantErr)
 	if code := run([]string{"--verify", missing, "--json"}, &out, &errb); code != want {
 		t.Errorf("--verify --json exit = %d, want %d", code, want)
 	}

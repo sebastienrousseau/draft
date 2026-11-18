@@ -76,33 +76,40 @@ func attest(cfg config.Config, path, reviewer string) (rv provenance.Review, sig
 	if err != nil {
 		return rv, false, "", err
 	}
-	files := map[string][]byte{manifestPath: updated}
-	cred, err := signReview(cfg, bodyPath, manifestPath, updated)
+	updated, cred, err := signReview(cfg, bodyPath, manifestPath, updated)
 	if err != nil {
 		return rv, false, "", err
 	}
+	files := map[string][]byte{manifestPath: updated}
 	if cred != nil {
 		files[sidecarPath(manifestPath)] = cred
 	}
 	return rv, cred != nil, manifestPath, atomicfile.WriteSet(files, 0o644)
 }
 
-// signReview signs the updated manifest when a signer is configured. Without
-// one it refuses to touch a signed article: its credential would no longer
-// match the manifest, and --verify would rightly call it invalid.
-func signReview(cfg config.Config, bodyPath, manifestPath string, manifest []byte) ([]byte, error) {
+// signReview signs the updated manifest when a signer is configured, and
+// returns the manifest to write with the credential: marked as signed when it
+// was. Without a signer it refuses to touch a signed article: its credential
+// would no longer match the manifest, and --verify would rightly call it
+// invalid.
+func signReview(cfg config.Config, bodyPath, manifestPath string, manifest []byte) ([]byte, []byte, error) {
 	if cfg.SignCert == "" || cfg.SignKey == "" {
 		if _, err := os.Stat(sidecarPath(manifestPath)); err == nil {
-			return nil, errors.New("this article has a signed credential; set DRAFT_C2PA_CERT and DRAFT_C2PA_KEY so the review is signed as well")
+			return nil, nil, errors.New("this article has a signed credential; set DRAFT_C2PA_CERT and DRAFT_C2PA_KEY so the review is signed as well")
 		}
-		return nil, nil
+		return manifest, nil, nil
 	}
 	if !c2paAvail() {
-		return nil, errors.New("signing is configured but c2patool is not installed")
+		return nil, nil, errors.New("signing is configured but c2patool is not installed")
 	}
-	return attestSign(context.Background(), bodyPath, manifest, c2pa.Signer{
+	marked, err := provenance.MarkSigned(manifest)
+	if err != nil {
+		return nil, nil, err
+	}
+	cred, err := attestSign(context.Background(), bodyPath, marked, c2pa.Signer{
 		CertPath: cfg.SignCert, KeyPath: cfg.SignKey, Alg: cfg.SignAlg,
 	})
+	return marked, cred, err
 }
 
 // sidecarPath is the signed credential beside a manifest definition.

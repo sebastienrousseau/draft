@@ -4,7 +4,9 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +15,34 @@ import (
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/internal/c2pa"
 	"github.com/sebastienrousseau/draft/internal/c2pa/c2patest"
+	"github.com/sebastienrousseau/draft/provenance"
 )
+
+// writeManifest writes a manifest as saveProvenance does and returns its
+// bytes, so the signer is exercised on the real shape it must mark.
+func writeManifest(t *testing.T, path string) []byte {
+	t.Helper()
+	b, _ := json.MarshalIndent(provenance.NewManifest(provenance.ManifestInput{Title: "x", Body: "b\n"}), "", "  ")
+	b = append(b, '\n')
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// signedAt reports whether the manifest at path records a signed credential.
+func signedAt(t *testing.T, path string) bool {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _, err := provenance.ParseManifest(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g.Signed
+}
 
 // With no signing certificate configured, signManifest writes nothing and the
 // manifest stays an unsigned definition — the long-standing default.
@@ -72,6 +101,17 @@ func TestSaveWritesVerifiableSignature(t *testing.T) {
 	if !rep.SignatureValid {
 		t.Errorf("the sidecar save wrote does not verify: state %q failures %v", rep.State, rep.Failures)
 	}
+	manifests, _ := filepath.Glob(filepath.Join(outputDir, "provenance", "*-c2pa.json"))
+	if len(manifests) != 1 {
+		t.Fatalf("expected one manifest, found %v", manifests)
+	}
+	if !signedAt(t, manifests[0]) {
+		t.Error("the manifest beside a signed credential does not record it")
+	}
+	m, _ := os.ReadFile(manifests[0])
+	if why := provenance.Unbound(m, rep.Assertions); why != "" {
+		t.Errorf("the credential does not vouch for the manifest beside it: %s", why)
+	}
 }
 
 func TestSignManifestWritesSidecarWithFakeSigner(t *testing.T) {
@@ -86,12 +126,50 @@ func TestSignManifestWritesSidecarWithFakeSigner(t *testing.T) {
 	}
 	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
 	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
-	_ = os.WriteFile(r.manifestPath, []byte(`{"assertions":[]}`), 0o644)
+	writeManifest(t, r.manifestPath)
+	var signed []byte
+	c2paSign = func(_ context.Context, _ string, m []byte, _ c2pa.Signer) ([]byte, error) {
+		signed = m
+		return []byte("cred"), nil
+	}
 
 	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
 	b, err := os.ReadFile(filepath.Join(dir, "provenance", "m-c2pa.c2pa"))
 	if err != nil || string(b) != "cred" {
 		t.Errorf("sidecar = %q, err %v; want the signed credential", b, err)
+	}
+	// The credential signs a manifest that records it, and that manifest is
+	// the one left beside the article.
+	if !signedAt(t, r.manifestPath) {
+		t.Error("the manifest does not record its signed credential")
+	}
+	if onDisk, _ := os.ReadFile(r.manifestPath); !bytes.Equal(onDisk, signed) {
+		t.Error("the manifest on disk is not the one the credential signed")
+	}
+}
+
+// A manifest the signer cannot mark is left as it was and nothing is signed:
+// a credential over an unmarked manifest could be deleted unnoticed.
+func TestSignManifestRefusesAnUnmarkableManifest(t *testing.T) {
+	origA, origS := c2paAvailable, c2paSign
+	defer func() { c2paAvailable, c2paSign = origA, origS }()
+	c2paAvailable = func() bool { return true }
+	called := false
+	c2paSign = func(context.Context, string, []byte, c2pa.Signer) ([]byte, error) {
+		called = true
+		return []byte("cred"), nil
+	}
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "provenance"), 0o755)
+	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
+	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
+	_ = os.WriteFile(r.manifestPath, []byte(`{"assertions":[]}`), 0o644)
+	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
+	if called {
+		t.Error("a manifest with no grounding was signed")
+	}
+	if b, _ := os.ReadFile(r.manifestPath); string(b) != `{"assertions":[]}` {
+		t.Errorf("the manifest was changed: %s", b)
 	}
 }
 
@@ -134,10 +212,13 @@ func TestSignManifestSignError(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(dir, "provenance"), 0o755)
 	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
 	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
-	_ = os.WriteFile(r.manifestPath, []byte(`{}`), 0o644)
+	writeManifest(t, r.manifestPath)
 	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
 	if _, err := os.Stat(filepath.Join(dir, "provenance", "m-c2pa.c2pa")); !os.IsNotExist(err) {
 		t.Error("a sidecar was written despite a signing error")
+	}
+	if signedAt(t, r.manifestPath) {
+		t.Error("the manifest records a credential that was never written")
 	}
 }
 
@@ -155,6 +236,12 @@ func TestSignManifestWriteSidecarError(t *testing.T) {
 	}
 	r := NewRunner(config.Config{SignCert: "c", SignKey: "k"}, []engine.Engine{&countingEngine{name: "x"}}, nil)
 	r.manifestPath = filepath.Join(dir, "m-c2pa.json")
-	_ = os.WriteFile(r.manifestPath, []byte(`{}`), 0o644)
+	writeManifest(t, r.manifestPath)
 	r.signManifest(context.Background(), dir, "m", filepath.Join(dir, "body.md"))
+	// The credential and the marked manifest are written together or not at
+	// all: a manifest that records a credential with none beside it fails
+	// --verify.
+	if signedAt(t, r.manifestPath) {
+		t.Error("the manifest records a credential that could not be written")
+	}
 }
