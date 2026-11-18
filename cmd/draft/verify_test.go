@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sebastienrousseau/draft/internal/c2pa"
 	"github.com/sebastienrousseau/draft/internal/c2pa/c2patest"
@@ -414,6 +415,10 @@ func TestSignatureFor(t *testing.T) {
 	if err := os.WriteFile(sidecarPath, []byte("cred"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	mb, _ := json.Marshal(provenance.NewManifest(provenance.ManifestInput{Title: "x", Body: "b\n"}))
+	if err := os.WriteFile(manifestPath, mb, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// c2patool absent -> present, unchecked, not a failure.
 	c2paAvail = func() bool { return false }
@@ -433,11 +438,29 @@ func TestSignatureFor(t *testing.T) {
 
 	// valid, untrusted.
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
-		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid"}, nil
+		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 	}
 	sig = signatureFor(bodyPath, manifestPath)
 	if sig == nil || !sig.Valid || sig.Trusted {
 		t.Errorf("valid untrusted: %+v", sig)
+	}
+
+	// valid, but signing none of the manifest's assertions -> invalid.
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
+	}
+	sig = signatureFor(bodyPath, manifestPath)
+	if sig == nil || sig.Valid || sig.Unbound == "" {
+		t.Errorf("unbound credential: %+v", sig)
+	}
+
+	// the manifest gone -> invalid, not a panic.
+	_ = os.Remove(manifestPath)
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, State: "Valid"}, nil
+	}
+	if sig = signatureFor(bodyPath, manifestPath); sig == nil || sig.Valid || sig.Unbound == "" {
+		t.Errorf("unreadable manifest: %+v", sig)
 	}
 }
 
@@ -537,7 +560,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 	t.Run("valid and trusted signature", func(t *testing.T) {
 		c2paAvail = func() bool { return true }
 		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
-			return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
+			return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 		}
 		var out, errb strings.Builder
 		code := runVerify(finalPath, &out, &errb)
@@ -576,7 +599,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 	t.Run("valid untrusted signature", func(t *testing.T) {
 		c2paAvail = func() bool { return true }
 		c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
-			return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid"}, nil
+			return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 		}
 		var out, errb strings.Builder
 		code := runVerify(finalPath, &out, &errb)
@@ -626,4 +649,89 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 			t.Errorf("json exit = %d, want 1", code)
 		}
 	})
+}
+
+// signedAssertions returns the assertions of the manifest at path keyed by
+// label, as c2patool reports the ones a credential signed.
+func signedAssertions(t *testing.T, path string) map[string]json.RawMessage {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Assertions []struct {
+			Label string          `json:"label"`
+			Data  json.RawMessage `json:"data"`
+		} `json:"assertions"`
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]json.RawMessage{}
+	for _, a := range m.Assertions {
+		out[a.Label] = a.Data
+	}
+	return out
+}
+
+// A valid signature proves the article bytes are unchanged; the digests of
+// the sources and the ledger, and any review, live in the unsigned manifest
+// beside it. A credential must vouch for those too, or they could be
+// rewritten under a signature that still verifies.
+func TestRunVerifyFailsACredentialThatDoesNotVouchForTheManifest(t *testing.T) {
+	origA, origV := c2paAvail, c2paVerify
+	defer func() { c2paAvail, c2paVerify = origA, origV }()
+
+	cases := map[string]func(t *testing.T, manifestPath string){
+		"grounding edited after signing": func(t *testing.T, p string) {
+			b, _ := os.ReadFile(p)
+			edited := strings.Replace(string(b), `"engine": "claude"`, `"engine": "forged"`, 1)
+			if edited == string(b) {
+				t.Fatal("fixture is wrong: no engine field to edit")
+			}
+			_ = os.WriteFile(p, []byte(edited), 0o644)
+		},
+		"review added after signing": func(t *testing.T, p string) {
+			b, _ := os.ReadFile(p)
+			body, _ := os.ReadFile(strings.Replace(strings.Replace(p, "provenance", "source", 1), "-c2pa.json", "-body.md", 1))
+			updated, _, err := provenance.Attest(b, string(body), "Mallory", time.Unix(0, 0))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = os.WriteFile(p, updated, 0o644)
+		},
+	}
+	for name, tamper := range cases {
+		t.Run(name, func(t *testing.T) {
+			day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
+			manifestPath := filepath.Join(day, "provenance", stem+"-c2pa.json")
+			if err := os.WriteFile(strings.TrimSuffix(manifestPath, ".json")+".c2pa", []byte("cred"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			signed := signedAssertions(t, manifestPath)
+			c2paAvail = func() bool { return true }
+			c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+				return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid", Assertions: signed}, nil
+			}
+			finalPath := filepath.Join(day, "final", stem+"-final.md")
+			var out, errb strings.Builder
+			if code := runVerify(finalPath, &out, &errb); code != 0 {
+				t.Fatalf("the untampered set must verify: exit %d\n%s", code, out.String())
+			}
+
+			tamper(t, manifestPath)
+			out.Reset()
+			if code := runVerify(finalPath, &out, &errb); code != 1 {
+				t.Errorf("exit = %d, want 1: the credential does not vouch for this manifest\n%s", code, out.String())
+			}
+			if !strings.Contains(out.String(), "does not vouch") {
+				t.Errorf("the report does not say why:\n%s", out.String())
+			}
+			out.Reset()
+			if code := runVerifyJSON(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), `"unbound"`) {
+				t.Errorf("--json: exit %d, want 1 with an unbound reason:\n%s", code, out.String())
+			}
+		})
+	}
 }

@@ -80,6 +80,12 @@ type Report struct {
 	// of the article, and is empty when it does. c2patool can call such a
 	// credential Valid; SignatureValid never does.
 	Uncovered string
+	// Assertions maps each assertion label in the credential's active
+	// manifest to its data, as c2patool read it back out of the signed claim.
+	// It is what lets a caller confirm the credential signs the evidence it
+	// is checked against, not merely the article bytes. Nil when the report
+	// carried no manifest.
+	Assertions map[string]json.RawMessage
 }
 
 // Sign turns a manifest definition into a signed sidecar credential for the
@@ -197,7 +203,7 @@ func parseReport(out string) (Report, error) {
 	}
 
 	passed := codes(doc.ValidationResults.ActiveManifest.Success, doc.ValidationStatus)
-	rep := Report{State: doc.ValidationState}
+	rep := Report{State: doc.ValidationState, Assertions: doc.Manifests[doc.ActiveManifest].AssertionStore}
 	var untrusted bool
 	rep.Failures, untrusted = failures(doc.ValidationResults.ActiveManifest.Failure)
 	// Trust is only ever positively asserted: c2patool run with no trust

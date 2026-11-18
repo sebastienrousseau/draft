@@ -36,6 +36,15 @@ series until `0.0.999`.
   `Trusted`. A report that validated the signature and said nothing about
   the certificate, as `c2patool` does with no trust list, was shown as
   "valid and trusted".
+- `--verify` fails a signed credential that does not vouch for the manifest
+  beside the article. The signature covers the article's bytes, but the
+  source and ledger digests, the review and the AI disclosure live in the
+  unsigned manifest, so any of them could be rewritten, or a review by
+  anyone added, while the signature still verified as "valid and trusted".
+  draft's three assertions must now equal the copies the credential signed,
+  which `c2patool` stores verbatim. The reason is shown, and recorded as
+  `signature.unbound` in `--verify --json`, an addition within v1.
+  Credentials draft has signed, before this release as well, still verify.
 
 ### Fixed
 

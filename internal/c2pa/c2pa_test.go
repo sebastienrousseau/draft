@@ -209,3 +209,21 @@ func TestParseReportTrustIsOnlyPositive(t *testing.T) {
 		}
 	}
 }
+
+// The active manifest's assertion store is exposed, so a caller can check
+// what the credential signed.
+func TestParseReportExposesSignedAssertions(t *testing.T) {
+	out := `{
+      "active_manifest": "m",
+      "manifests": {"m": {"assertion_store": {"c2pa.hash.data": {"alg": "sha256"}, "com.draftlib.grounding": {"schema": 1}}}},
+      "validation_state": "Valid",
+      "validation_results": {"activeManifest": {"success": [{"code": "claimSignature.validated"}, {"code": "assertion.dataHash.match"}], "failure": []}}
+    }`
+	rep, err := parseReport(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(rep.Assertions["com.draftlib.grounding"]); got != `{"schema": 1}` {
+		t.Errorf("grounding assertion = %q", got)
+	}
+}

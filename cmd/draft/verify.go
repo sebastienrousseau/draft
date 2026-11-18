@@ -354,10 +354,22 @@ func signatureFor(bodyPath, manifestPath string) *provenance.SignatureState {
 	if err != nil {
 		return &provenance.SignatureState{Present: true, Checked: true, State: "error: " + err.Error()}
 	}
-	return &provenance.SignatureState{
+	st := &provenance.SignatureState{
 		Present: true, Checked: true, Valid: rep.SignatureValid, Trusted: rep.Trusted, State: rep.State,
 		Uncovered: rep.Uncovered,
 	}
+	// The signature covers the article bytes; the evidence about them is in
+	// the unsigned manifest, so the credential must have signed that too.
+	manifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		st.Unbound = "the manifest cannot be read"
+	} else {
+		st.Unbound = provenance.Unbound(manifest, rep.Assertions)
+	}
+	if st.Unbound != "" {
+		st.Valid = false
+	}
+	return st
 }
 
 // printSignatureReport prints a SIGNATURE section for a credential's state and
@@ -375,6 +387,9 @@ func printSignatureReport(w io.Writer, sig *provenance.SignatureState) bool {
 		return true
 	case sig.Uncovered != "":
 		row("!!", "signature", "INVALID — "+sig.Uncovered)
+		return false
+	case sig.Unbound != "":
+		row("!!", "binding", "INVALID — the credential does not vouch for this manifest: "+sig.Unbound)
 		return false
 	case !sig.Valid:
 		row("!!", "signature", "INVALID — the credential does not match this article")

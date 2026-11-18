@@ -100,6 +100,12 @@ type SignatureState struct {
 	// article unsigned. Such a credential is invalid even when c2patool calls
 	// it valid. Added within v1.
 	Uncovered string `json:"uncovered,omitempty"`
+	// Unbound says why the credential does not vouch for the manifest beside
+	// the article: one of draft's assertions differs from, or is missing
+	// from, the copy the credential signed. Such a credential is invalid,
+	// since the evidence it would vouch for may have been rewritten. Added
+	// within v1.
+	Unbound string `json:"unbound,omitempty"`
 }
 
 // NewVerificationRecord builds a record from a CheckReport and an optional
