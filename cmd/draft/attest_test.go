@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/sebastienrousseau/draft/internal/c2pa"
+	"github.com/sebastienrousseau/draft/internal/c2pa/c2patest"
 	"github.com/sebastienrousseau/draft/provenance"
 )
 
@@ -228,5 +229,38 @@ func TestAttestSignsTheReview(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(manifest); !bytes.Equal(got, signed) {
 		t.Error("the manifest written is not the one signed")
+	}
+	if g, _, err := provenance.ParseManifest(signed); err != nil || !g.Signed {
+		t.Errorf("the signed manifest does not record its credential (err %v)", err)
+	}
+}
+
+// End to end with the real c2patool: a set --attest signed verifies, and
+// deleting its credential afterwards fails --verify instead of leaving a set
+// that reads as never signed.
+func TestAttestSignedSetLosesItsCredentialLive(t *testing.T) {
+	if !c2paAvailable() {
+		t.Skip("c2patool not installed")
+	}
+	hermeticAttest(t)
+	cert, key := c2patest.MustChain(t.TempDir())
+	t.Setenv("DRAFT_C2PA_CERT", cert)
+	t.Setenv("DRAFT_C2PA_KEY", key)
+
+	day, stem := writeSet(t, "# Title\n\nA sentence.", false)
+	body := filepath.Join(day, "source", stem+"-body.md")
+	if code, out, errs := runCLI(t, "--attest", body, "--reviewed-by", "Ada"); code != 0 {
+		t.Fatalf("attest: exit %d\n%s%s", code, out, errs)
+	}
+	var out, errb strings.Builder
+	if code := runVerify(body, &out, &errb); code != 0 {
+		t.Fatalf("a set signed by --attest must verify: exit %d\n%s", code, out.String())
+	}
+	if err := os.Remove(sidecarPath(filepath.Join(day, "provenance", stem+"-c2pa.json"))); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := runVerify(body, &out, &errb); code != 1 || !strings.Contains(out.String(), "MISSING") {
+		t.Errorf("credential deleted: exit %d, want 1 and MISSING\n%s", code, out.String())
 	}
 }

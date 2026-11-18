@@ -97,3 +97,55 @@ func copyAssertions(m map[string]json.RawMessage) map[string]json.RawMessage {
 	}
 	return out
 }
+
+func TestMarkSigned(t *testing.T) {
+	manifest, _ := boundManifest(t)
+	marked, err := MarkSigned(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _, err := ParseManifest(marked)
+	if err != nil || !g.Signed {
+		t.Fatalf("grounding not marked signed (err %v)", err)
+	}
+	// Every other assertion is carried over as it was.
+	before, after := assertionsOf(t, manifest), assertionsOf(t, marked)
+	for label, data := range before {
+		if label != GroundingLabel && !sameJSON(data, after[label]) {
+			t.Errorf("%s changed when the manifest was marked", label)
+		}
+	}
+	// Marking twice is harmless.
+	if again, err := MarkSigned(marked); err != nil || string(again) != string(marked) {
+		t.Errorf("marking a marked manifest changed it (err %v)", err)
+	}
+
+	for name, bad := range map[string]string{
+		"not json":             "nope",
+		"assertions not list":  `{"assertions": 1}`,
+		"no grounding":         `{"assertions": [{"label": "x", "data": {}}]}`,
+		"grounding not object": `{"assertions": [{"label": "` + GroundingLabel + `", "data": 1}]}`,
+	} {
+		if _, err := MarkSigned([]byte(bad)); err == nil {
+			t.Errorf("%s: marked a manifest it cannot reproduce", name)
+		}
+	}
+}
+
+func assertionsOf(t *testing.T, manifest []byte) map[string]json.RawMessage {
+	t.Helper()
+	var m struct {
+		Assertions []struct {
+			Label string          `json:"label"`
+			Data  json.RawMessage `json:"data"`
+		} `json:"assertions"`
+	}
+	if err := json.Unmarshal(manifest, &m); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]json.RawMessage{}
+	for _, a := range m.Assertions {
+		out[a.Label] = a.Data
+	}
+	return out
+}

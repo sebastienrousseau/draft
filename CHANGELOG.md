@@ -45,6 +45,15 @@ series until `0.0.999`.
   which `c2patool` stores verbatim. The reason is shown, and recorded as
   `signature.unbound` in `--verify --json`, an addition within v1.
   Credentials draft has signed, before this release as well, still verify.
+- **A signed manifest records `signed: true` in its grounding assertion
+  (breaking: generated output)**, and
+  `--verify` fails a set whose manifest records a credential with none
+  beside it. Deleting the `.c2pa` file used to turn a signed set into one
+  that verified as never signed. Signing at run time and `--attest` both
+  write the marked manifest and the credential together, or neither, and
+  `--verify --json` gains `signature.expected`, an addition within v1.
+  Manifests written unsigned are unchanged, and a set signed before this
+  release still verifies as it did.
 
 ### Fixed
 

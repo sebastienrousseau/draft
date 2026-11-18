@@ -513,7 +513,9 @@ article fails even when `c2patool` accepts it: excluding the whole file is
 how a signature over nothing still validates. So does one that does not vouch
 for the manifest beside the article: the source and ledger digests, the review
 and the AI disclosure must match the copies the credential signed, or they
-could be rewritten under a signature that still verifies. Add `--json` to emit a portable
+could be rewritten under a signature that still verifies. A signed manifest
+records that it was signed, so a credential deleted later fails `--verify`
+instead of leaving a set that reads as never signed. Add `--json` to emit a portable
 `draft.verification-record/v1` receipt instead of the human report — the
 article digest and whether it matches, the grounding summary, the source and
 signature state, and the overall verdict — for a script, a CI gate, or an

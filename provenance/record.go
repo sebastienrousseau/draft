@@ -106,6 +106,11 @@ type SignatureState struct {
 	// since the evidence it would vouch for may have been rewritten. Added
 	// within v1.
 	Unbound string `json:"unbound,omitempty"`
+	// Expected is true when the manifest records that a signed credential
+	// was issued for it. Such a set is checked as signed: a credential that
+	// has gone missing fails it rather than leaving an unsigned set. Added
+	// within v1.
+	Expected bool `json:"expected,omitempty"`
 }
 
 // NewVerificationRecord builds a record from a CheckReport and an optional

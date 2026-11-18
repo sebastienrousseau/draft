@@ -409,7 +409,7 @@ func TestSignatureFor(t *testing.T) {
 	bodyPath := filepath.Join(dir, "x-body.md")
 
 	// No sidecar -> nil.
-	if sig := signatureFor(bodyPath, manifestPath); sig != nil {
+	if sig := signatureFor(bodyPath, manifestPath, false); sig != nil {
 		t.Errorf("no credential should yield nil, got %+v", sig)
 	}
 	if err := os.WriteFile(sidecarPath, []byte("cred"), 0o644); err != nil {
@@ -422,7 +422,7 @@ func TestSignatureFor(t *testing.T) {
 
 	// c2patool absent -> present, unchecked, not a failure.
 	c2paAvail = func() bool { return false }
-	sig := signatureFor(bodyPath, manifestPath)
+	sig := signatureFor(bodyPath, manifestPath, false)
 	if sig == nil || !sig.Present || sig.Checked {
 		t.Errorf("absent c2patool: %+v", sig)
 	}
@@ -431,7 +431,7 @@ func TestSignatureFor(t *testing.T) {
 
 	// verify error -> checked, invalid.
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) { return c2pa.Report{}, errVerify }
-	sig = signatureFor(bodyPath, manifestPath)
+	sig = signatureFor(bodyPath, manifestPath, false)
 	if sig == nil || !sig.Checked || sig.Valid {
 		t.Errorf("verify error: %+v", sig)
 	}
@@ -440,7 +440,7 @@ func TestSignatureFor(t *testing.T) {
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 	}
-	sig = signatureFor(bodyPath, manifestPath)
+	sig = signatureFor(bodyPath, manifestPath, false)
 	if sig == nil || !sig.Valid || sig.Trusted {
 		t.Errorf("valid untrusted: %+v", sig)
 	}
@@ -449,7 +449,7 @@ func TestSignatureFor(t *testing.T) {
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
 	}
-	sig = signatureFor(bodyPath, manifestPath)
+	sig = signatureFor(bodyPath, manifestPath, false)
 	if sig == nil || sig.Valid || sig.Unbound == "" {
 		t.Errorf("unbound credential: %+v", sig)
 	}
@@ -459,7 +459,7 @@ func TestSignatureFor(t *testing.T) {
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, State: "Valid"}, nil
 	}
-	if sig = signatureFor(bodyPath, manifestPath); sig == nil || sig.Valid || sig.Unbound == "" {
+	if sig = signatureFor(bodyPath, manifestPath, false); sig == nil || sig.Valid || sig.Unbound == "" {
 		t.Errorf("unreadable manifest: %+v", sig)
 	}
 }
@@ -733,5 +733,30 @@ func TestRunVerifyFailsACredentialThatDoesNotVouchForTheManifest(t *testing.T) {
 				t.Errorf("--json: exit %d, want 1 with an unbound reason:\n%s", code, out.String())
 			}
 		})
+	}
+}
+
+// A manifest that records a signed credential, with none beside it, has lost
+// its signature: verifying it as an unsigned set would let anyone strip a
+// credential that no longer matched and pass. The JSON record says so too.
+func TestRunVerifyFailsWhenARecordedCredentialIsMissing(t *testing.T) {
+	day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
+	manifestPath := filepath.Join(day, "provenance", stem+"-c2pa.json")
+	b, _ := os.ReadFile(manifestPath)
+	marked := strings.Replace(string(b), `"article_sha256"`, `"signed": true, "article_sha256"`, 1)
+	if marked == string(b) {
+		t.Fatal("fixture is wrong: no grounding to mark")
+	}
+	if err := os.WriteFile(manifestPath, []byte(marked), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	finalPath := filepath.Join(day, "final", stem+"-final.md")
+	var out, errb strings.Builder
+	if code := runVerify(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), "MISSING") {
+		t.Errorf("exit = %d, want 1 and the credential reported missing:\n%s", code, out.String())
+	}
+	out.Reset()
+	if code := runVerifyJSON(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), `"expected": true`) {
+		t.Errorf("--json: exit %d, want 1 with the credential expected:\n%s", code, out.String())
 	}
 }

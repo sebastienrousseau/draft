@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sebastienrousseau/draft/internal/atomicfile"
 	"github.com/sebastienrousseau/draft/internal/c2pa"
+	"github.com/sebastienrousseau/draft/provenance"
 )
 
 // Seams over the c2pa package so the signing wiring is testable without the
@@ -21,8 +23,9 @@ var (
 // signManifest turns the just-written manifest definition into a signed,
 // detached C2PA credential beside the set, when a signing certificate is
 // configured and c2patool is installed. It binds the credential to the body
-// file — the same bytes draft --verify checks — so a verifier can confirm both
-// the digests and the signature.
+// file — the same bytes draft --verify checks — and signs the manifest's own
+// assertions with it, so a verifier can confirm the digests, the signature,
+// and that the one vouches for the other.
 //
 // Signing is opt-in and never fails a run: the article is already saved and
 // grounded, and an unsigned manifest is the long-standing default. Every
@@ -43,15 +46,25 @@ func (r *Runner) signManifest(ctx context.Context, outputDir, stem, bodyPath str
 		r.warn("could not read the manifest to sign: " + err.Error())
 		return
 	}
-	cred, err := c2paSign(ctx, bodyPath, manifest, c2pa.Signer{
+	// The credential signs a manifest that records it, so a credential
+	// deleted later reads as missing rather than as a set never signed.
+	marked, err := provenance.MarkSigned(manifest)
+	if err != nil {
+		r.warn("could not prepare the manifest for signing; wrote an unsigned manifest: " + err.Error())
+		return
+	}
+	cred, err := c2paSign(ctx, bodyPath, marked, c2pa.Signer{
 		CertPath: r.cfg.SignCert, KeyPath: r.cfg.SignKey, Alg: r.cfg.SignAlg,
 	})
 	if err != nil {
 		r.warn("C2PA signing failed; wrote an unsigned manifest: " + err.Error())
 		return
 	}
+	// Both or neither: a marked manifest with no credential beside it fails
+	// --verify, and a credential beside the unmarked manifest does not vouch
+	// for it.
 	sidecar := filepath.Join(outputDir, "provenance", stem+"-c2pa.c2pa")
-	if err := os.WriteFile(sidecar, cred, 0o644); err != nil {
+	if err := atomicfile.WriteSet(map[string][]byte{sidecar: cred, r.manifestPath: marked}, 0o644); err != nil {
 		r.warn("could not write the signed credential: " + err.Error())
 		return
 	}

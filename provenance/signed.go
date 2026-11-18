@@ -6,6 +6,7 @@ package provenance
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 )
 
 // boundLabels are the assertions draft writes whose signed copy must match
@@ -73,4 +74,40 @@ func canonicalJSON(v json.RawMessage) ([]byte, bool) {
 	// A value just decoded from JSON always encodes.
 	out, _ := json.Marshal(x)
 	return out, true
+}
+
+// MarkSigned returns manifest with its grounding assertion's signed field
+// set, the rest carried over unchanged as Attest does. A signer signs these
+// bytes and writes them together with the credential, so the grounding the
+// credential signed and the one --verify reads are the same.
+func MarkSigned(manifest []byte) ([]byte, error) {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(manifest, &top); err != nil {
+		return nil, fmt.Errorf("not a draft manifest: %w", err)
+	}
+	var assertions []json.RawMessage
+	if err := json.Unmarshal(top["assertions"], &assertions); err != nil {
+		return nil, fmt.Errorf("malformed assertions: %w", err)
+	}
+	i := -1
+	for j, a := range assertions {
+		if labelOf(a) == GroundingLabel {
+			i = j
+		}
+	}
+	if i < 0 {
+		return nil, fmt.Errorf("no %s assertion in the manifest", GroundingLabel)
+	}
+	var a struct {
+		Data map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(assertions[i], &a); err != nil || a.Data == nil {
+		return nil, fmt.Errorf("malformed grounding assertion")
+	}
+	a.Data["signed"] = json.RawMessage("true")
+	assertions[i] = entry(GroundingLabel, a.Data)
+	// Raw messages just decoded from JSON always encode.
+	top["assertions"], _ = json.Marshal(assertions)
+	out, _ := json.MarshalIndent(top, "", "  ")
+	return append(out, '\n'), nil
 }
