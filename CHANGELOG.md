@@ -26,6 +26,15 @@ series until `0.0.999`.
   written in them no longer escapes the check. The same reading applies to
   the article's number check and to attribution.
 
+### Fixed
+
+- A claim whose `TYPE` is `none` is kept with no type, instead of being
+  dropped. The extraction prompt tells the model to write `none` for a
+  field that does not apply, so doing as asked cost a verified claim, on
+  both the text and the JSON path. `STRENGTH: none` is still dropped: an
+  empty strength reaches the writer as no hedge, so a hedged claim would
+  read as settled.
+
 ## [0.0.47] - 2026-11-17
 
 ### Added

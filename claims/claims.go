@@ -73,6 +73,7 @@ func Parse(text, source string) (records []Record, dropped int) {
 // is refused outright: see singleLine.
 func verifyOrRepair(rec Record, source string) (Record, bool) {
 	rec = singleLine(rec)
+	rec.Type = optional(rec.Type)
 	if spellsField(rec.Claim) {
 		return Record{}, false
 	}
@@ -85,6 +86,21 @@ func verifyOrRepair(rec Record, source string) (Record, bool) {
 		}
 	}
 	return Record{}, false
+}
+
+// optional returns "" for a TYPE the model marked as not applying. The
+// extraction prompt asks for "none" when a field does not apply, and Verify
+// accepts only an empty TYPE or a known one, so doing as asked used to cost
+// the whole claim.
+//
+// STRENGTH is deliberately not given the same reading: an empty strength
+// reaches the writer as no hedge at all, so a hedged claim marked "none"
+// would be written as settled. Dropping it is the safe failure.
+func optional(s string) string {
+	if strings.EqualFold(strings.TrimSpace(s), "none") {
+		return ""
+	}
+	return s
 }
 
 // ParseLedger reads back a ledger previously written by RenderLedger,
