@@ -9,6 +9,9 @@
 // containing one — so a carelessly cut prompt costs verified claims further
 // down the run. internal/pdf already guarded its own cut this way; these are
 // the same two operations, shared, so the next caller cannot get it wrong.
+//
+// It also strips the characters that display as nothing (StripInvisible), so
+// source text a reader cannot see never reaches a model.
 package runes
 
 import "unicode/utf8"

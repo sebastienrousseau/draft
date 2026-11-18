@@ -117,6 +117,19 @@ series until `0.0.999`.
   writes a needs-review Markdown copy that carries the markup; the raw
   `failed-output.txt` keeps it as text. `--review` fails an edit that adds
   any. `validate.UnsafeMarkup` is the new check, with a fuzz target.
+- **Invisible characters are stripped from source text when it is read
+  (S-L2, breaking: generated output).** Unicode tag characters, bidi
+  embeddings, overrides and isolates, the zero-width space, word joiner and
+  byte-order mark display as nothing but reached the extraction prompt, so
+  a document could carry instructions or reorder text that its reader never
+  saw. Every reader's text now loses them before it is split into sections,
+  so the prompt and quote verification see the same visible text, and a
+  claim's quote is verified against it. The zero-width non-joiner and joiner
+  are kept between two visible non-ASCII characters, where Persian, Indic
+  scripts and emoji sequences need them, and removed elsewhere; directional
+  marks are kept. A resumed claim whose quote held a stripped tag or bidi
+  character no longer verifies and is dropped; the extraction cache is keyed
+  on section text, so a section that changed is extracted afresh.
 
 ## [0.0.48] - 2026-11-18
 

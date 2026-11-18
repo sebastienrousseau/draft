@@ -51,6 +51,7 @@ fuzz: ## Run each fuzz target briefly (FUZZTIME=30s make fuzz)
 	@go test ./seo/ -run FuzzParseCheck -fuzz FuzzParseCheck -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./pipeline/ -run FuzzParseSurgicalEdits -fuzz FuzzParseSurgicalEdits -fuzztime $(or $(FUZZTIME),20s)
 	@go test ./validate/ -run FuzzUnsafeMarkup -fuzz FuzzUnsafeMarkup -fuzztime $(or $(FUZZTIME),20s)
+	@go test ./internal/runes/ -run FuzzStripInvisible -fuzz FuzzStripInvisible -fuzztime $(or $(FUZZTIME),20s)
 
 .PHONY: corpus
 corpus: ## Run the grounding corpus against the recorded extractions

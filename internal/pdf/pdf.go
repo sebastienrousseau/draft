@@ -278,11 +278,18 @@ func lastStopIndex(text string) int {
 // lineEndings folds CRLF and lone CR to LF in a single pass.
 var lineEndings = strings.NewReplacer("\r\n", "\n", "\r", "\n")
 
-// NormaliseSpace canonicalises line endings and collapses runs of blank lines.
+// NormaliseSpace canonicalises line endings, collapses runs of blank lines,
+// and strips invisible characters (see runes.StripInvisible).
+//
+// Every reader's text passes through here before it is split into sections,
+// and the sections are both what the extraction prompt carries and what a
+// claim's quote is verified against. Stripping here, once, is what keeps the
+// two identical: text a reader of the document cannot see never reaches the
+// model, and a quote of the visible text still verifies.
 func NormaliseSpace(text string) string {
 	// One Replacer pass rather than two ReplaceAll passes: each pass copies the
 	// whole document, and these run on every source file.
-	text = lineEndings.Replace(text)
+	text = runes.StripInvisible(lineEndings.Replace(text))
 	if multiBlank.MatchString(text) {
 		text = multiBlank.ReplaceAllString(text, "\n\n\n")
 	}
