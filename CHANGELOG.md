@@ -40,6 +40,11 @@ series until `0.0.999`.
   both the text and the JSON path. `STRENGTH: none` is still dropped: an
   empty strength reaches the writer as no hedge, so a hedged claim would
   read as settled.
+- ACP sessions: a call that looked up its agent session just as the idle
+  reaper or shutdown dropped it started a new agent no one would ever close,
+  leaving the process running after draft exited. The reaper also waited
+  behind an agent that was still starting, which can take minutes; it now
+  skips a session in use and closes agents outside its locks.
 
 ## [0.0.47] - 2026-11-17
 
