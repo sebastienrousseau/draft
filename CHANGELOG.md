@@ -10,6 +10,10 @@ series until `0.0.999`.
 
 - CI installs `c2patool` on Linux (a release pinned by version and SHA-256)
   and macOS, so the live C2PA tests run there instead of skipping.
+- The release job builds with an exact Go toolchain (1.27.4, the one that
+  built v0.0.48) instead of whatever `stable` is on the day, and the
+  devcontainer installs the docs tooling from the same hash-pinned files
+  as CI.
 
 ### Security
 

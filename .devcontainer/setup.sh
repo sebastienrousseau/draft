@@ -12,8 +12,10 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq poppler-utils groff
 
 echo "==> Lint and docs tooling"
-python3 -m pip install --quiet --disable-pip-version-check \
-  codespell==2.4.3 mkdocs==1.6.1 mkdocs-material==9.7.7 pre-commit==4.6.2
+# The same hash-pinned files CI and the Makefile install from.
+python3 -m pip install --quiet --disable-pip-version-check --require-hashes \
+  -r .github/requirements/codespell.txt -r .github/requirements/manual.txt
+python3 -m pip install --quiet --disable-pip-version-check pre-commit==4.6.2
 
 # Pinned together with the Go toolchain; see the comment in ci.yml.
 echo "==> golangci-lint"
