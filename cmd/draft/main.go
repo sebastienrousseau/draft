@@ -117,6 +117,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 type options struct {
 	flags                                                    config.Flags
 	showVersion, headless, jsonOut, dryRun                   bool
+	requireSignature                                         bool
 	clearCache, doctor, manPage, trustConfig                 bool
 	reviewPath, frontmatterPath, completionShell, verifyPath string
 	attestPath, reviewedBy, seoPath                          string
@@ -154,6 +155,7 @@ func newFlagSet(o *options, stderr io.Writer) *flag.FlagSet {
 	fs.BoolVar(&o.headless, "print", false, "run without the TUI; print draft paths to stdout")
 	fs.BoolVar(&o.jsonOut, "json", false, "run without the TUI; print one JSON object per job to stdout")
 	fs.StringVar(&o.verifyPath, "verify", "", "check an article against the provenance written beside it, and exit")
+	fs.BoolVar(&o.requireSignature, "require-signature", false, "with --verify: fail a set that has no valid signed credential")
 	fs.StringVar(&o.seoPath, "seo", "", "check final articles against Google Search guidance, and exit")
 	fs.StringVar(&o.attestPath, "attest", "", "record that --reviewed-by reviewed an article as it now stands, and exit")
 	fs.StringVar(&o.reviewedBy, "reviewed-by", "", "with --attest: the person taking editorial responsibility")
@@ -195,9 +197,9 @@ func runInfo(o options, stdout, stderr io.Writer) (code int, done bool) {
 func runOnFile(o options, stdout, stderr io.Writer) (code int, done bool) {
 	switch {
 	case o.verifyPath != "" && o.jsonOut:
-		return runVerifyJSON(o.verifyPath, stdout, stderr), true
+		return runVerifyJSON(o.verifyPath, verifyOptions{requireSignature: o.requireSignature}, stdout, stderr), true
 	case o.verifyPath != "":
-		return runVerify(o.verifyPath, stdout, stderr), true
+		return runVerify(o.verifyPath, verifyOptions{requireSignature: o.requireSignature}, stdout, stderr), true
 	case o.seoPath != "":
 		return runSEO(o, stdout, stderr), true
 	case o.attestPath != "":
@@ -406,6 +408,7 @@ var flagHelp = [][2]string{
 	{"--review <draft.md>", "enhance an existing draft with surgical edits"},
 	{"--frontmatter <file>", "regenerate frontmatter and the final article"},
 	{"--verify <file>", "check an article against its provenance, and exit"},
+	{"--require-signature", "with --verify: fail a set with no valid signed credential"},
 	{"--seo <file>...", "check final articles against Google Search guidance, and exit"},
 	{"--attest <file>", "record a human review of an article as it stands, and exit"},
 	{"--reviewed-by <id>", "with --attest: who takes editorial responsibility"},

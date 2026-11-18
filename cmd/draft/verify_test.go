@@ -60,7 +60,7 @@ func TestRunVerifyHappyPath(t *testing.T) {
 	} {
 		out.Reset()
 		errb.Reset()
-		if code := runVerify(entry, &out, &errb); code != 0 {
+		if code := runVerify(entry, verifyOptions{}, &out, &errb); code != 0 {
 			t.Errorf("verify %s: exit %d, stderr %s", filepath.Base(entry), code, errb.String())
 		}
 		if !strings.Contains(out.String(), "Verified.") {
@@ -76,7 +76,7 @@ func TestRunVerifyDetectsAnEditedArticle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errb strings.Builder
-	if code := runVerify(bodyPath, &out, &errb); code != 1 {
+	if code := runVerify(bodyPath, verifyOptions{}, &out, &errb); code != 1 {
 		t.Errorf("an edited body should fail with exit 1, got %d", code)
 	}
 	if !strings.Contains(out.String(), "does NOT match") || !strings.Contains(out.String(), "Not verified.") {
@@ -92,7 +92,7 @@ func TestRunVerifyFallsBackToFinalWhenBodyMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errb strings.Builder
-	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), &out, &errb); code != 0 {
+	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), verifyOptions{}, &out, &errb); code != 0 {
 		t.Errorf("final-only verify should pass, got %d: %s", code, errb.String())
 	}
 }
@@ -118,7 +118,7 @@ func TestRunVerifyErrors(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			var out, errb strings.Builder
-			if code := runVerify(tc.path, &out, &errb); code != 1 {
+			if code := runVerify(tc.path, verifyOptions{}, &out, &errb); code != 1 {
 				t.Errorf("expected exit 1, got %d", code)
 			}
 			if tc.wantStderr != "" && !strings.Contains(errb.String(), tc.wantStderr) {
@@ -132,7 +132,7 @@ func TestRunVerifyErrors(t *testing.T) {
 func TestRunVerifyReportsAForeignManifest(t *testing.T) {
 	day, stem := writeSet(t, "# Title\n\nBody.", true)
 	var out, errb strings.Builder
-	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), &out, &errb); code != 1 {
+	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), verifyOptions{}, &out, &errb); code != 1 {
 		t.Errorf("a foreign manifest should fail, got %d", code)
 	}
 	if !strings.Contains(out.String(), "Cannot verify.") {
@@ -212,7 +212,7 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 
 	// Everything present and unchanged.
 	var out, errb strings.Builder
-	if code := runVerify(final, &out, &errb); code != 0 {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 0 {
 		t.Fatalf("should verify, exit %d: %s", code, errb.String())
 	}
 	for _, want := range []string{"unchanged since it was read", "matches the verified claims", "written with", "carry a figure no claim contains"} {
@@ -226,7 +226,7 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if code := runVerify(final, &out, &errb); code != 1 || !strings.Contains(out.String(), "differs from the source") {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), "differs from the source") {
 		t.Errorf("a changed source should fail, exit %d:\n%s", code, out.String())
 	}
 
@@ -235,7 +235,7 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if code := runVerify(final, &out, &errb); code != 0 || !strings.Contains(out.String(), "not on this machine") {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 0 || !strings.Contains(out.String(), "not on this machine") {
 		t.Errorf("an absent source must not fail, exit %d:\n%s", code, out.String())
 	}
 
@@ -246,7 +246,7 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if code := runVerify(final, &out, &errb); code != 0 || !strings.Contains(out.String(), "matches the verified claims") {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 0 || !strings.Contains(out.String(), "matches the verified claims") {
 		t.Errorf("sibling ledger in the same day folder broke verification, exit %d:\n%s", code, out.String())
 	}
 	// If no ledger matches the manifest's digest, findLedger falls back to the
@@ -258,7 +258,7 @@ func TestRunVerifyChecksSourcesAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if code := runVerify(final, &out, &errb); code != 1 {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 1 {
 		t.Errorf("tampered ledgers should fail verification, got %d", code)
 	}
 }
@@ -277,7 +277,7 @@ func TestRunVerifyIgnoresAnotherPapersLedger(t *testing.T) {
 	}
 	var out, errb strings.Builder
 	final := filepath.Join(day, "final", stem+"-final.md")
-	if code := runVerify(final, &out, &errb); code != 0 || strings.Contains(out.String(), "does not match the recorded digest") {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 0 || strings.Contains(out.String(), "does not match the recorded digest") {
 		t.Errorf("another paper's ledger failed verification, exit %d:\n%s", code, out.String())
 	}
 }
@@ -295,7 +295,7 @@ func TestRunVerifyChecksALedgerNamedForTheSource(t *testing.T) {
 	}
 	var out, errb strings.Builder
 	final := filepath.Join(day, "final", stem+"-final.md")
-	if code := runVerify(final, &out, &errb); code != 1 || !strings.Contains(out.String(), "does not match the recorded digest") {
+	if code := runVerify(final, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), "does not match the recorded digest") {
 		t.Errorf("a tampered source-named ledger should fail, exit %d:\n%s", code, out.String())
 	}
 }
@@ -351,7 +351,7 @@ func TestRunVerifySignature(t *testing.T) {
 	}
 
 	var out, errb strings.Builder
-	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), &out, &errb); code != 0 {
+	if code := runVerify(filepath.Join(day, "final", stem+"-final.md"), verifyOptions{}, &out, &errb); code != 0 {
 		t.Errorf("signed verify: exit %d, out %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "SIGNATURE") || !strings.Contains(out.String(), "valid") {
@@ -364,7 +364,7 @@ func TestRunVerifySignature(t *testing.T) {
 	}
 	out.Reset()
 	errb.Reset()
-	if code := runVerify(bodyPath, &out, &errb); code != 1 {
+	if code := runVerify(bodyPath, verifyOptions{}, &out, &errb); code != 1 {
 		t.Errorf("tampered signed verify: exit %d, want 1\n%s", code, out.String())
 	}
 }
@@ -409,7 +409,7 @@ func TestSignatureFor(t *testing.T) {
 	bodyPath := filepath.Join(dir, "x-body.md")
 
 	// No sidecar -> nil.
-	if sig := signatureFor(bodyPath, manifestPath, false); sig != nil {
+	if sig := signatureFor(bodyPath, manifestPath, false, false); sig != nil {
 		t.Errorf("no credential should yield nil, got %+v", sig)
 	}
 	if err := os.WriteFile(sidecarPath, []byte("cred"), 0o644); err != nil {
@@ -422,7 +422,7 @@ func TestSignatureFor(t *testing.T) {
 
 	// c2patool absent -> present, unchecked, not a failure.
 	c2paAvail = func() bool { return false }
-	sig := signatureFor(bodyPath, manifestPath, false)
+	sig := signatureFor(bodyPath, manifestPath, false, false)
 	if sig == nil || !sig.Present || sig.Checked {
 		t.Errorf("absent c2patool: %+v", sig)
 	}
@@ -431,7 +431,7 @@ func TestSignatureFor(t *testing.T) {
 
 	// verify error -> checked, invalid.
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) { return c2pa.Report{}, errVerify }
-	sig = signatureFor(bodyPath, manifestPath, false)
+	sig = signatureFor(bodyPath, manifestPath, false, false)
 	if sig == nil || !sig.Checked || sig.Valid {
 		t.Errorf("verify error: %+v", sig)
 	}
@@ -440,7 +440,7 @@ func TestSignatureFor(t *testing.T) {
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 	}
-	sig = signatureFor(bodyPath, manifestPath, false)
+	sig = signatureFor(bodyPath, manifestPath, false, false)
 	if sig == nil || !sig.Valid || sig.Trusted {
 		t.Errorf("valid untrusted: %+v", sig)
 	}
@@ -449,7 +449,7 @@ func TestSignatureFor(t *testing.T) {
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid"}, nil
 	}
-	sig = signatureFor(bodyPath, manifestPath, false)
+	sig = signatureFor(bodyPath, manifestPath, false, false)
 	if sig == nil || sig.Valid || sig.Unbound == "" {
 		t.Errorf("unbound credential: %+v", sig)
 	}
@@ -459,7 +459,7 @@ func TestSignatureFor(t *testing.T) {
 	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
 		return c2pa.Report{SignatureValid: true, State: "Valid"}, nil
 	}
-	if sig = signatureFor(bodyPath, manifestPath, false); sig == nil || sig.Valid || sig.Unbound == "" {
+	if sig = signatureFor(bodyPath, manifestPath, false, false); sig == nil || sig.Valid || sig.Unbound == "" {
 		t.Errorf("unreadable manifest: %+v", sig)
 	}
 }
@@ -473,7 +473,7 @@ func (e errString) Error() string { return string(e) }
 func TestRunVerifyJSON(t *testing.T) {
 	day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
 	var out, errb strings.Builder
-	code := runVerifyJSON(filepath.Join(day, "final", stem+"-final.md"), &out, &errb)
+	code := runVerifyJSON(filepath.Join(day, "final", stem+"-final.md"), verifyOptions{}, &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr %s\n%s", code, errb.String(), out.String())
 	}
@@ -492,7 +492,7 @@ func TestRunVerifyJSON(t *testing.T) {
 	}
 	out.Reset()
 	errb.Reset()
-	if code := runVerifyJSON(body, &out, &errb); code != 1 {
+	if code := runVerifyJSON(body, verifyOptions{}, &out, &errb); code != 1 {
 		t.Errorf("tampered exit = %d, want 1", code)
 	}
 	var rec2 provenance.VerificationRecord
@@ -504,7 +504,7 @@ func TestRunVerifyJSON(t *testing.T) {
 
 func TestRunVerifyJSONLoadError(t *testing.T) {
 	var out, errb strings.Builder
-	if code := runVerifyJSON("/no/such/x-final.md", &out, &errb); code != 1 {
+	if code := runVerifyJSON("/no/such/x-final.md", verifyOptions{}, &out, &errb); code != 1 {
 		t.Errorf("missing file exit = %d, want 1", code)
 	}
 }
@@ -514,7 +514,7 @@ func TestRunVerifyJSONManifestProblem(t *testing.T) {
 	// reports verified=false and no signature is attempted.
 	day, stem := writeSet(t, "# Title\n\nA sentence.", true)
 	var out, errb strings.Builder
-	if code := runVerifyJSON(filepath.Join(day, "final", stem+"-final.md"), &out, &errb); code != 1 {
+	if code := runVerifyJSON(filepath.Join(day, "final", stem+"-final.md"), verifyOptions{}, &out, &errb); code != 1 {
 		t.Fatalf("exit = %d, want 1\n%s", code, out.String())
 	}
 	var rec provenance.VerificationRecord
@@ -542,7 +542,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 	t.Run("c2patool not installed", func(t *testing.T) {
 		c2paAvail = func() bool { return false }
 		var out, errb strings.Builder
-		code := runVerify(finalPath, &out, &errb)
+		code := runVerify(finalPath, verifyOptions{}, &out, &errb)
 		if code != 0 {
 			t.Errorf("exit = %d, want 0", code)
 		}
@@ -551,7 +551,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 		}
 		out.Reset()
 		errb.Reset()
-		code = runVerifyJSON(finalPath, &out, &errb)
+		code = runVerifyJSON(finalPath, verifyOptions{}, &out, &errb)
 		if code != 0 {
 			t.Errorf("json exit = %d, want 0", code)
 		}
@@ -563,7 +563,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 			return c2pa.Report{SignatureValid: true, Trusted: true, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 		}
 		var out, errb strings.Builder
-		code := runVerify(finalPath, &out, &errb)
+		code := runVerify(finalPath, verifyOptions{}, &out, &errb)
 		if code != 0 {
 			t.Errorf("exit = %d, want 0", code)
 		}
@@ -572,7 +572,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 		}
 		out.Reset()
 		errb.Reset()
-		code = runVerifyJSON(finalPath, &out, &errb)
+		code = runVerifyJSON(finalPath, verifyOptions{}, &out, &errb)
 		if code != 0 {
 			t.Errorf("json exit = %d, want 0", code)
 		}
@@ -587,7 +587,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 			return c2pa.Report{State: "Valid", Uncovered: "the credential's data hash excludes 1 byte range(s) of the article"}, nil
 		}
 		var out, errb strings.Builder
-		if code := runVerify(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), "INVALID — the credential's data hash excludes") {
+		if code := runVerify(finalPath, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), "INVALID — the credential's data hash excludes") {
 			t.Errorf("exit %d\n%s", code, out.String())
 		}
 		rec := verifyJSON(t, finalPath)
@@ -602,7 +602,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 			return c2pa.Report{SignatureValid: true, Trusted: false, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
 		}
 		var out, errb strings.Builder
-		code := runVerify(finalPath, &out, &errb)
+		code := runVerify(finalPath, verifyOptions{}, &out, &errb)
 		if code != 0 {
 			t.Errorf("exit = %d, want 0", code)
 		}
@@ -617,7 +617,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 			return c2pa.Report{SignatureValid: false, Trusted: false, State: "Invalid"}, nil
 		}
 		var out, errb strings.Builder
-		code := runVerify(finalPath, &out, &errb)
+		code := runVerify(finalPath, verifyOptions{}, &out, &errb)
 		if code != 1 {
 			t.Errorf("exit = %d, want 1", code)
 		}
@@ -626,7 +626,7 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 		}
 		out.Reset()
 		errb.Reset()
-		code = runVerifyJSON(finalPath, &out, &errb)
+		code = runVerifyJSON(finalPath, verifyOptions{}, &out, &errb)
 		if code != 1 {
 			t.Errorf("json exit = %d, want 1", code)
 		}
@@ -638,13 +638,13 @@ func TestRunVerifyWithMockedSignatures(t *testing.T) {
 			return c2pa.Report{}, fmt.Errorf("c2patool failed")
 		}
 		var out, errb strings.Builder
-		code := runVerify(finalPath, &out, &errb)
+		code := runVerify(finalPath, verifyOptions{}, &out, &errb)
 		if code != 1 {
 			t.Errorf("exit = %d, want 1", code)
 		}
 		out.Reset()
 		errb.Reset()
-		code = runVerifyJSON(finalPath, &out, &errb)
+		code = runVerifyJSON(finalPath, verifyOptions{}, &out, &errb)
 		if code != 1 {
 			t.Errorf("json exit = %d, want 1", code)
 		}
@@ -716,20 +716,20 @@ func TestRunVerifyFailsACredentialThatDoesNotVouchForTheManifest(t *testing.T) {
 			}
 			finalPath := filepath.Join(day, "final", stem+"-final.md")
 			var out, errb strings.Builder
-			if code := runVerify(finalPath, &out, &errb); code != 0 {
+			if code := runVerify(finalPath, verifyOptions{}, &out, &errb); code != 0 {
 				t.Fatalf("the untampered set must verify: exit %d\n%s", code, out.String())
 			}
 
 			tamper(t, manifestPath)
 			out.Reset()
-			if code := runVerify(finalPath, &out, &errb); code != 1 {
+			if code := runVerify(finalPath, verifyOptions{}, &out, &errb); code != 1 {
 				t.Errorf("exit = %d, want 1: the credential does not vouch for this manifest\n%s", code, out.String())
 			}
 			if !strings.Contains(out.String(), "does not vouch") {
 				t.Errorf("the report does not say why:\n%s", out.String())
 			}
 			out.Reset()
-			if code := runVerifyJSON(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), `"unbound"`) {
+			if code := runVerifyJSON(finalPath, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), `"unbound"`) {
 				t.Errorf("--json: exit %d, want 1 with an unbound reason:\n%s", code, out.String())
 			}
 		})
@@ -752,11 +752,11 @@ func TestRunVerifyFailsWhenARecordedCredentialIsMissing(t *testing.T) {
 	}
 	finalPath := filepath.Join(day, "final", stem+"-final.md")
 	var out, errb strings.Builder
-	if code := runVerify(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), "MISSING") {
+	if code := runVerify(finalPath, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), "MISSING") {
 		t.Errorf("exit = %d, want 1 and the credential reported missing:\n%s", code, out.String())
 	}
 	out.Reset()
-	if code := runVerifyJSON(finalPath, &out, &errb); code != 1 || !strings.Contains(out.String(), `"expected": true`) {
+	if code := runVerifyJSON(finalPath, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), `"expected": true`) {
 		t.Errorf("--json: exit %d, want 1 with the credential expected:\n%s", code, out.String())
 	}
 }
@@ -765,7 +765,7 @@ func TestRunVerifyFailsWhenARecordedCredentialIsMissing(t *testing.T) {
 // cannot be loaded, so it never has to tell "unverified" from "no output".
 func TestRunVerifyJSONRecordsASetThatCannotBeLoaded(t *testing.T) {
 	var out, errb strings.Builder
-	code := runVerifyJSON(filepath.Join(t.TempDir(), "missing-final.md"), &out, &errb)
+	code := runVerifyJSON(filepath.Join(t.TempDir(), "missing-final.md"), verifyOptions{}, &out, &errb)
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
@@ -779,5 +779,40 @@ func TestRunVerifyJSONRecordsASetThatCannotBeLoaded(t *testing.T) {
 	}
 	if rec.Kind != provenance.RecordKind || rec.Verified || rec.Error == "" {
 		t.Errorf("record = %+v, want an unverified record with an error", rec)
+	}
+}
+
+// --require-signature turns --verify into a gate that an unsigned set, or a
+// signature that could not be checked, does not pass.
+func TestRunVerifyRequireSignature(t *testing.T) {
+	origA, origV := c2paAvail, c2paVerify
+	defer func() { c2paAvail, c2paVerify = origA, origV }()
+	day, stem := writeSet(t, "# Title\n\nA grounded sentence about a result.", false)
+	final := filepath.Join(day, "final", stem+"-final.md")
+	manifestPath := filepath.Join(day, "provenance", stem+"-c2pa.json")
+
+	if code, out, _ := runCLI(t, "--verify", final); code != 0 {
+		t.Fatalf("an unsigned set verifies without the flag: exit %d\n%s", code, out)
+	}
+	if code, out, _ := runCLI(t, "--verify", final, "--require-signature"); code != 1 || !strings.Contains(out, "--require-signature needs a valid signed credential") {
+		t.Errorf("unsigned set: exit %d, want 1\n%s", code, out)
+	}
+	if code, out, _ := runCLI(t, "--verify", final, "--require-signature", "--json"); code != 1 || !strings.Contains(out, `"required": true`) {
+		t.Errorf("unsigned set, --json: exit %d, want 1\n%s", code, out)
+	}
+
+	if err := os.WriteFile(strings.TrimSuffix(manifestPath, ".json")+".c2pa", []byte("cred"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c2paAvail = func() bool { return false }
+	if code, out, _ := runCLI(t, "--verify", final, "--require-signature"); code != 1 || !strings.Contains(out, "needs c2patool") {
+		t.Errorf("unchecked credential: exit %d, want 1\n%s", code, out)
+	}
+	c2paAvail = func() bool { return true }
+	c2paVerify = func(context.Context, string, []byte) (c2pa.Report, error) {
+		return c2pa.Report{SignatureValid: true, State: "Valid", Assertions: signedAssertions(t, manifestPath)}, nil
+	}
+	if code, out, _ := runCLI(t, "--verify", final, "--require-signature"); code != 0 {
+		t.Errorf("valid, bound credential: exit %d, want 0\n%s", code, out)
 	}
 }

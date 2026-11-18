@@ -114,6 +114,21 @@ type SignatureState struct {
 	// has gone missing fails it rather than leaving an unsigned set. Added
 	// within v1.
 	Expected bool `json:"expected,omitempty"`
+	// Required is true when the caller asked for a signature
+	// (--require-signature): then a missing credential, or one that could not
+	// be checked here, fails the record. Added within v1.
+	Required bool `json:"required,omitempty"`
+}
+
+// Acceptable reports whether the credential state lets a set verify. A
+// credential that was checked must be valid; one that could not be checked
+// here does not fail the set unless a signature was required, since a
+// verifier with c2patool still can check it.
+func (s SignatureState) Acceptable() bool {
+	if !s.Checked {
+		return !s.Required
+	}
+	return s.Valid
 }
 
 // NewVerificationRecord builds a record from a CheckReport and an optional
@@ -145,9 +160,9 @@ func NewVerificationRecord(r CheckReport, sig *SignatureState) VerificationRecor
 		rec.Sources = append(rec.Sources, SourceState(s))
 	}
 	rec.Signature = sig
-	// A signature fails the verdict only when it was actually checked and found
-	// invalid; a missing credential, or one that could not be checked here, does
-	// not — matching `draft --verify`.
-	rec.Verified = r.OK() && (sig == nil || !sig.Checked || sig.Valid)
+	// A signature fails the verdict when it was checked and found invalid, or
+	// is missing or unchecked where one was expected or required; see
+	// SignatureState.Acceptable. This matches `draft --verify`.
+	rec.Verified = r.OK() && (sig == nil || sig.Acceptable())
 	return rec
 }

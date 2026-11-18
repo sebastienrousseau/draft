@@ -42,7 +42,7 @@ func runCLI(t *testing.T, args ...string) (int, string, string) {
 func verifyJSON(t *testing.T, path string) provenance.VerificationRecord {
 	t.Helper()
 	var out, errb strings.Builder
-	runVerifyJSON(path, &out, &errb)
+	runVerifyJSON(path, verifyOptions{}, &out, &errb)
 	var rec provenance.VerificationRecord
 	if err := json.Unmarshal([]byte(out.String()), &rec); err != nil {
 		t.Fatalf("verify --json: %v\n%s%s", err, out.String(), errb.String())
@@ -253,14 +253,14 @@ func TestAttestSignedSetLosesItsCredentialLive(t *testing.T) {
 		t.Fatalf("attest: exit %d\n%s%s", code, out, errs)
 	}
 	var out, errb strings.Builder
-	if code := runVerify(body, &out, &errb); code != 0 {
+	if code := runVerify(body, verifyOptions{}, &out, &errb); code != 0 {
 		t.Fatalf("a set signed by --attest must verify: exit %d\n%s", code, out.String())
 	}
 	if err := os.Remove(sidecarPath(filepath.Join(day, "provenance", stem+"-c2pa.json"))); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if code := runVerify(body, &out, &errb); code != 1 || !strings.Contains(out.String(), "MISSING") {
+	if code := runVerify(body, verifyOptions{}, &out, &errb); code != 1 || !strings.Contains(out.String(), "MISSING") {
 		t.Errorf("credential deleted: exit %d, want 1 and MISSING\n%s", code, out.String())
 	}
 }

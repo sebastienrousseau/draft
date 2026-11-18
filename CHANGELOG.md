@@ -13,6 +13,11 @@ series until `0.0.999`.
   stdout. A program reading the record no longer has to tell "unverified"
   from "no output". `error` is an addition within
   `draft.verification-record/v1`.
+- `--require-signature`, with `--verify`, fails a set that has no valid,
+  bound signed credential, or whose credential could not be checked because
+  `c2patool` is not installed. Without it an unsigned set still verifies on
+  its digests. `--verify --json` records it as `signature.required`, and
+  `provenance.SignatureState.Acceptable` is the verdict both use.
 
 ### Security
 
