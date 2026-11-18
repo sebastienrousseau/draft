@@ -16,6 +16,10 @@ series until `0.0.999`.
   built v0.0.48) instead of whatever `stable` is on the day, and the
   devcontainer installs the docs tooling from the same hash-pinned files
   as CI.
+- The docs tooling's pinned Python requirements start at Python 3.10 and
+  require `urllib3` 2.8.0, `requests` 2.33.0 and `pymdown-extensions`
+  11.0.1 or later. Resolving for 3.9 had kept versions with published
+  advisories, which only 3.10 can upgrade past.
 
 ### Security
 

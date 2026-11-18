@@ -125,10 +125,12 @@ manual: ## Build the rendered user manual into .gen/site
 
 .PHONY: requirements
 requirements: ## Re-pin the docs tools' Python requirements, with hashes (needs uv)
-	@# Universal and from the 3.9 floor, so one file serves every Python CI
-	@# and contributors run, each resolving its own markers.
+	@# Universal from a 3.10 floor, so one file serves every Python CI and
+	@# contributors run, each resolving its own markers. 3.9 pinned urllib3,
+	@# requests and pymdown-extensions below their security fixes, which
+	@# need 3.10.
 	cd $(REQS) && for r in codespell manual; do \
-	  uv pip compile --quiet --universal --python-version 3.9 --generate-hashes \
+	  uv pip compile --quiet --universal --python-version 3.10 --generate-hashes \
 	    --custom-compile-command 'make requirements' $$r.in -o $$r.txt; \
 	done
 

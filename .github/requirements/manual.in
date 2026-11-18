@@ -5,3 +5,9 @@
 # `make requirements`; the docs workflow deploys what these build.
 mkdocs
 mkdocs-material
+
+# Floors at the first release that fixes a published advisory, so no
+# affected version can resolve (Dependabot alerts 1 to 8).
+pymdown-extensions>=11.0.1
+requests>=2.33.0
+urllib3>=2.8.0
