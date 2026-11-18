@@ -45,6 +45,12 @@ series until `0.0.999`.
   support its claim, so a real sentence attached to an overstated or
   reversed claim passes. The semantic second gate checks this, but it is
   opt-in and fails open. Nothing in the code changed.
+- `--engine api:<provider>` refuses a redirect to another scheme, host or
+  port. Go drops `Authorization` when a redirect changes domain, but it
+  forwarded `x-api-key` and, on a 307 or 308, the prompt itself, so a
+  redirecting endpoint could hand the Anthropic key and the source text to
+  a host the user never named. Redirects within the endpoint's own origin
+  are still followed.
 
 ## [0.0.48] - 2026-11-18
 

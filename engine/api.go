@@ -155,7 +155,28 @@ func newAPIClient() *http.Client {
 			IdleConnTimeout:     90 * time.Second,
 			MaxIdleConnsPerHost: 2,
 		},
+		CheckRedirect: sameOriginRedirect,
 	}
+}
+
+// maxAPIRedirects matches the standard library's own default limit.
+const maxAPIRedirects = 10
+
+// sameOriginRedirect refuses any redirect that leaves the endpoint's scheme
+// and host. The standard library strips Authorization when the domain
+// changes but forwards custom headers such as x-api-key, ignores a port
+// change, and replays the body (the prompt, with the source text) on a 307 or
+// 308, so the only safe answer to a hosted API pointing elsewhere is to stop.
+func sameOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxAPIRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxAPIRedirects)
+	}
+	from := via[0].URL
+	if req.URL.Scheme != from.Scheme || req.URL.Host != from.Host {
+		return fmt.Errorf("refusing redirect from %s://%s to %s://%s: it would send the API key to another host",
+			from.Scheme, from.Host, req.URL.Scheme, req.URL.Host)
+	}
+	return nil
 }
 
 // Name implements Engine: the full escape-hatch name, so routing and provenance
