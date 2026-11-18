@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -53,6 +54,12 @@ func TestConcurrentRunsKeepSeparateLedgers(t *testing.T) {
 // ledger or the new one, never a truncated file. A rename puts a new file in
 // place; an in-place write keeps the same one and truncates it first.
 func TestSaveLedgerReplacesRatherThanTruncates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// os.Stat on Windows reads a file's identity lazily, by path, when
+		// SameFile asks, so both stats name whatever is at the path now
+		// and the comparison cannot see the replacement.
+		t.Skip("os.SameFile cannot compare a replaced path on Windows")
+	}
 	r := NewRunner(testConfig(t), []engine.Engine{okEngine("fake")}, make(chan Event, 512))
 	path := filepath.Join(t.TempDir(), "ledger.md")
 	if err := os.WriteFile(path, []byte("earlier ledger"), 0o600); err != nil {
