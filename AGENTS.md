@@ -25,7 +25,14 @@ The repository has gates, and "it compiles" is not one of them:
 make check          # fmt, vet, test, complexity, docs-lint
 make cover          # the 98% coverage gate CI applies
 golangci-lint run   # must be zero issues
+make mutation       # 100% efficacy on claims; not in CI
+make corpus-live    # live recall; needs a backend, not in CI
 ```
+
+The last two are not in CI, so they are on you. A mutant gremlins reports as
+timed out is not a kill: rerun with `--timeout-coefficient 10` to confirm
+none lives. `make corpus-live` costs a provider call per case; if you have no
+backend to run it against, say so rather than skipping it silently.
 
 State what you ran and what you observed. If you skipped something, say so.
 A benchmark delta inside noise is not a win, a test that was never seen to
