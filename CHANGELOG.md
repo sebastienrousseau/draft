@@ -6,6 +6,11 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Changed
+
+- `AGENTS.md` lists `make mutation` and `make corpus-live` among the gates
+  to run before claiming a change is done, since CI runs neither.
+
 ## [0.0.49] - 2026-11-18
 
 ### Changed
