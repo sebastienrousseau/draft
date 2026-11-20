@@ -6,6 +6,8 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.50] - 2026-11-20
+
 ### Changed
 
 - `AGENTS.md` lists `make mutation` and `make corpus-live` among the gates
@@ -1832,6 +1834,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.50]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.50
 [0.0.49]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.49
 [0.0.48]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.48
 [0.0.47]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.47
