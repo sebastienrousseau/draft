@@ -49,3 +49,35 @@ func TestExtractDOCXInvalid(t *testing.T) {
 	// textutil either errors or returns empty; either way the .docx branch runs.
 	_, _ = Extract(context.Background(), p)
 }
+
+func TestCauseLine(t *testing.T) {
+	cases := map[string]string{
+		"single line":           "docling: conversion failed",
+		"warning before error":  "Syntax Warning: odd\nSyntax Error: Couldn't open file 'x.pdf'",
+		"no error named":        "first line\nlast line",
+		"exception then a note": "Traceback:\n  File \"a.py\"\nValueError: bad page\nWARNING: failed to convert",
+	}
+	want := map[string]string{
+		"single line":           "docling: conversion failed",
+		"warning before error":  "Syntax Error: Couldn't open file 'x.pdf'",
+		"no error named":        "last line",
+		"exception then a note": "ValueError: bad page",
+	}
+	for name, in := range cases {
+		if got := causeLine(in); got != want[name] {
+			t.Errorf("%s: causeLine = %q, want %q", name, got, want[name])
+		}
+	}
+}
+
+func TestTailWriterKeepsTheEnd(t *testing.T) {
+	w := &tailWriter{max: 5}
+	for _, s := range []string{"abc", "defg", "hi"} {
+		if n, err := w.Write([]byte(s)); n != len(s) || err != nil {
+			t.Fatalf("Write(%q) = %d, %v", s, n, err)
+		}
+	}
+	if got := string(w.buf); got != "efghi" {
+		t.Errorf("kept %q, want the last five bytes %q", got, "efghi")
+	}
+}
