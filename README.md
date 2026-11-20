@@ -1183,8 +1183,10 @@ Honesty here saves you an evening.
   verify verbatim. A thin source yields a thin ledger and a short draft. That
   is the design, not a defect.
 - **You have no agent CLI and no Ollama.** There is no direct API mode.
-- **Your sources are scans.** A PDF with no text layer is reported as such,
-  with a suggestion to run OCR first. `draft` does not OCR.
+- **Your sources are scans.** With the default reader, a PDF with no text
+  layer is reported as such, with a suggestion to run OCR first.
+  `--reader docling` falls back to Docling's OCR for such a PDF, which
+  downloads its models on first use; a PDF with text is read without it.
 - **You need figures or LaTeX maths.** The default reader extracts text;
   `--reader docling` keeps tables and headings but still cannot quote a
   figure. Feed `draft` Markdown you have prepared if you need more.

@@ -16,23 +16,41 @@ import (
 // fakeDocling puts a stand-in `docling` first on PATH. It ignores its input
 // and writes the given Markdown to <output>/<input stem>.md, the way the real
 // CLI names its output; an empty body writes an empty file, and "fail" exits
-// non-zero.
-func fakeDocling(t *testing.T, body string) {
+// non-zero. "noisy-fail" fails the way the real CLI does when a model cannot
+// be fetched: a harmless warning first, a long traceback, the cause last.
+// "scan" stands in for a PDF with no text layer: only an image placeholder
+// without OCR, and text with it. Each call's arguments are appended, one line
+// per call, to the file the function returns.
+func fakeDocling(t *testing.T, body string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake reader is a shell script")
 	}
 	dir := t.TempDir()
+	calls := filepath.Join(dir, "calls.log")
 	script := `#!/bin/sh
+echo "$*" >> '` + calls + `'
 out=""
+ocr=1
 while [ $# -gt 1 ]; do
   if [ "$1" = "--output" ]; then out="$2"; shift; fi
+  if [ "$1" = "--no-ocr" ]; then ocr=0; fi
   shift
 done
 in="$1"
 stem=$(basename "$in"); stem="${stem%.*}"
 body='` + strings.ReplaceAll(body, "'", `'\''`) + `'
 if [ "$body" = "fail" ]; then echo "docling: conversion failed" >&2; exit 1; fi
+if [ "$body" = "noisy-fail" ]; then
+  echo "W1120 redirects.py:35] NOTE: Redirects are currently not supported in MacOs." >&2
+  i=0; while [ $i -lt 400 ]; do echo "  File \"frame$i.py\", line $i, in run" >&2; i=$((i+1)); done
+  echo "rapidocr.utils.download_file.DownloadFileException: Failed to download https://example.invalid/det.pth" >&2
+  echo "WARNING docling.cli.main: Document $in failed to convert." >&2
+  exit 1
+fi
+if [ "$body" = "scan" ]; then
+  if [ $ocr = 1 ]; then body='OCR text with a value of 5.'; else body='<!-- image -->'; fi
+fi
 if [ "$body" = "nothing" ]; then exit 0; fi
 if [ "$body" = "renamed" ]; then printf 'Renamed output with a value of 7.' > "$out/converted-document.md"; exit 0; fi
 printf '%s' "$body" > "$out/$stem.md"
@@ -41,6 +59,7 @@ printf '%s' "$body" > "$out/$stem.md"
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return calls
 }
 
 func TestValidateReader(t *testing.T) {
@@ -145,6 +164,65 @@ func TestDoclingReaderFailures(t *testing.T) {
 			t.Errorf("an image-only document should be reported as having no text, got %v", err)
 		}
 	})
+	t.Run("cause buried under warnings", func(t *testing.T) {
+		// The real CLI opens with a platform warning and ends a long
+		// traceback with the exception; reporting the first line told the
+		// user about the warning and hid the failed download.
+		fakeDocling(t, "noisy-fail")
+		_, err := ExtractWith(context.Background(), p, ReaderDocling)
+		if err == nil || !strings.Contains(err.Error(), "Failed to download") {
+			t.Errorf("the exception should be reported, got %v", err)
+		}
+		if err != nil && strings.Contains(err.Error(), "Redirects") {
+			t.Errorf("the leading warning should not stand in for the cause, got %v", err)
+		}
+	})
+}
+
+// A PDF with a text layer needs no OCR, and OCR fetches models over the
+// network on first use, so a text PDF must convert with OCR off and in a
+// single pass.
+func TestDoclingSkipsOCRWhenTextIsPresent(t *testing.T) {
+	calls := fakeDocling(t, "A text layer with a value of 3.")
+	p := filepath.Join(t.TempDir(), "paper.pdf")
+	if err := os.WriteFile(p, []byte("%PDF"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text, err := ExtractWith(context.Background(), p, ReaderDocling)
+	if err != nil || !strings.Contains(text, "value of 3") {
+		t.Fatalf("got (%q, %v)", text, err)
+	}
+	log := doclingCalls(t, calls)
+	if len(log) != 1 || !strings.Contains(log[0], "--no-ocr") {
+		t.Errorf("want one call with --no-ocr, got %q", log)
+	}
+}
+
+// A scan has nothing to read without OCR, so the reader falls back to it
+// rather than reporting a text PDF's failure mode.
+func TestDoclingFallsBackToOCRForAScan(t *testing.T) {
+	calls := fakeDocling(t, "scan")
+	p := filepath.Join(t.TempDir(), "scan.pdf")
+	if err := os.WriteFile(p, []byte("%PDF"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text, err := ExtractWith(context.Background(), p, ReaderDocling)
+	if err != nil || !strings.Contains(text, "OCR text with a value of 5.") {
+		t.Fatalf("got (%q, %v)", text, err)
+	}
+	log := doclingCalls(t, calls)
+	if len(log) != 2 || !strings.Contains(log[0], "--no-ocr") || strings.Contains(log[1], "--no-ocr") {
+		t.Errorf("want a pass without OCR, then one with it, got %q", log)
+	}
+}
+
+func doclingCalls(t *testing.T, path string) []string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSpace(string(b)), "\n")
 }
 
 // Markdown and text sources never go through a reader: choosing docling for

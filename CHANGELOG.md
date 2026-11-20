@@ -11,6 +11,16 @@ series until `0.0.999`.
 - `AGENTS.md` lists `make mutation` and `make corpus-live` among the gates
   to run before claiming a change is done, since CI runs neither.
 
+### Fixed
+
+- `--reader docling` no longer fails on a PDF that has a text layer when
+  Docling cannot download its OCR models. It converts with OCR off first,
+  and runs OCR only when that pass finds no text.
+- A failed reader reports the line that names the error, not the first line
+  it printed: Docling's failure showed a harmless macOS warning and hid the
+  failed download behind it. The end of the tool's error output is kept
+  rather than the start, where a long traceback had pushed the cause out.
+
 ## [0.0.49] - 2026-11-18
 
 ### Changed

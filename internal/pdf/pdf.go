@@ -161,10 +161,24 @@ func ExtractWith(ctx context.Context, path, reader string) (string, error) {
 // returns it as normalised text. Docling writes <stem>.md into an output
 // directory of its own choosing within the one given; the directory is
 // private to this call and removed afterwards.
+//
+// OCR is off for the first pass: a document with a text layer does not need
+// it, and Docling's OCR engine downloads its models on first use, so leaving
+// it on made a text PDF fail wherever that download did. Only a document that
+// yields no text that way is converted again with OCR.
 func extractDocling(ctx context.Context, path string) (string, error) {
 	if _, err := exec.LookPath("docling"); err != nil {
 		return "", errors.New("docling not found on PATH; install it (for example: uv tool install docling) or use --reader pdftotext")
 	}
+	text, err := convertDocling(ctx, path, "--no-ocr")
+	if errors.Is(err, ErrNoTextLayer) {
+		return convertDocling(ctx, path)
+	}
+	return text, err
+}
+
+// convertDocling runs one Docling conversion with the given extra flags.
+func convertDocling(ctx context.Context, path string, flags ...string) (string, error) {
 	dir, err := os.MkdirTemp("", "draft-docling-")
 	if err != nil {
 		return "", fmt.Errorf("docling: could not create an output directory: %w", err)
@@ -174,7 +188,8 @@ func extractDocling(ctx context.Context, path string) (string, error) {
 	// Images are what the layout model cannot turn into text; a placeholder
 	// keeps them out of the sections rather than inlining megabytes of
 	// base64 that no claim could ever quote.
-	_, err = runTool(ctx, doclingTimeout, "docling", "--to", "md", "--output", dir, "--image-export-mode", "placeholder", path)
+	args := append([]string{"--to", "md", "--output", dir, "--image-export-mode", "placeholder"}, flags...)
+	_, err = runTool(ctx, doclingTimeout, "docling", append(args, path)...)
 	if err != nil {
 		return "", fmt.Errorf("docling: %w", err)
 	}
@@ -365,9 +380,12 @@ func runTool(ctx context.Context, timeout time.Duration, name string, args ...st
 
 	cmd := exec.CommandContext(ctx, name, args...)
 	proc.Bound(cmd)
-	var stdout, stderr bytes.Buffer
+	var stdout bytes.Buffer
 	cmd.Stdout = &limitedWriter{w: &stdout, remaining: MaxSourceBytes}
-	cmd.Stderr = &limitedWriter{w: &stderr, remaining: 8 << 10}
+	// A Python tool prints its warnings first and its exception last, after
+	// a traceback that can run past the cap; keep the end, not the start.
+	stderr := &tailWriter{max: 8 << 10}
+	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
 		if ctxErr := ctx.Err(); errors.Is(ctxErr, context.DeadlineExceeded) {
@@ -375,8 +393,8 @@ func runTool(ctx context.Context, timeout time.Duration, name string, args ...st
 		} else if ctxErr != nil {
 			return "", ctxErr
 		}
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return "", fmt.Errorf("%w: %s", err, firstLine(msg))
+		if msg := strings.TrimSpace(string(stderr.buf)); msg != "" {
+			return "", fmt.Errorf("%w: %s", err, causeLine(msg))
 		}
 		return "", err
 	}
@@ -406,9 +424,31 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 	return l.w.Write(p)
 }
 
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return strings.TrimSpace(s[:i])
+// tailWriter keeps the last max bytes written to it, for output whose useful
+// part comes at the end.
+type tailWriter struct {
+	buf []byte
+	max int
+}
+
+func (t *tailWriter) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - t.max; over > 0 {
+		t.buf = append(t.buf[:0], t.buf[over:]...)
 	}
-	return s
+	return len(p), nil
+}
+
+// causeLine picks the line of a tool's stderr that explains its failure: the
+// last one that names an error or exception, else the last line. The first
+// line is often a warning that has nothing to do with it.
+func causeLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.ToLower(lines[i])
+		if strings.Contains(l, "error:") || strings.Contains(l, "exception:") {
+			return strings.TrimSpace(lines[i])
+		}
+	}
+	return strings.TrimSpace(lines[len(lines)-1])
 }
