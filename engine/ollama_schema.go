@@ -34,10 +34,10 @@ func (o *Ollama) probeSchema() bool {
 	o.ensureOnce.Do(func() { _ = ensureRunning(o.host) })
 	body, err := json.Marshal(map[string]any{
 		"model":      o.modelFor(KindExtract),
-		"prompt":     "Return an empty JSON array.",
+		"prompt":     "Return an empty JSON object.",
 		"stream":     false,
 		"think":      false,
-		"format":     map[string]any{"type": "array"},
+		"format":     map[string]any{"type": "object"},
 		"keep_alive": "10m",
 		"options":    map[string]any{"num_predict": 1},
 	})

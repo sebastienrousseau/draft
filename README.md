@@ -845,10 +845,14 @@ its speed from four things:
 - **Deterministic style repair.** Banned cliché words are swapped for neutral
   equivalents in place, so one stray "furthermore" no longer costs a full
   regeneration.
-- **Parallel extraction.** Claims are mined two sections at a time. One request
-  does not saturate a small GPU, so two concurrent extractions run at roughly
-  1.8× the throughput of one — provided the server has two slots. A server
-  pinned to one simply queues the second call, so this is always safe.
+- **Parallel extraction, when the server has the slots.** One request does not
+  saturate a small GPU, so two concurrent extractions run at roughly 1.8× the
+  throughput of one, provided the server has two slots. draft cannot see the
+  server's setting, so it sends one request at a time unless
+  `OLLAMA_NUM_PARALLEL` is set in *draft's* environment too. Sending more than
+  the server runs is not harmless queueing: Ollama sends no headers until it
+  starts a request, so a queued one waited out the header timeout and failed
+  while a long section ran ahead of it.
 
 The biggest single win is how the Ollama **server** is launched. The default
 configuration is slow on 8 GB. Give it a quantised KV cache, flash attention
@@ -862,6 +866,9 @@ OLLAMA_NUM_PARALLEL=2 \
 OLLAMA_MAX_LOADED_MODELS=1 \
 OLLAMA_KEEP_ALIVE=10m \
   ollama serve
+
+# and in the shell you run draft from, so it uses both slots:
+export OLLAMA_NUM_PARALLEL=2
 ```
 
 On a base 8 GB Apple-silicon machine a two-section source drafts in roughly two

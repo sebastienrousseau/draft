@@ -21,7 +21,8 @@ func TestClaimSchemaCompiles(t *testing.T) {
 	}
 	// The start symbol and the shared lexical rules are present.
 	for _, want := range []string{
-		"root ::= arr0",
+		"root ::= obj1",
+		`obj1 ::= "{" ws "\"claims\"" ws ":" ws arr0 ws "}"`,
 		`ws ::= [ \t\n]*`,
 		`string ::= "\"" char* "\""`,
 	} {

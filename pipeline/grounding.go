@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/sebastienrousseau/draft/claims"
@@ -218,32 +217,10 @@ func (r *Runner) extractClaims(ctx context.Context, job Job, sections []pdf.Sect
 	return r.finishLedger(ctx, r.ownLedgerPath(outputDir, job), records, dropped)
 }
 
-// ollamaExtractConcurrency caps how many extraction calls the local backend runs
-// at once. A single small GPU is not saturated by one request: with the server
-// started at OLLAMA_NUM_PARALLEL>=2, two concurrent extractions measured ~1.8x the
-// throughput of one on an 8 GB machine, and a server pinned to a single slot just
-// queues the second — so this is safe either way. Two keeps the win without adding
-// memory pressure a shared GPU cannot absorb.
-const ollamaExtractConcurrency = 2
-
-// ollamaParallelism reports how many extraction calls the local server will
-// genuinely serve at once.
-//
-// The constant above was measured on an 8 GB machine, where two workers gave
-// ~1.8x the throughput of one. Treating it as a ceiling leaves a larger
-// machine idle: a host started with OLLAMA_NUM_PARALLEL=4 has four slots and
-// queues anything beyond them, so reading the server's own setting is both
-// safe and strictly better. Absent the variable, nothing has changed.
-func ollamaParallelism() int {
-	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("OLLAMA_NUM_PARALLEL"))); err == nil && v > ollamaExtractConcurrency {
-		return v
-	}
-	return ollamaExtractConcurrency
-}
-
 // extractConcurrency is the number of parallel extraction workers for the settled
 // engine: the configured value for a session provider (independent subprocesses),
-// and a small, capped amount for Ollama (concurrent requests to one local server).
+// and no more than engine.OllamaParallelism for Ollama, which is how many
+// requests one local server is known to run at once.
 func (r *Runner) extractConcurrency(xchain *chainState) int {
 	n := r.cfg.ExtractConcurrency
 	if n < 1 {
@@ -257,7 +234,7 @@ func (r *Runner) extractConcurrency(xchain *chainState) int {
 		extractor = e.Name()
 	}
 	if extractor == "ollama" {
-		if limit := ollamaParallelism(); n > limit {
+		if limit := engine.OllamaParallelism(); n > limit {
 			return limit
 		}
 	}

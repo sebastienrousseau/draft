@@ -300,6 +300,11 @@ type ManifestInput struct {
 	Sources       []Source
 	When          time.Time
 	Attribution   *Attribution
+	// LimitationsGiven and LimitationsCarried are how many limitation
+	// claims the writer was given and how many the article carries (see
+	// validate.LimitationRetention).
+	LimitationsGiven   int
+	LimitationsCarried int
 }
 
 // Manifest is a C2PA manifest definition in the shape c2patool reads: the
@@ -353,6 +358,11 @@ type Grounding struct {
 	Attributed                     int      `json:"attributed"`
 	Unattributed                   int      `json:"unattributed"`
 	SentencesWithUngroundedNumbers int      `json:"sentences_with_ungrounded_numbers"`
+	// LimitationsGiven and LimitationsCarried record how many of the
+	// source's stated limitations the writer was given and the article
+	// carries. Omitted when none were given, so older manifests read alike.
+	LimitationsGiven   int `json:"limitations_given,omitempty"`
+	LimitationsCarried int `json:"limitations_carried,omitempty"`
 	// Signed records that a signed credential was issued for this manifest,
 	// so a credential deleted later reads as missing, not as a set that was
 	// never signed. Set by MarkSigned; omitted when false, so an unsigned
@@ -372,14 +382,16 @@ func NewManifest(in ManifestInput) Manifest {
 		when = time.Now()
 	}
 	g := Grounding{
-		Schema:        Schema,
-		ArticleSHA256: hex.EncodeToString(sum[:]),
-		LedgerSHA256:  in.LedgerSHA256,
-		PromptVersion: in.PromptVersion,
-		Engine:        in.Engine,
-		Model:         in.Model,
-		Reader:        in.Reader,
-		Sources:       in.Sources,
+		Schema:             Schema,
+		ArticleSHA256:      hex.EncodeToString(sum[:]),
+		LedgerSHA256:       in.LedgerSHA256,
+		PromptVersion:      in.PromptVersion,
+		Engine:             in.Engine,
+		Model:              in.Model,
+		Reader:             in.Reader,
+		Sources:            in.Sources,
+		LimitationsGiven:   in.LimitationsGiven,
+		LimitationsCarried: in.LimitationsCarried,
 	}
 	if in.Attribution != nil {
 		for _, c := range in.Attribution.Claims {

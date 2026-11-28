@@ -56,7 +56,7 @@ func (e *recordingEngine) requests() []engine.Request {
 // and the engine is not even asked whether it can apply a schema, because for
 // Ollama asking costs a request to the server.
 func TestExtractionSendsTheSchemaOnlyWhenOptedInAndCapable(t *testing.T) {
-	jsonOut := `[{"claim":"The system reached 12 pages per second.","source_quote":"The system reached 12 pages per second in testing.","type":"metric","strength":"demonstrated"}]`
+	jsonOut := `{"claims":[{"claim":"The system reached 12 pages per second.","source_quote":"The system reached 12 pages per second in testing.","type":"metric","strength":"demonstrated"}]}`
 	for _, tc := range []struct {
 		name       string
 		structured bool

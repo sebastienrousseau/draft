@@ -190,7 +190,9 @@ func (r *Runner) validateWithRetry(ctx context.Context, basePrompt, markdown str
 		markdown = r.dedupe(markdown, style)
 		styleErrs := validate.ErrorsWithStyle(markdown, style)
 		factErrs, warnings := validate.FaithfulnessWithOptions(markdown, records, r.validateOptions())
-		errs = append(append([]string{}, styleErrs...), factErrs...)
+		limErrs, limWarnings := validate.LimitationRetention(markdown, writerLedger(records))
+		warnings = append(warnings, limWarnings...)
+		errs = append(append(append([]string{}, styleErrs...), factErrs...), limErrs...)
 		if len(errs) == 0 {
 			for _, w := range warnings {
 				r.warn("review: " + w)

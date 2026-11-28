@@ -83,8 +83,8 @@ func TestExtractConcurrency(t *testing.T) {
 	if got := conc("claude", 4); got != 4 {
 		t.Errorf("session engine concurrency = %d, want 4", got)
 	}
-	if got := conc("ollama", 4); got != ollamaExtractConcurrency {
-		t.Errorf("ollama concurrency = %d, want %d (capped for a shared GPU)", got, ollamaExtractConcurrency)
+	if got := conc("ollama", 4); got != 1 {
+		t.Errorf("ollama concurrency = %d, want 1 (the server's slots are unknown)", got)
 	}
 	if got := conc("claude", 1); got != 1 {
 		t.Errorf("concurrency of 1 should stay 1, got %d", got)
@@ -97,7 +97,7 @@ func TestExtractConcurrency(t *testing.T) {
 	routed := NewRoutedRunner(config.Config{
 		Engine: "ollama", WriteEngine: "claude", ExtractConcurrency: 8,
 	}, nil)
-	if got := routed.extractConcurrency(routed.chainFor(engine.KindExtract)); got != ollamaExtractConcurrency {
-		t.Errorf("routed ollama extraction = %d, want %d", got, ollamaExtractConcurrency)
+	if got := routed.extractConcurrency(routed.chainFor(engine.KindExtract)); got != 1 {
+		t.Errorf("routed ollama extraction = %d, want 1", got)
 	}
 }

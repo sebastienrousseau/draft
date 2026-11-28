@@ -6,6 +6,54 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.52] - 2026-11-28
+
+### Added
+
+- A draft must carry at least one of the limitations its writer was
+  given, or it is sent back with the rule named; each limitation it drops
+  is reported. The manifest's grounding assertion records how many were
+  given and carried (`limitations_given`, `limitations_carried`). The
+  floor is one, not all: thirteen published articles carried 103 of the
+  310 limitations their ledgers held, and a long ledger has more caveats
+  than one article can hold.
+- `DRAFT_STRUCTURED_OUTPUT=1` now covers Claude and Codex as well as
+  Ollama: `claude` gets the schema with `--json-schema`, and `codex` gets
+  it as a file in the call's sandbox directory with `--output-schema`.
+  Both answered with the schema's object in live runs. On six sections
+  of a 65-page paper, single runs verified 64 claims and dropped 17
+  records in JSON against 68 and 22 in text for Claude, and 137 and 16
+  against 135 and 8 for Codex, so structured output stays opt-in.
+
+### Changed
+
+- The writer is given claims from across the whole ledger, with a fifth
+  of its 45 slots kept for limitations, instead of the first 45 in source
+  order. On a long paper the first 45 are the abstract and introduction:
+  on the same 65-page paper, the article drew 51 of its 81 attributed
+  claims from the ledger's first quarter before, and 41 of 107 after,
+  with the rest spread over the later three quarters. A ledger that fits
+  the budget is given whole, as before.
+- The claim schema's root is an object, `{"claims": [...]}`, instead of
+  the array itself, and it names no `$schema` dialect. Claude rejects a
+  schema whose root is not an object, and one that names the 2020-12
+  dialect. `claims.ParseJSON` reads both the object and a bare array, so
+  cached and earlier output still parses, and gates both identically.
+
+### Fixed
+
+- Offline extraction no longer fails sections against an Ollama server
+  that runs one request at a time. draft sent two at once and assumed the
+  second would just queue, but Ollama sends no headers until it starts a
+  request, so a queued one waited out the header timeout: on an 8 GB
+  machine with `OLLAMA_NUM_PARALLEL=1`, a section failed after five
+  minutes while the one ahead of it took 6 min 38 s, and a full run spent
+  its time retrying. draft now keeps no more requests in flight than
+  `OLLAMA_NUM_PARALLEL` in its own environment allows, one by default,
+  and waits for a slot before sending, so the header timeout measures
+  the server, not a queue. Export `OLLAMA_NUM_PARALLEL` to draft as well
+  as the server to run sections in parallel.
+
 ## [0.0.51] - 2026-11-28
 
 ### Added
@@ -1889,6 +1937,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.52]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.52
 [0.0.51]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.51
 [0.0.50]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.50
 [0.0.49]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.49

@@ -71,15 +71,16 @@ func main() {
 
 ## API
 
-| Symbol             | Signature                                                                 | Purpose                                                        |
-| ------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `Errors`           | `func(md string) []string`                                                | Hard rule violations that must block a save; empty means clean |
-| `Faithfulness`     | `func(article string, records []claims.Record) (errs, warnings []string)` | Cross-check a draft against the verified ledger                |
-| `WordCount`        | `func(s string) int`                                                      | Alphanumeric word tokens                                       |
-| `ContainsEmoji`    | `func(s string) bool`                                                     | Pictographic or symbol emoji                                   |
-| `EndsSentence`     | `func(tail string) bool`                                                  | Whether trailing text closes on sentence-ending punctuation    |
-| `LooksLikeArticle` | `func(s string) bool`                                                     | Whether a string resembles a Markdown article body             |
-| `UnsafeMarkup`     | `func(md string) []string`                                                | HTML and URLs that would run script on a rendered site         |
+| Symbol                | Signature                                                                 | Purpose                                                        |
+| --------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `Errors`              | `func(md string) []string`                                                | Hard rule violations that must block a save; empty means clean |
+| `Faithfulness`        | `func(article string, records []claims.Record) (errs, warnings []string)` | Cross-check a draft against the verified ledger                |
+| `LimitationRetention` | `func(article string, given []claims.Record) (errs, warnings []string)`   | Fails a draft carrying none of the limitations it was given    |
+| `WordCount`           | `func(s string) int`                                                      | Alphanumeric word tokens                                       |
+| `ContainsEmoji`       | `func(s string) bool`                                                     | Pictographic or symbol emoji                                   |
+| `EndsSentence`        | `func(tail string) bool`                                                  | Whether trailing text closes on sentence-ending punctuation    |
+| `LooksLikeArticle`    | `func(s string) bool`                                                     | Whether a string resembles a Markdown article body             |
+| `UnsafeMarkup`        | `func(md string) []string`                                                | HTML and URLs that would run script on a rendered site         |
 
 ## Errors versus warnings
 

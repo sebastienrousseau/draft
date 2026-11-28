@@ -97,18 +97,18 @@ If the SOURCE section contains no extractable claims, return exactly: NONE.
 
 `
 
-// claimJSONOutput asks for the array claims.Schema() describes, which
-// claims.ParseJSON reads. An empty array is the "no claims here" answer,
-// the JSON form of NONE.
+// claimJSONOutput asks for the object claims.Schema() describes, which
+// claims.ParseJSON reads. An empty claims array is the "no claims here"
+// answer, the JSON form of NONE.
 const claimJSONOutput = `## OUTPUT
-Return a JSON array of objects, nothing before or after. Each object has exactly these fields:
+Return one JSON object, nothing before or after, with a single field "claims": an array of objects. Each object in the array has exactly these fields:
 - "claim": the fact, in the source's own terms, one sentence
 - "source_quote": a verbatim span copied exactly from the SOURCE
 - "type": one of metric, mechanism, definition, method, result, limitation
 - "strength": one of demonstrated, hedged, speculation-or-future-work
 
 Order objects by where they appear in the SOURCE, top to bottom.
-If the SOURCE section contains no extractable claims, return exactly: []
+If the SOURCE section contains no extractable claims, return exactly: {"claims": []}
 
 `
 
@@ -232,7 +232,8 @@ const groundingRules = `- Every number, name, mechanism, metric, and result in y
 - Match each claim's STRENGTH exactly:
   demonstrated -> state it plainly as a result.
   hedged -> use hedged verbs: suggests, appears to, may, is associated with. Never as settled fact.
-  speculation-or-future-work -> frame as proposed or future. Never as achieved.`
+  speculation-or-future-work -> frame as proposed or future. Never as achieved.
+- A CLAIM with TYPE: limitation is something the source says it does not show or cannot do. Carry the limitations into the article in the source's terms, beside the results they qualify; never leave them all out.`
 
 // ContinueWriting nudges a backend that stopped on a length limit to finish the
 // article seamlessly from where it left off. It carries the compact ledger and

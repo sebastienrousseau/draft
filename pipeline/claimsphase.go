@@ -45,3 +45,9 @@ func (r *Runner) groundClaims(ctx context.Context, job Job, sections []pdf.Secti
 func promptLedger(records []claims.Record) string {
 	return claims.RenderPromptLedger(records, maxPromptClaims, maxPromptClaimChars)
 }
+
+// writerLedger is the records promptLedger gives the writer, so a check on
+// the draft holds it to what it was shown, not to the whole extraction.
+func writerLedger(records []claims.Record) []claims.Record {
+	return claims.SelectForPrompt(records, maxPromptClaims, maxPromptClaimChars)
+}
