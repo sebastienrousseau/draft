@@ -90,19 +90,26 @@ func TestRehabilitateIsANoOpWithoutADemotion(t *testing.T) {
 	}
 }
 
+// draft cannot see the server's own OLLAMA_NUM_PARALLEL, and a request sent
+// beyond the server's slots waits without headers until the header timeout
+// fails it. So the default is one in flight, and only a positive value in
+// draft's own environment raises it. The old floor of two failed a section
+// against a single-slot server on an 8 GB machine.
 func TestOllamaParallelismFollowsTheServerSetting(t *testing.T) {
 	for _, tc := range []struct {
 		env  string
 		want int
 	}{
-		{"", ollamaExtractConcurrency},
-		{"not-a-number", ollamaExtractConcurrency},
-		{"1", ollamaExtractConcurrency}, // never below the measured floor
-		{"2", ollamaExtractConcurrency},
+		{"", 1},
+		{"not-a-number", 1},
+		{"0", 1},
+		{"-3", 1},
+		{"1", 1},
+		{"2", 2},
 		{"6", 6},
 	} {
 		t.Setenv("OLLAMA_NUM_PARALLEL", tc.env)
-		if got := ollamaParallelism(); got != tc.want {
+		if got := engine.OllamaParallelism(); got != tc.want {
 			t.Errorf("OLLAMA_NUM_PARALLEL=%q: parallelism = %d, want %d", tc.env, got, tc.want)
 		}
 	}
@@ -113,8 +120,8 @@ func TestExtractConcurrencyRespectsTheServerSetting(t *testing.T) {
 	r := NewRunner(config.Config{ExtractConcurrency: 8}, []engine.Engine{ollama}, nil)
 
 	t.Setenv("OLLAMA_NUM_PARALLEL", "")
-	if got := r.extractConcurrency(r.chainFor(engine.KindExtract)); got != ollamaExtractConcurrency {
-		t.Errorf("default cap = %d, want %d", got, ollamaExtractConcurrency)
+	if got := r.extractConcurrency(r.chainFor(engine.KindExtract)); got != 1 {
+		t.Errorf("default cap = %d, want 1", got)
 	}
 	t.Setenv("OLLAMA_NUM_PARALLEL", "4")
 	if got := r.extractConcurrency(r.chainFor(engine.KindExtract)); got != 4 {

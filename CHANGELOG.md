@@ -6,6 +6,20 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Offline extraction no longer fails sections against an Ollama server
+  that runs one request at a time. draft sent two at once and assumed the
+  second would just queue, but Ollama sends no headers until it starts a
+  request, so a queued one waited out the header timeout: on an 8 GB
+  machine with `OLLAMA_NUM_PARALLEL=1`, a section failed after five
+  minutes while the one ahead of it took 6 min 38 s, and a full run spent
+  its time retrying. draft now keeps no more requests in flight than
+  `OLLAMA_NUM_PARALLEL` in its own environment allows, one by default,
+  and waits for a slot before sending, so the header timeout measures
+  the server, not a queue. Export `OLLAMA_NUM_PARALLEL` to draft as well
+  as the server to run sections in parallel.
+
 ### Added
 
 - `DRAFT_STRUCTURED_OUTPUT=1` now covers Claude and Codex as well as

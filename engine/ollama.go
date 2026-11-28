@@ -35,13 +35,16 @@ type Ollama struct {
 	// constrain the extraction model's output; schemaOK holds the answer.
 	schemaOnce sync.Once
 	schemaOK   bool
-	extract    string
-	write      string
-	edit       string
-	numCtx     int
-	numPred    int
-	timeout    time.Duration
-	client     *http.Client
+	// slots bounds the generations in flight to OllamaParallelism; see
+	// acquireSlot.
+	slots   chan struct{}
+	extract string
+	write   string
+	edit    string
+	numCtx  int
+	numPred int
+	timeout time.Duration
+	client  *http.Client
 }
 
 // newOllamaClient builds the HTTP client used for generation. It deliberately
@@ -86,6 +89,7 @@ func NewOllama(cfg config.Config) *Ollama {
 		numPred: cfg.PredictLength,
 		timeout: cfg.CallTimeout,
 		client:  newOllamaClient(),
+		slots:   make(chan struct{}, OllamaParallelism()),
 	}
 }
 
@@ -114,6 +118,35 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 	// unreachable error with the host in it.
 	o.ensureOnce.Do(func() { _ = ensureRunning(o.host) })
 
+	body, err := o.requestBody(req)
+	if err != nil {
+		return Result{}, err
+	}
+	release, err := o.acquireSlot(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
+	resp, err := o.post(ctx, body)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() {
+		// Drain what is left before closing so the connection can be reused;
+		// the early break on done would otherwise abandon it mid-body. The cap
+		// keeps a misbehaving server from making the drain itself unbounded.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxDrainBytes))
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		return Result{}, fmt.Errorf("ollama http %s: %s", resp.Status, strings.TrimSpace(string(data)))
+	}
+	return readOllamaStream(resp.Body, req.OnChunk)
+}
+
+// requestBody is the /api/generate payload for req.
+func (o *Ollama) requestBody(req Request) ([]byte, error) {
 	numPred := o.numPred
 	if req.NumPredict > 0 && req.NumPredict < numPred {
 		numPred = req.NumPredict
@@ -137,41 +170,33 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 	if req.Schema != nil {
 		grammar, err := gbnf.FromJSONSchema(req.Schema)
 		if err != nil {
-			return Result{}, err
+			return nil, err
 		}
 		payload["format"] = req.Schema
 		options["grammar"] = grammar
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return Result{}, err
-	}
+	return json.Marshal(payload)
+}
+
+// post sends a generate request and returns the server's response.
+func (o *Ollama) post(ctx context.Context, body []byte) (*http.Response, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, o.host+"/api/generate", bytes.NewReader(body))
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-
 	resp, err := o.client.Do(httpReq)
 	if err != nil {
-		return Result{}, fmt.Errorf("ollama unreachable at %s: %w", o.host, err)
+		return nil, fmt.Errorf("ollama unreachable at %s: %w", o.host, err)
 	}
-	defer func() {
-		// Drain what is left before closing so the connection can be reused;
-		// the early break on done would otherwise abandon it mid-body. The cap
-		// keeps a misbehaving server from making the drain itself unbounded.
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxDrainBytes))
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
-		return Result{}, fmt.Errorf("ollama http %s: %s", resp.Status, strings.TrimSpace(string(data)))
-	}
+	return resp, nil
+}
 
+// readOllamaStream reads the streamed generate response, forwarding each chunk
+// to onChunk, and reports whether the model stopped on a length limit.
+func readOllamaStream(r io.Reader, onChunk func(string)) (Result, error) {
 	var out strings.Builder
-	var truncated bool
-	var usage Usage
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		var item struct {
@@ -190,21 +215,20 @@ func (o *Ollama) Generate(ctx context.Context, req Request) (Result, error) {
 		}
 		if item.Response != "" {
 			out.WriteString(item.Response)
-			if req.OnChunk != nil {
-				req.OnChunk(item.Response)
+			if onChunk != nil {
+				onChunk(item.Response)
 			}
 		}
 		if item.Done {
-			truncated = item.DoneReason == "length"
 			// The local model reports token counts but never a price.
-			usage = Usage{InputTokens: item.PromptTokens, OutputTokens: item.EvalTokens, Reported: item.PromptTokens > 0 || item.EvalTokens > 0}
-			break
+			usage := Usage{InputTokens: item.PromptTokens, OutputTokens: item.EvalTokens, Reported: item.PromptTokens > 0 || item.EvalTokens > 0}
+			return Result{Text: out.String(), Truncated: item.DoneReason == "length", Usage: usage}, nil
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return Result{Text: out.String()}, err
 	}
-	return Result{Text: out.String(), Truncated: truncated, Usage: usage}, nil
+	return Result{Text: out.String()}, nil
 }
 
 func (o *Ollama) modelFor(kind Kind) string {
