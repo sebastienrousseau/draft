@@ -106,6 +106,19 @@ type Engine interface {
 	Generate(ctx context.Context, req Request) (Result, error)
 }
 
+// SchemaCapable is implemented by an engine that holds its output to
+// Request.Schema, rather than ignoring the field. The pipeline sends a schema,
+// and the JSON form of a prompt, only to an engine that reports true.
+type SchemaCapable interface {
+	SupportsSchema() bool
+}
+
+// SupportsSchema reports whether e constrains its output to Request.Schema.
+func SupportsSchema(e Engine) bool {
+	s, ok := e.(SchemaCapable)
+	return ok && s.SupportsSchema()
+}
+
 // Chain resolves the ordered list of engines to try for a run, honouring the
 // configured mode. The pipeline uses the first that succeeds and sticks with it.
 //

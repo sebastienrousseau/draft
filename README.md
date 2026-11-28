@@ -388,15 +388,19 @@ draft [flags] <source> [more-sources...]
 
 | Flag                   | Description                                                 |
 | ---------------------- | ----------------------------------------------------------- |
-| `--engine <mode>`      | `auto` (default), `ollama`, or a provider name              |
+| `--engine <mode>`      | `auto` (default), `ollama`, a provider, or `api:<provider>` |
 | `--model <name>`       | Session-provider model override (e.g. `opus`)               |
+| `--reader <name>`      | Document reader: `pdftotext` (default) or `docling`         |
+| `--style <file>`       | JSON house style: word band, banned vocabulary, language    |
 | `--experimental`       | Let auto mode use experimental providers                    |
 | `--strict-numbers`     | Fail a draft carrying a number found in no verified claim   |
+| `--second-gate`        | Drop verified claims a local model finds unsupported        |
 | `--out <dir>`          | Directory to write drafts into (default `~/Drop/Drafts`)    |
 | `--sources-dir <dir>`  | Directory bare filenames resolve against                    |
 | `--no-cache`           | Re-extract instead of reusing cached claims                 |
 | `--clear-cache`        | Delete every cached claim extraction and exit               |
 | `--doctor`             | Check that this machine can run draft, and exit             |
+| `--trust-config`       | Trust `./draft.toml` as it now stands, and exit             |
 | `--num-ctx <n>`        | Ollama context window (default `8192`)                      |
 | `--num-predict <n>`    | Ollama max output tokens (default `6000`)                   |
 | `--force-new`          | Draft even if today's folder already has one                |
@@ -417,6 +421,7 @@ draft [flags] <source> [more-sources...]
 | `--print`              | Run without the TUI; print draft paths to stdout            |
 | `--json`               | Run without the TUI; one JSON object per job on stdout      |
 | `--completion <sh>`    | Print a completion script: `bash`, `zsh`, or `fish`         |
+| `--man`                | Print a roff manual page on stdout, and exit                |
 | `--version`            | Print version and exit                                      |
 | `-h, --help`           | Show help                                                   |
 
@@ -624,6 +629,35 @@ so a stale entry can only ever produce *fewer* verified claims, never an
 ungrounded one — the same property that makes `--resume` safe. Entries expire
 after 30 days. `--no-cache` skips it; `--clear-cache` empties it.
 
+### What a run costs
+
+Two end-to-end runs on the same 65-page paper (arXiv:2604.05018, CC BY 4.0,
+39 sections), on an 8 GB Apple silicon laptop, 28 November 2026. The figures
+come from each run's `--json` record, so you can reproduce them:
+
+```console
+draft --json --engine claude paper.pdf | jq '{duration_ms, phases_ms, usage, provenance}'
+```
+
+| Engine                 | Outcome                         | Wall clock | Extract    | Write | Output tokens | Cost reported |
+| ---------------------- | ------------------------------- | ---------- | ---------- | ----- | ------------- | ------------- |
+| `claude` (sonnet)      | 2,935 words, 81/157 sentences   | 8 min 9 s  | 7 min 12 s | 55 s  | 71,883        | $1.19         |
+| `ollama` (`gemma3:4b`) | **Failed** the 2,250-word floor | ~55 min    | —          | —     | —             | $0 (local)    |
+
+The local run verified 263 claims and dropped 191, then wrote 1,174 to 1,360
+words on each of its three attempts, short of the floor 263 claims set, and
+saved the result as `needs-review`. A 4B model is enough to extract from a
+long paper on this machine but not to write a full article from it. Use a
+larger local model, or route writing to a session provider with
+`--write-engine`, for papers this size.
+
+The cost is what the provider's CLI reports; on a subscription it is an
+equivalent, not a charge. For scale, PaperOrchestra reports about 60 to 70
+LLM calls and 39.6 minutes per paper ([arXiv:2604.05018][po-paper]), for a
+different job (see [COMPARISON](docs/COMPARISON.md)).
+
+[po-paper]: https://arxiv.org/abs/2604.05018
+
 ### How that compares
 
 Document-understanding toolkits do far more than pull out text — layout
@@ -744,6 +778,7 @@ module, no TOML library.
 | `DRAFT_EXPERIMENTAL`        | —                               | `1` to let auto use experimental providers              |
 | `DRAFT_STRICT_NUMBERS`      | —                               | `1` to fail a draft carrying an ungrounded number       |
 | `DRAFT_SECOND_GATE`         | —                               | `1` for an opt-in semantic second pass (see below)      |
+| `DRAFT_STRUCTURED_OUTPUT`   | —                               | `1` for schema-held JSON extraction on Ollama           |
 | `DRAFT_C2PA_CERT`           | —                               | PEM certificate chain for signing the C2PA credential   |
 | `DRAFT_C2PA_KEY`            | —                               | PEM private key paired with `DRAFT_C2PA_CERT`           |
 | `DRAFT_C2PA_ALG`            | `es256`                         | Signature algorithm when signing is configured          |
@@ -1182,7 +1217,9 @@ Honesty here saves you an evening.
 - **You want a general-purpose summariser.** `draft` drops any claim it cannot
   verify verbatim. A thin source yields a thin ledger and a short draft. That
   is the design, not a defect.
-- **You have no agent CLI and no Ollama.** There is no direct API mode.
+- **You have no agent CLI, no Ollama and no API key.** `draft` needs one of
+  them: `--engine api:anthropic` or `api:openai` is the opt-in direct-API
+  path for a machine with a key but no agent CLI.
 - **Your sources are scans.** With the default reader, a PDF with no text
   layer is reported as such, with a suggestion to run OCR first.
   `--reader docling` falls back to Docling's OCR for such a PDF, which
@@ -1349,6 +1386,7 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 | [DEVELOPMENT](DEVELOPMENT.md)                                         | Toolchain, every CI gate reproduced locally, release model |
 | [ARCHITECTURE](docs/ARCHITECTURE.md)                                  | How the pipeline fits together, for contributors           |
 | [Decision records](docs/adr/)                                         | Why the load-bearing choices were made                     |
+| [COMPARISON](docs/COMPARISON.md)                                      | draft beside PaperOrchestra, STORM and OpenScholar         |
 | [Packaging](docs/packaging.md)                                        | For distribution maintainers                               |
 | [Supply chain](supply-chain/)                                         | What is depended on, how it is pinned, what is checked     |
 | [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format             |

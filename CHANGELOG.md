@@ -6,6 +6,61 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+## [0.0.51] - 2026-11-28
+
+### Added
+
+- `DRAFT_STRUCTURED_OUTPUT=1` sends claim extraction on Ollama as JSON
+  held to `claims.Schema()`, with a prompt whose rules are word for word
+  the text prompt's. The schema and its grammar had existed since v0.0.36
+  (#64), but no request set it. It is off by default because the
+  evidence is mixed: on six sections of a 65-page paper, single runs on
+  gemma3:4b verified 30 claims and dropped 15 records in JSON, against 26
+  and 46 in text, but JSON answered `[]` for a section the text prompt
+  found six claims in. It stays opt-in until a full-paper benchmark
+  settles it.
+  Whether a server can apply a schema depends on the model and runtime
+  (qwen3.5 under Ollama 0.40's nvfp4 runtime answers any `format` with
+  501), so when it is on, draft asks the server once with a one-token
+  request and keeps the text prompt when the answer is no. Text and JSON
+  extractions are cached separately, and `make corpus-live` sends the
+  pipeline's own request.
+
+### Changed
+
+- `pipeline.go` is split into `events.go`, `chainstate.go` and
+  `dryrun.go`, taking it from 592 lines to 360, under the 500-line cap.
+  `config.Load` moves its overrides into two helpers and drops from
+  cyclomatic 13 and 73 lines to 3 and 50. Both leave the complexity
+  baseline, and neither changes behaviour.
+- `docs/COMPARISON.md` sets draft beside PaperOrchestra, STORM and
+  OpenScholar, with evidence for each cell and a list of what draft does
+  not do yet. The docs site's Decisions menu now lists ADRs 0009 to 0011.
+- The audit's claim that GBNF decoding ran on the local path is corrected
+  in its status table: no request used the schema until this release.
+- CI uses `actions/setup-go` 7.1.0 and `ossf/scorecard-action` 2.6.0, and
+  the docs build `mkdocs-material` 9.8.2.
+- The README's Performance section gains "What a run costs", with two
+  measured end-to-end runs on a 65-page paper: `claude` (sonnet) in
+  8 min 9 s for a reported $1.19, and `ollama` with `gemma3:4b`, which
+  extracted 263 claims in about 55 minutes but could not write the
+  2,250 words they call for. The README links the new comparison page.
+
+### Fixed
+
+- The first Ollama extraction of a run no longer fails with "timeout
+  awaiting response headers" while a cold model loads. Ollama answers only
+  once the model is in memory, and the 60-second header wait was shorter
+  than a cold 4B model took to load on an 8 GB machine; it is now five
+  minutes, with the whole call still bounded by `DRAFT_CALL_TIMEOUT`.
+- The README flag table lists `--reader`, `--style`, `--second-gate`,
+  `--trust-config` and `--man`, which the CLI accepted but the table left
+  out, and `--engine` now shows the `api:<provider>` form. A test reads the
+  flag set and fails on any flag the table misses or invents, so the two
+  cannot drift again.
+- "When not to use draft" no longer says there is no direct API mode;
+  `--engine api:anthropic` and `api:openai` have existed since ADR 0011.
+
 ## [0.0.50] - 2026-11-20
 
 ### Changed
@@ -1834,6 +1889,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.51]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.51
 [0.0.50]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.50
 [0.0.49]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.49
 [0.0.48]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.48

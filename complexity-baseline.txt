@@ -14,7 +14,6 @@ claims/verify.go stripDashes halstead=31
 cmd/draft/completion.go writeCompletion lines=65
 cmd/draft/doctor.go runDoctor cognitive=27 cyclomatic=18 halstead=34.7 lines=97
 cmd/draft/verify.go printVerifyReport cyclomatic=11
-config/config.go Load cyclomatic=13 lines=73
 engine/acp.go (file) filelines=525
 engine/acp.go ACP.Generate cyclomatic=13 halstead=31.2 lines=67
 engine/acp.go acpConn.read cognitive=16 cyclomatic=12
@@ -40,7 +39,6 @@ pipeline/enginechain.go Runner.generateOn cognitive=27 cyclomatic=15 halstead=33
 pipeline/grounding.go Runner.extractClaims cyclomatic=13 halstead=32.2 lines=61
 pipeline/grounding.go Runner.extractOne cyclomatic=12
 pipeline/grounding.go Runner.sections cognitive=19 cyclomatic=11
-pipeline/pipeline.go (file) filelines=592
 pipeline/review.go Runner.review cyclomatic=13 lines=111
 pipeline/review.go applySurgicalEdits halstead=37.2
 provenance/provenance.go Attribute cognitive=41 cyclomatic=20 halstead=40.5 lines=79

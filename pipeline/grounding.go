@@ -17,7 +17,6 @@ import (
 	"github.com/sebastienrousseau/draft/engine"
 	"github.com/sebastienrousseau/draft/internal/extractcache"
 	"github.com/sebastienrousseau/draft/internal/pdf"
-	"github.com/sebastienrousseau/draft/prompt"
 )
 
 // Prompt budgets for the compact writing ledger.
@@ -280,14 +279,14 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 	if serving == nil {
 		serving = xchain.active()
 	}
-	if key := r.extractKey(body, serving); key != "" {
+	req := extractRequest(body, serving, r.cfg.StructuredOutput)
+	if key := r.extractKey(body, serving, req); key != "" {
 		if text, ok := r.cache.Get(key); ok {
 			r.cacheHits.Add(1)
 			return text, nil
 		}
 	}
 
-	req := engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature}
 	var text string
 	var err error
 	if direct != nil {
@@ -319,7 +318,7 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 	if actual == nil {
 		actual = xchain.active()
 	}
-	if key := r.extractKey(body, actual); key != "" {
+	if key := r.extractKey(body, actual, req); key != "" {
 		if putErr := r.cache.Put(key, text); putErr != nil {
 			r.warn("could not cache the extraction: " + putErr.Error())
 		}
@@ -386,12 +385,12 @@ func (r *Runner) extractAlternates(ctx context.Context, body string, refusal err
 	if cs == nil || cs.cur >= len(cs.engines) {
 		return "", refusal
 	}
-	req := engine.Request{Kind: engine.KindExtract, Prompt: prompt.Claim(body), Temperature: extractTemperature}
+	req := extractRequest(body, cs.active(), r.cfg.StructuredOutput)
 	res, alt, ok := r.tryAlternates(ctx, cs, cs.cur, req)
 	if !ok {
 		return "", refusal
 	}
-	if key := r.extractKey(body, alt); key != "" {
+	if key := r.extractKey(body, alt, req); key != "" {
 		if putErr := r.cache.Put(key, res.Text); putErr != nil {
 			r.warn("could not cache the extraction: " + putErr.Error())
 		}
@@ -399,10 +398,12 @@ func (r *Runner) extractAlternates(ctx context.Context, body string, refusal err
 	return res.Text, nil
 }
 
-// extractKey addresses one section's extraction against a specific backend.
-func (r *Runner) extractKey(body string, e engine.Engine) string {
+// extractKey addresses one section's extraction against a specific backend
+// and the prompt variant req carried, since the text and JSON prompts
+// produce different output for the same section.
+func (r *Runner) extractKey(body string, e engine.Engine, req engine.Request) string {
 	if e == nil || r.cache == nil {
 		return ""
 	}
-	return extractcache.Key(body, r.cfg.Reader, prompt.ClaimVersion(), e.Name(), engine.ResolveModel(r.cfg, e))
+	return extractcache.Key(body, r.cfg.Reader, extractVersion(req), e.Name(), engine.ResolveModel(r.cfg, e))
 }
