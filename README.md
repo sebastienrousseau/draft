@@ -629,6 +629,35 @@ so a stale entry can only ever produce *fewer* verified claims, never an
 ungrounded one — the same property that makes `--resume` safe. Entries expire
 after 30 days. `--no-cache` skips it; `--clear-cache` empties it.
 
+### What a run costs
+
+Two end-to-end runs on the same 65-page paper (arXiv:2604.05018, CC BY 4.0,
+39 sections), on an 8 GB Apple silicon laptop, 28 November 2026. The figures
+come from each run's `--json` record, so you can reproduce them:
+
+```console
+draft --json --engine claude paper.pdf | jq '{duration_ms, phases_ms, usage, provenance}'
+```
+
+| Engine                 | Outcome                         | Wall clock | Extract    | Write | Output tokens | Cost reported |
+| ---------------------- | ------------------------------- | ---------- | ---------- | ----- | ------------- | ------------- |
+| `claude` (sonnet)      | 2,935 words, 81/157 sentences   | 8 min 9 s  | 7 min 12 s | 55 s  | 71,883        | $1.19         |
+| `ollama` (`gemma3:4b`) | **Failed** the 2,250-word floor | ~55 min    | —          | —     | —             | $0 (local)    |
+
+The local run verified 263 claims and dropped 191, then wrote 1,174 to 1,360
+words on each of its three attempts, short of the floor 263 claims set, and
+saved the result as `needs-review`. A 4B model is enough to extract from a
+long paper on this machine but not to write a full article from it. Use a
+larger local model, or route writing to a session provider with
+`--write-engine`, for papers this size.
+
+The cost is what the provider's CLI reports; on a subscription it is an
+equivalent, not a charge. For scale, PaperOrchestra reports about 60 to 70
+LLM calls and 39.6 minutes per paper ([arXiv:2604.05018][po-paper]), for a
+different job (see [COMPARISON](docs/COMPARISON.md)).
+
+[po-paper]: https://arxiv.org/abs/2604.05018
+
 ### How that compares
 
 Document-understanding toolkits do far more than pull out text — layout
@@ -1357,6 +1386,7 @@ single source of truth; see [docs/packaging.md](docs/packaging.md).
 | [DEVELOPMENT](DEVELOPMENT.md)                                         | Toolchain, every CI gate reproduced locally, release model |
 | [ARCHITECTURE](docs/ARCHITECTURE.md)                                  | How the pipeline fits together, for contributors           |
 | [Decision records](docs/adr/)                                         | Why the load-bearing choices were made                     |
+| [COMPARISON](docs/COMPARISON.md)                                      | draft beside PaperOrchestra, STORM and OpenScholar         |
 | [Packaging](docs/packaging.md)                                        | For distribution maintainers                               |
 | [Supply chain](supply-chain/)                                         | What is depended on, how it is pinned, what is checked     |
 | [CHANGELOG](CHANGELOG.md)                                             | Every released change, Keep-a-Changelog format             |

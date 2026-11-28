@@ -6,6 +6,14 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Documentation
+
+- The README's Performance section gains "What a run costs", with two
+  measured end-to-end runs on a 65-page paper: `claude` (sonnet) in
+  8 min 9 s for a reported $1.19, and `ollama` with `gemma3:4b`, which
+  extracted 263 claims in about 55 minutes but could not write the
+  2,250 words they call for. The README links the new comparison page.
+
 ### Added
 
 - `DRAFT_STRUCTURED_OUTPUT=1` sends claim extraction on Ollama as JSON
