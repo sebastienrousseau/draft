@@ -166,7 +166,7 @@ func TestCacheWriteFailureWarnsButDoesNotFailTheRun(t *testing.T) {
 	r := NewRunner(cfg, []engine.Engine{eng}, events)
 	// Occupy every shard path the run will need with a plain file.
 	for _, sec := range sections {
-		key := r.extractKey(sec.Body, eng)
+		key := r.extractKey(sec.Body, eng, extractRequest(sec.Body, eng))
 		if err := writeFileAt(dir, key[:2]); err != nil {
 			t.Fatal(err)
 		}

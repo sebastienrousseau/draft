@@ -31,6 +31,10 @@ const (
 type Ollama struct {
 	host       string
 	ensureOnce sync.Once
+	// schemaOnce guards the one-time probe of whether this server can
+	// constrain the extraction model's output; schemaOK holds the answer.
+	schemaOnce sync.Once
+	schemaOK   bool
 	extract    string
 	write      string
 	edit       string

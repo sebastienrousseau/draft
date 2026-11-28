@@ -45,7 +45,32 @@ func ClaimVersion() string {
 }
 
 func claimWith(sourceBlock string) string {
-	return fmt.Sprintf(`You extract verified facts from a source document. You do NOT summarize, interpret, rephrase for style, or add anything. You are building a claim list that a later writing step will rely on, so a wrong or unsupported entry is worse than a missing one.
+	return claimRules + claimTextOutput + "## SOURCE\n" + sourceBlock
+}
+
+// ClaimJSON builds the extraction prompt for an engine that constrains its
+// output to claims.Schema(). The rules are the text prompt's, word for word;
+// only the output section asks for the JSON array the schema forces, so a
+// constrained model is not told one format and made to emit another.
+func ClaimJSON(source string) string {
+	return claimJSONWith(Untrusted("UNTRUSTED SOURCE DOCUMENT", source))
+}
+
+// ClaimJSONVersion identifies the JSON extraction instructions, as
+// ClaimVersion does the text ones. The two produce different output, so a
+// cached extraction from one is never served for the other.
+func ClaimJSONVersion() string {
+	sum := sha256.Sum256([]byte(claimJSONWith("")))
+	return hex.EncodeToString(sum[:8])
+}
+
+func claimJSONWith(sourceBlock string) string {
+	return claimRules + claimJSONOutput + "## SOURCE\n" + sourceBlock
+}
+
+// claimRules is what every extraction prompt holds the model to, whatever
+// format it answers in.
+const claimRules = `You extract verified facts from a source document. You do NOT summarize, interpret, rephrase for style, or add anything. You are building a claim list that a later writing step will rely on, so a wrong or unsupported entry is worse than a missing one.
 
 ## RULES
 - Extract only claims that are explicitly stated in the SOURCE below.
@@ -55,7 +80,10 @@ func claimWith(sourceBlock string) string {
 - Do not infer cause, significance, or implications the source does not state in words.
 - If a field does not apply, write "none". Do not invent to fill a slot.
 
-## OUTPUT
+`
+
+// claimTextOutput asks for the CLAIM/SOURCE_QUOTE records claims.Parse reads.
+const claimTextOutput = `## OUTPUT
 Return a list of records in exactly this format, nothing before or after:
 
 CLAIM: <the fact, in the source's own terms, one sentence>
@@ -67,9 +95,22 @@ STRENGTH: <demonstrated | hedged | speculation-or-future-work>
 Order records by where they appear in the SOURCE, top to bottom.
 If the SOURCE section contains no extractable claims, return exactly: NONE.
 
-## SOURCE
-%s`, sourceBlock)
-}
+`
+
+// claimJSONOutput asks for the array claims.Schema() describes, which
+// claims.ParseJSON reads. An empty array is the "no claims here" answer,
+// the JSON form of NONE.
+const claimJSONOutput = `## OUTPUT
+Return a JSON array of objects, nothing before or after. Each object has exactly these fields:
+- "claim": the fact, in the source's own terms, one sentence
+- "source_quote": a verbatim span copied exactly from the SOURCE
+- "type": one of metric, mechanism, definition, method, result, limitation
+- "strength": one of demonstrated, hedged, speculation-or-future-work
+
+Order objects by where they appear in the SOURCE, top to bottom.
+If the SOURCE section contains no extractable claims, return exactly: []
+
+`
 
 // EffectiveStyle returns the style-calibration text the writing prompt will
 // embed: the caller's own templates, or the built-in example when none are

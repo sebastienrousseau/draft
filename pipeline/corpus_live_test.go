@@ -14,7 +14,6 @@ import (
 	"github.com/sebastienrousseau/draft/claims"
 	"github.com/sebastienrousseau/draft/config"
 	"github.com/sebastienrousseau/draft/engine"
-	"github.com/sebastienrousseau/draft/prompt"
 )
 
 // Live recall measurement against the grounding corpus.
@@ -78,11 +77,9 @@ func TestCorpusLiveRecall(t *testing.T) {
 			t.Fatalf("case %s: %v", tc.Name, err)
 		}
 
-		res, err := backend.Generate(context.Background(), engine.Request{
-			Kind:        engine.KindExtract,
-			Prompt:      prompt.Claim(string(source)),
-			Temperature: extractTemperature,
-		})
+		// The same request the pipeline sends this backend, schema and all,
+		// so the run measures the extraction a real draft gets.
+		res, err := backend.Generate(context.Background(), extractRequest(string(source), backend))
 		if err != nil {
 			t.Fatalf("case %s: extraction failed: %v", tc.Name, err)
 		}

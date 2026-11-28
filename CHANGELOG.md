@@ -6,6 +6,21 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- Claim extraction on Ollama now uses structured output. The request
+  carries `claims.Schema()` and a prompt that asks for the same JSON
+  array, with the rules word for word as the text prompt. The schema and
+  its grammar had existed since v0.0.36 (#64), but no request set it, so
+  the local path never got constrained decoding. Whether a server can
+  apply a schema depends on the model and runtime (qwen3.5 under Ollama
+  0.40's nvfp4 runtime answers any `format` with 501), so draft asks the
+  server once with a one-token request and keeps the text prompt when the
+  answer is no. Text and JSON extractions are cached separately.
+  `make corpus-live` sends the pipeline's own request. On gemma3:4b the
+  corpus verified 19 claims with 0 dropped in both modes; qwen3.5:4b
+  falls back to text and verified 20, as before.
+
 ### Fixed
 
 - The first Ollama extraction of a run no longer fails with "timeout
