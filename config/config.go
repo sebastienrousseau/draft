@@ -199,22 +199,8 @@ func Load(flags Flags) Config {
 	}
 
 	// Flags win over environment.
-	if flags.Engine != "" {
-		c.Engine = flags.Engine
-	}
-	if flags.ExtractEngine != "" {
-		c.ExtractEngine = flags.ExtractEngine
-	}
-	if flags.WriteEngine != "" {
-		c.WriteEngine = flags.WriteEngine
-	}
-	if flags.Reader != "" {
-		c.Reader = flags.Reader
-	}
+	c.applyBackendFlags(flags)
 	c.Style, c.StylePath = resolveStyle(warn, firstNonEmpty(flags.Style, firstNonEmpty(os.Getenv("DRAFT_STYLE"), fc.get("style", ""))), home)
-	if flags.Model != "" {
-		c.Model = flags.Model
-	}
 	c.ContextLength = flagInt(warn, "--num-ctx", flags.ContextLength, c.ContextLength, 512, maxContextLen)
 	c.PredictLength = flagInt(warn, "--num-predict", flags.PredictLength, c.PredictLength, 1024, maxPredictLen)
 	if d := strings.TrimSpace(flags.DraftsDir); d != "" {
@@ -223,6 +209,35 @@ func Load(flags Flags) Config {
 	if d := strings.TrimSpace(flags.SourcesDir); d != "" {
 		c.SourcesDir = absDir(warn, "--sources-dir", expandHome(d, home))
 	}
+	c.applySwitches(flags)
+	c.SignCert = env("DRAFT_C2PA_CERT", fc.get("c2pa-cert", ""))
+	c.SignKey = env("DRAFT_C2PA_KEY", fc.get("c2pa-key", ""))
+	c.SignAlg = env("DRAFT_C2PA_ALG", fc.get("c2pa-alg", ""))
+	c.Warnings = warnings
+	return c
+}
+
+// applyBackendFlags overlays the flags that choose a backend, a reader and a
+// session model; an empty flag leaves the environment's value in place.
+func (c *Config) applyBackendFlags(flags Flags) {
+	c.Engine = override(flags.Engine, c.Engine)
+	c.ExtractEngine = override(flags.ExtractEngine, c.ExtractEngine)
+	c.WriteEngine = override(flags.WriteEngine, c.WriteEngine)
+	c.Reader = override(flags.Reader, c.Reader)
+	c.Model = override(flags.Model, c.Model)
+}
+
+// override is flag when it is set, else current.
+func override(flag, current string) string {
+	if flag != "" {
+		return flag
+	}
+	return current
+}
+
+// applySwitches sets the on/off behaviours, each from its flag or its
+// environment variable.
+func (c *Config) applySwitches(flags Flags) {
 	c.ForceNew = flags.ForceNew
 	c.Merge = flags.Merge
 	c.Resume = flags.Resume
@@ -230,14 +245,9 @@ func Load(flags Flags) Config {
 	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
 	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
 	c.SecondGate = flags.SecondGate || envBool("DRAFT_SECOND_GATE")
-	c.SignCert = env("DRAFT_C2PA_CERT", fc.get("c2pa-cert", ""))
-	c.SignKey = env("DRAFT_C2PA_KEY", fc.get("c2pa-key", ""))
-	c.SignAlg = env("DRAFT_C2PA_ALG", fc.get("c2pa-alg", ""))
 	if flags.NoCache || envBool("DRAFT_NO_CACHE") {
 		c.CacheDir = ""
 	}
-	c.Warnings = warnings
-	return c
 }
 
 // resolveStyle loads the house-style file at path. With no path, or one that

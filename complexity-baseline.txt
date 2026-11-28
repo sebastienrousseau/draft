@@ -14,7 +14,6 @@ claims/verify.go stripDashes halstead=31
 cmd/draft/completion.go writeCompletion lines=65
 cmd/draft/doctor.go runDoctor cognitive=27 cyclomatic=18 halstead=34.7 lines=97
 cmd/draft/verify.go printVerifyReport cyclomatic=11
-config/config.go Load cyclomatic=13 lines=73
 engine/acp.go (file) filelines=525
 engine/acp.go ACP.Generate cyclomatic=13 halstead=31.2 lines=67
 engine/acp.go acpConn.read cognitive=16 cyclomatic=12
