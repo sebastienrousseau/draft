@@ -279,7 +279,7 @@ func (r *Runner) extractOne(ctx context.Context, body string, direct engine.Engi
 	if serving == nil {
 		serving = xchain.active()
 	}
-	req := extractRequest(body, serving)
+	req := extractRequest(body, serving, r.cfg.StructuredOutput)
 	if key := r.extractKey(body, serving, req); key != "" {
 		if text, ok := r.cache.Get(key); ok {
 			r.cacheHits.Add(1)
@@ -385,7 +385,7 @@ func (r *Runner) extractAlternates(ctx context.Context, body string, refusal err
 	if cs == nil || cs.cur >= len(cs.engines) {
 		return "", refusal
 	}
-	req := extractRequest(body, cs.active())
+	req := extractRequest(body, cs.active(), r.cfg.StructuredOutput)
 	res, alt, ok := r.tryAlternates(ctx, cs, cs.cur, req)
 	if !ok {
 		return "", refusal

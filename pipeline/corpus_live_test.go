@@ -79,7 +79,7 @@ func TestCorpusLiveRecall(t *testing.T) {
 
 		// The same request the pipeline sends this backend, schema and all,
 		// so the run measures the extraction a real draft gets.
-		res, err := backend.Generate(context.Background(), extractRequest(string(source), backend))
+		res, err := backend.Generate(context.Background(), extractRequest(string(source), backend, cfg.StructuredOutput))
 		if err != nil {
 			t.Fatalf("case %s: extraction failed: %v", tc.Name, err)
 		}

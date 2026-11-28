@@ -20,10 +20,22 @@ type recordingEngine struct {
 	out    string
 	mu     sync.Mutex
 	reqs   []engine.Request
+	probed int
 }
 
-func (e *recordingEngine) Name() string         { return e.name }
-func (e *recordingEngine) SupportsSchema() bool { return e.schema }
+func (e *recordingEngine) Name() string { return e.name }
+func (e *recordingEngine) SupportsSchema() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.probed++
+	return e.schema
+}
+
+func (e *recordingEngine) probes() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.probed
+}
 func (e *recordingEngine) Generate(_ context.Context, req engine.Request) (engine.Result, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -38,22 +50,28 @@ func (e *recordingEngine) requests() []engine.Request {
 }
 
 // claims.Schema and internal/gbnf existed, but nothing in the pipeline set
-// Request.Schema, so the local path never got constrained output. Every
-// extraction sent to a schema-capable engine must now carry the schema and
-// the JSON prompt; every other engine keeps the text prompt and no schema.
-func TestExtractionSendsTheSchemaOnlyToACapableEngine(t *testing.T) {
+// Request.Schema. With DRAFT_STRUCTURED_OUTPUT on, every extraction sent to a
+// schema-capable engine carries the schema and the JSON prompt; any other
+// engine keeps the text prompt. With it off, the default, nothing changes,
+// and the engine is not even asked whether it can apply a schema, because for
+// Ollama asking costs a request to the server.
+func TestExtractionSendsTheSchemaOnlyWhenOptedInAndCapable(t *testing.T) {
+	jsonOut := `[{"claim":"The system reached 12 pages per second.","source_quote":"The system reached 12 pages per second in testing.","type":"metric","strength":"demonstrated"}]`
 	for _, tc := range []struct {
 		name       string
+		structured bool
 		schema     bool
 		out        string
 		wantSchema bool
+		wantProbe  bool
 	}{
-		{"schema-capable", true, `[{"claim":"The system reached 12 pages per second.","source_quote":"The system reached 12 pages per second in testing.","type":"metric","strength":"demonstrated"}]`, true},
-		{"text-only", false, "NONE", false},
+		{"opted in, capable", true, true, jsonOut, true, true},
+		{"opted in, text-only", true, false, "NONE", false, true},
+		{"default, capable", false, true, "NONE", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			eng := &recordingEngine{name: "fake", schema: tc.schema, out: tc.out}
-			cfg := config.Config{HomeDir: t.TempDir(), CacheDir: t.TempDir()}
+			cfg := config.Config{HomeDir: t.TempDir(), CacheDir: t.TempDir(), StructuredOutput: tc.structured}
 			r := NewRunner(cfg, []engine.Engine{eng}, nil)
 			records, _, err := r.extractClaims(context.Background(), Job{}, cacheTestSections(), t.TempDir(), r.chainFor(engine.KindExtract))
 			if err != nil {
@@ -67,10 +85,12 @@ func TestExtractionSendsTheSchemaOnlyToACapableEngine(t *testing.T) {
 				if got := req.Schema != nil; got != tc.wantSchema {
 					t.Errorf("Schema set = %v, want %v", got, tc.wantSchema)
 				}
-				asksJSON := strings.Contains(req.Prompt, `"source_quote"`)
-				if asksJSON != tc.wantSchema {
+				if asksJSON := strings.Contains(req.Prompt, `"source_quote"`); asksJSON != tc.wantSchema {
 					t.Errorf("prompt asks for JSON = %v, want %v", asksJSON, tc.wantSchema)
 				}
+			}
+			if probed := eng.probes() > 0; probed != tc.wantProbe {
+				t.Errorf("engine asked about schema support = %v, want %v", probed, tc.wantProbe)
 			}
 			if tc.wantSchema && len(records) == 0 {
 				t.Error("a verified JSON answer produced no claims")
@@ -86,8 +106,8 @@ func TestExtractionCacheKeyDependsOnThePromptVariant(t *testing.T) {
 	eng := &recordingEngine{name: "fake"}
 	r := NewRunner(cfg, []engine.Engine{eng}, nil)
 	body := cacheTestSections()[0].Body
-	text := r.extractKey(body, eng, extractRequest(body, &recordingEngine{name: "fake"}))
-	json := r.extractKey(body, eng, extractRequest(body, &recordingEngine{name: "fake", schema: true}))
+	text := r.extractKey(body, eng, extractRequest(body, &recordingEngine{name: "fake"}, true))
+	json := r.extractKey(body, eng, extractRequest(body, &recordingEngine{name: "fake", schema: true}, true))
 	if text == "" || json == "" || text == json {
 		t.Errorf("text and JSON extractions share a cache key: %q, %q", text, json)
 	}

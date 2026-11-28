@@ -749,6 +749,7 @@ module, no TOML library.
 | `DRAFT_EXPERIMENTAL`        | —                               | `1` to let auto use experimental providers              |
 | `DRAFT_STRICT_NUMBERS`      | —                               | `1` to fail a draft carrying an ungrounded number       |
 | `DRAFT_SECOND_GATE`         | —                               | `1` for an opt-in semantic second pass (see below)      |
+| `DRAFT_STRUCTURED_OUTPUT`   | —                               | `1` for schema-held JSON extraction on Ollama           |
 | `DRAFT_C2PA_CERT`           | —                               | PEM certificate chain for signing the C2PA credential   |
 | `DRAFT_C2PA_KEY`            | —                               | PEM private key paired with `DRAFT_C2PA_CERT`           |
 | `DRAFT_C2PA_ALG`            | `es256`                         | Signature algorithm when signing is configured          |

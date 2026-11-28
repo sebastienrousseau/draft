@@ -8,18 +8,21 @@ series until `0.0.999`.
 
 ### Added
 
-- Claim extraction on Ollama now uses structured output. The request
-  carries `claims.Schema()` and a prompt that asks for the same JSON
-  array, with the rules word for word as the text prompt. The schema and
-  its grammar had existed since v0.0.36 (#64), but no request set it, so
-  the local path never got constrained decoding. Whether a server can
-  apply a schema depends on the model and runtime (qwen3.5 under Ollama
-  0.40's nvfp4 runtime answers any `format` with 501), so draft asks the
-  server once with a one-token request and keeps the text prompt when the
-  answer is no. Text and JSON extractions are cached separately.
-  `make corpus-live` sends the pipeline's own request. On gemma3:4b the
-  corpus verified 19 claims with 0 dropped in both modes; qwen3.5:4b
-  falls back to text and verified 20, as before.
+- `DRAFT_STRUCTURED_OUTPUT=1` sends claim extraction on Ollama as JSON
+  held to `claims.Schema()`, with a prompt whose rules are word for word
+  the text prompt's. The schema and its grammar had existed since v0.0.36
+  (#64), but no request set it. It is off by default because the
+  evidence is mixed: on six sections of a 65-page paper, single runs on
+  gemma3:4b verified 30 claims and dropped 15 records in JSON, against 26
+  and 46 in text, but JSON answered `[]` for a section the text prompt
+  found six claims in. It stays opt-in until a full-paper benchmark
+  settles it.
+  Whether a server can apply a schema depends on the model and runtime
+  (qwen3.5 under Ollama 0.40's nvfp4 runtime answers any `format` with
+  501), so when it is on, draft asks the server once with a one-token
+  request and keeps the text prompt when the answer is no. Text and JSON
+  extractions are cached separately, and `make corpus-live` sends the
+  pipeline's own request.
 
 ### Fixed
 

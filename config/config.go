@@ -117,6 +117,12 @@ type Config struct {
 	// unsupported claims are dropped before writing. Off by default; the
 	// verbatim gate is always the primary check.
 	SecondGate bool
+	// StructuredOutput sends claim extraction to an engine that can hold its
+	// output to claims.Schema() as JSON under that schema, instead of the
+	// CLAIM: text records. Off by default: on gemma3:4b it dropped fewer
+	// records than text but answered [] for a section text found claims in,
+	// so it stays opt-in until a full-paper benchmark settles which is better.
+	StructuredOutput bool
 
 	// SignCert and SignKey are PEM paths for a C2PA signing certificate chain
 	// (leaf first) and its private key. When both are set and c2patool is
@@ -245,6 +251,7 @@ func (c *Config) applySwitches(flags Flags) {
 	c.Experimental = flags.Experimental || envBool("DRAFT_EXPERIMENTAL")
 	c.StrictNumbers = flags.StrictNumbers || envBool("DRAFT_STRICT_NUMBERS")
 	c.SecondGate = flags.SecondGate || envBool("DRAFT_SECOND_GATE")
+	c.StructuredOutput = envBool("DRAFT_STRUCTURED_OUTPUT")
 	if flags.NoCache || envBool("DRAFT_NO_CACHE") {
 		c.CacheDir = ""
 	}
