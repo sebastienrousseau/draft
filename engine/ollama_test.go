@@ -217,3 +217,19 @@ func TestOllamaSchemaAndGBNF(t *testing.T) {
 		t.Error("unsupported schema type should return a gbnf error")
 	}
 }
+
+// The header wait has to outlast a cold model load, which took over a minute
+// on an 8 GB machine; at 60 seconds the first extraction of a run failed
+// while the server was still loading.
+func TestOllamaWaitsLongEnoughForAColdModelLoad(t *testing.T) {
+	tr, ok := newOllamaClient().Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("the Ollama client has no *http.Transport")
+	}
+	if tr.ResponseHeaderTimeout < 2*time.Minute {
+		t.Errorf("ResponseHeaderTimeout = %v; a cold model load can take longer", tr.ResponseHeaderTimeout)
+	}
+	if tr.ResponseHeaderTimeout > 10*time.Minute {
+		t.Errorf("ResponseHeaderTimeout = %v; a silent server should still be caught", tr.ResponseHeaderTimeout)
+	}
+}

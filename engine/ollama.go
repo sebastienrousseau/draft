@@ -49,16 +49,27 @@ type Ollama struct {
 // minutes. What must be bounded is the server going silent, so the limits sit
 // on the dial and on the wait for response headers, and the overall call is
 // bounded by the context instead.
+//
+// Ollama sends response headers only once the model is loaded and the prompt
+// evaluated, so the header wait has to cover a cold model load as well as a
+// silent server.
 func newOllamaClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
-			ResponseHeaderTimeout: 60 * time.Second,
+			ResponseHeaderTimeout: ollamaHeaderTimeout,
 			IdleConnTimeout:       90 * time.Second,
 			MaxIdleConnsPerHost:   2,
 		},
 	}
 }
+
+// ollamaHeaderTimeout is how long Generate waits for the server to start
+// answering. It was 60 seconds, and a cold 4B model (qwen3.5:4b) on an 8 GB
+// machine took longer than that to load: the first extraction of a run
+// failed with "timeout awaiting response headers" while the server was
+// still loading, and only a warm model got through.
+const ollamaHeaderTimeout = 5 * time.Minute
 
 // NewOllama builds an Ollama engine from configuration.
 func NewOllama(cfg config.Config) *Ollama {

@@ -8,6 +8,11 @@ series until `0.0.999`.
 
 ### Fixed
 
+- The first Ollama extraction of a run no longer fails with "timeout
+  awaiting response headers" while a cold model loads. Ollama answers only
+  once the model is in memory, and the 60-second header wait was shorter
+  than a cold 4B model took to load on an 8 GB machine; it is now five
+  minutes, with the whole call still bounded by `DRAFT_CALL_TIMEOUT`.
 - The README flag table lists `--reader`, `--style`, `--second-gate`,
   `--trust-config` and `--man`, which the CLI accepted but the table left
   out, and `--engine` now shows the `api:<provider>` form. A test reads the
