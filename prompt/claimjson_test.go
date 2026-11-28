@@ -18,7 +18,7 @@ func TestClaimJSONAsksForTheSchemaShape(t *testing.T) {
 	if !strings.Contains(p, "the body") {
 		t.Fatal("ClaimJSON() does not embed its source")
 	}
-	for _, field := range []string{`"claim"`, `"source_quote"`, `"type"`, `"strength"`} {
+	for _, field := range []string{`"claims"`, `"claim"`, `"source_quote"`, `"type"`, `"strength"`} {
 		if !strings.Contains(p, field) {
 			t.Errorf("JSON claim prompt does not name the %s field", field)
 		}

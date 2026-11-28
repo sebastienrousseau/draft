@@ -64,6 +64,13 @@ type Provider struct {
 	// Like PromptViaStdin it keeps the prompt out of argv, but the provider's
 	// stream drives the turn rather than reading a raw prompt.
 	StreamJSONInput bool
+	// SchemaFlag, when non-empty, is the flag that holds the answer to a
+	// JSON Schema, which makes the provider SchemaCapable. With SchemaFile
+	// the flag takes the path of a file in the call's sandbox directory
+	// (Codex --output-schema); without it, the schema itself (Claude
+	// --json-schema).
+	SchemaFlag string
+	SchemaFile bool
 	// Credentials are the environment variables the provider may sign in
 	// with, in the pattern syntax of credentialPatterns. Every other token in
 	// the user's environment is withheld from it.
@@ -112,13 +119,13 @@ var (
 
 func defaultProviders() []Provider {
 	return []Provider{
-		{Name: "claude", Bin: "claude", Args: append([]string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, claudeHermetic...), ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true, Credentials: claudeCredentials},
+		{Name: "claude", Bin: "claude", Args: append([]string{"-p", "--output-format", "stream-json", "--include-partial-messages", "--verbose"}, claudeHermetic...), ModelFlag: "--model", DefaultModel: "sonnet", PromptViaStdin: true, StreamJSON: true, SchemaFlag: "--json-schema", Credentials: claudeCredentials},
 		// copilot is driven over the Agent Client Protocol, not `copilot -p`:
 		// the -p path takes the prompt as a positional argument, which puts the
 		// verbatim source text into the process listing. ACP delivers it in a
 		// JSON-RPC frame on stdin, and reports a typed stop reason.
 		{Name: "copilot", Bin: "copilot", Args: []string{"--acp", "--disable-builtin-mcps", "--no-custom-instructions"}, ACP: true, Credentials: []string{"COPILOT_*", "GH_*", "GITHUB_*"}},
-		{Name: "codex", Bin: "codex", Args: append([]string{"exec"}, codexHermetic...), ModelFlag: "--model", PromptViaStdin: true, Credentials: codexCredentials},
+		{Name: "codex", Bin: "codex", Args: append([]string{"exec"}, codexHermetic...), ModelFlag: "--model", PromptViaStdin: true, SchemaFlag: "--output-schema", SchemaFile: true, Credentials: codexCredentials},
 		// agy is driven over its stream-json turn protocol, not `agy -p`: the -p
 		// path takes the prompt as a positional argument, exposing the source
 		// text in the process listing. The prompt goes on stdin as one NDJSON

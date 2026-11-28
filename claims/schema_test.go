@@ -21,10 +21,20 @@ func TestSchemaMarshalsAndDescribesAClaimList(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["type"] != "array" {
-		t.Errorf("top-level type = %v, want array", got["type"])
+	// The root is an object holding the list, not the list itself: Claude's
+	// --json-schema and OpenAI structured outputs (Codex --output-schema)
+	// both reject a schema whose root is not an object.
+	if got["type"] != "object" || got["additionalProperties"] != false {
+		t.Errorf("root = type %v, additionalProperties %v; want a closed object", got["type"], got["additionalProperties"])
 	}
-	items, ok := got["items"].(map[string]any)
+	if req, _ := got["required"].([]any); !reflect.DeepEqual(req, []any{"claims"}) {
+		t.Errorf("root required = %v, want [claims]", got["required"])
+	}
+	list, ok := got["properties"].(map[string]any)["claims"].(map[string]any)
+	if !ok || list["type"] != "array" {
+		t.Fatalf("claims property = %v, want an array", got["properties"])
+	}
+	items, ok := list["items"].(map[string]any)
 	if !ok {
 		t.Fatalf("items is %T, want object", got["items"])
 	}
@@ -45,7 +55,7 @@ func TestSchemaMarshalsAndDescribesAClaimList(t *testing.T) {
 }
 
 func TestSchemaEnumsMatchCanonicalValues(t *testing.T) {
-	items := Schema()["items"].(map[string]any)
+	items := Schema()["properties"].(map[string]any)["claims"].(map[string]any)["items"].(map[string]any)
 	props := items["properties"].(map[string]any)
 	for field, want := range map[string][]string{
 		"type":     ClaimTypes,
@@ -72,7 +82,7 @@ func TestSchemaEnumsMatchCanonicalValues(t *testing.T) {
 func TestSchemaReturnsAFreshMap(t *testing.T) {
 	a := Schema()
 	a["type"] = "mutated"
-	if Schema()["type"] != "array" {
+	if Schema()["type"] != "object" {
 		t.Error("Schema() shares state between calls")
 	}
 }
@@ -89,5 +99,13 @@ func TestClaimEnumsAreNonEmptyAndDistinct(t *testing.T) {
 			}
 			seen[v] = true
 		}
+	}
+}
+
+// Claude's --json-schema refuses a schema that names the 2020-12 dialect
+// ("no schema with key or ref"), so Schema() must not declare one.
+func TestSchemaDeclaresNoDialect(t *testing.T) {
+	if _, ok := Schema()["$schema"]; ok {
+		t.Error("Schema() declares $schema, which Claude's validator rejects")
 	}
 }

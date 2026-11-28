@@ -97,18 +97,18 @@ If the SOURCE section contains no extractable claims, return exactly: NONE.
 
 `
 
-// claimJSONOutput asks for the array claims.Schema() describes, which
-// claims.ParseJSON reads. An empty array is the "no claims here" answer,
-// the JSON form of NONE.
+// claimJSONOutput asks for the object claims.Schema() describes, which
+// claims.ParseJSON reads. An empty claims array is the "no claims here"
+// answer, the JSON form of NONE.
 const claimJSONOutput = `## OUTPUT
-Return a JSON array of objects, nothing before or after. Each object has exactly these fields:
+Return one JSON object, nothing before or after, with a single field "claims": an array of objects. Each object in the array has exactly these fields:
 - "claim": the fact, in the source's own terms, one sentence
 - "source_quote": a verbatim span copied exactly from the SOURCE
 - "type": one of metric, mechanism, definition, method, result, limitation
 - "strength": one of demonstrated, hedged, speculation-or-future-work
 
 Order objects by where they appear in the SOURCE, top to bottom.
-If the SOURCE section contains no extractable claims, return exactly: []
+If the SOURCE section contains no extractable claims, return exactly: {"claims": []}
 
 `
 

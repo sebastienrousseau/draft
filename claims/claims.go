@@ -41,7 +41,7 @@ func Parse(text, source string) (records []Record, dropped int) {
 	if text == "" || text == "NONE" {
 		return nil, 0
 	}
-	if strings.HasPrefix(text, "[") {
+	if strings.HasPrefix(text, "[") || strings.HasPrefix(text, "{") {
 		return ParseJSON(text, source)
 	}
 	for _, block := range blockSep.Split(text, -1) {

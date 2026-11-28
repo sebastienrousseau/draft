@@ -17,8 +17,8 @@ type jsonRecord struct {
 	Strength    string `json:"strength"`
 }
 
-// ParseJSON reads a structured extraction — a JSON array of claim objects
-// matching Schema() — and returns the records whose quotes verify, plus the
+// ParseJSON reads a structured extraction — the {"claims": [...]} object
+// Schema() describes, or a bare list of claim objects — and returns the records whose quotes verify, plus the
 // count dropped. It is the decoder half of constrained/structured decoding: a
 // model constrained to the schema (or to the compiled GBNF grammar) emits this
 // shape instead of the CLAIM/SOURCE_QUOTE text, and no malformed block can then
@@ -38,8 +38,8 @@ func ParseJSON(text, source string) (records []Record, dropped int) {
 	if text == "" {
 		return nil, 0
 	}
-	var raw []jsonRecord
-	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+	raw, ok := decodeClaims(text)
+	if !ok {
 		return nil, 0
 	}
 	for _, r := range raw {
@@ -56,4 +56,24 @@ func ParseJSON(text, source string) (records []Record, dropped int) {
 		dropped++
 	}
 	return records, dropped
+}
+
+// decodeClaims reads either wire shape: the {"claims": [...]} object Schema()
+// describes, or the bare list an earlier schema used and a cached or
+// unconstrained answer may still carry. Anything else is no claims at all.
+func decodeClaims(text string) ([]jsonRecord, bool) {
+	if strings.HasPrefix(text, "{") {
+		var wrapped struct {
+			Claims *[]jsonRecord `json:"claims"`
+		}
+		if err := json.Unmarshal([]byte(text), &wrapped); err != nil || wrapped.Claims == nil {
+			return nil, false
+		}
+		return *wrapped.Claims, true
+	}
+	var list []jsonRecord
+	if err := json.Unmarshal([]byte(text), &list); err != nil {
+		return nil, false
+	}
+	return list, true
 }

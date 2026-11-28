@@ -99,37 +99,81 @@ func (s *Session) Generate(ctx context.Context, req Request) (Result, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	args := append([]string{}, s.provider.Args...)
+	args, promptFile, err := s.stageArgs(dir, req)
+	if err != nil {
+		return Result{}, err
+	}
+	cmd := providerCommand(ctx, s.provider, dir, args...)
+	s.deliverPrompt(cmd, req.Prompt, promptFile)
+	return s.collect(ctx, cmd, req.OnChunk)
+}
+
+// SupportsSchema implements SchemaCapable for a provider whose CLI can hold
+// its answer to a JSON Schema (see Provider.SchemaFlag).
+func (s *Session) SupportsSchema() bool { return s.provider.SchemaFlag != "" }
+
+// stageArgs builds the provider's arguments for one call: its fixed flags,
+// the model, and, staged inside the sandbox directory dir, the prompt file
+// and the schema where the provider takes them. It returns the prompt file's
+// path, or "" when the prompt goes another way.
+func (s *Session) stageArgs(dir string, req Request) (args []string, promptFile string, err error) {
+	args = append([]string{}, s.provider.Args...)
 	if s.provider.ModelFlag != "" && s.model != "" && s.model != "default" {
 		args = append(args, s.provider.ModelFlag, s.model)
 	}
-
+	schema, err := s.schemaArgs(dir, req.Schema)
+	if err != nil {
+		return nil, "", err
+	}
+	args = append(args, schema...)
 	// Deliver the prompt without putting it in argv wherever the CLI allows:
 	// a positional prompt puts the verbatim source text into the process
 	// listing for every other user on the machine to read.
-	promptFile := ""
-	if !s.provider.PromptViaStdin && s.provider.PromptFileFlag != "" {
-		promptFile = filepath.Join(dir, "prompt.txt")
-		if err := os.WriteFile(promptFile, []byte(req.Prompt), 0o600); err != nil {
-			return Result{}, fmt.Errorf("%s: could not stage the prompt: %w", s.provider.Name, err)
-		}
-		args = append(args, s.provider.PromptFileFlag, promptFile)
+	if s.provider.PromptViaStdin || s.provider.PromptFileFlag == "" {
+		return args, "", nil
 	}
+	promptFile = filepath.Join(dir, "prompt.txt")
+	if err := os.WriteFile(promptFile, []byte(req.Prompt), 0o600); err != nil {
+		return nil, "", fmt.Errorf("%s: could not stage the prompt: %w", s.provider.Name, err)
+	}
+	return append(args, s.provider.PromptFileFlag, promptFile), promptFile, nil
+}
 
-	cmd := providerCommand(ctx, s.provider, dir, args...)
+// schemaArgs is the flag and value that hold the answer to schema, or nothing
+// when there is no schema or the provider cannot take one. A file schema is
+// written into the call's own sandbox directory, which is removed with it.
+func (s *Session) schemaArgs(dir string, schema map[string]any) ([]string, error) {
+	if schema == nil || s.provider.SchemaFlag == "" {
+		return nil, nil
+	}
+	data, err := json.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("%s: could not encode the schema: %w", s.provider.Name, err)
+	}
+	if !s.provider.SchemaFile {
+		return []string{s.provider.SchemaFlag, string(data)}, nil
+	}
+	path := filepath.Join(dir, "schema.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return nil, fmt.Errorf("%s: could not stage the schema: %w", s.provider.Name, err)
+	}
+	return []string{s.provider.SchemaFlag, path}, nil
+}
+
+// deliverPrompt hands the prompt to cmd the way the provider reads it: as a
+// stream-json event, on stdin, from the staged file, or, last, as argv.
+func (s *Session) deliverPrompt(cmd *exec.Cmd, prompt, promptFile string) {
 	switch {
 	case s.provider.StreamJSONInput:
-		cmd.Stdin = strings.NewReader(agyUserEvent(req.Prompt))
+		cmd.Stdin = strings.NewReader(agyUserEvent(prompt))
 	case s.provider.PromptViaStdin:
-		cmd.Stdin = strings.NewReader(req.Prompt)
+		cmd.Stdin = strings.NewReader(prompt)
 		if s.provider.StdinPlaceholder != "" {
 			cmd.Args = append(cmd.Args, s.provider.StdinPlaceholder)
 		}
 	case promptFile == "":
-		cmd.Args = append(cmd.Args, req.Prompt)
+		cmd.Args = append(cmd.Args, prompt)
 	}
-
-	return s.collect(ctx, cmd, req.OnChunk)
 }
 
 // collect starts cmd and gathers its answer. proc.Bound has already capped

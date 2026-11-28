@@ -49,9 +49,12 @@ func TestParseJSONEmptyAndMalformed(t *testing.T) {
 		"empty string":  "",
 		"whitespace":    "   \n ",
 		"empty array":   "[]",
+		"empty wrapper": `{"claims": []}`,
 		"malformed":     "[{not json",
+		"bad wrapper":   `{"claims": [{not json`,
 		"prose refusal": "I cannot help with that.",
-		"object":        `{"claim":"x"}`, // not the array shape
+		"bare record":   `{"claim":"x"}`, // neither the wrapper nor the list
+		"wrong key":     `{"records": [{"claim":"x","source_quote":"any source","type":"result","strength":"demonstrated"}]}`,
 	} {
 		if r, d := ParseJSON(in, "any source"); len(r) != 0 || d != 0 {
 			t.Errorf("%s: ParseJSON = %d records, %d dropped; want 0, 0", name, len(r), d)
@@ -86,4 +89,27 @@ func TestParseJSONMatchesTextParse(t *testing.T) {
 // hasSuffix avoids importing strings for a single call in the test file.
 func hasSuffix(s, suf string) bool {
 	return len(s) >= len(suf) && s[len(s)-len(suf):] == suf
+}
+
+// The schema's root is an object, {"claims": [...]}, because Claude and Codex
+// require one. That wrapper must gate exactly as the bare list does, which
+// cached and older Ollama output still uses, and Parse must route both to
+// ParseJSON rather than reading them as CLAIM: text.
+func TestParseJSONAcceptsTheClaimsWrapper(t *testing.T) {
+	source := "The method used 5x fewer tokens than the baseline and tripled throughput on every device."
+	list := `[{"claim": "used 5x fewer tokens", "source_quote": "used 5x fewer tokens than the baseline", "type": "result", "strength": "demonstrated"},
+	          {"claim": "made up", "source_quote": "a quote that is not in the source at all", "type": "result", "strength": "demonstrated"}]`
+	wrapped := `{"claims": ` + list + `}`
+	lr, ld := ParseJSON(list, source)
+	wr, wd := ParseJSON(wrapped, source)
+	pr, pd := Parse("  "+wrapped+"\n", source)
+	if len(lr) != 1 || ld != 1 {
+		t.Fatalf("bare list = %d records, %d dropped; want 1, 1", len(lr), ld)
+	}
+	if len(wr) != len(lr) || wd != ld || len(pr) != len(lr) || pd != ld {
+		t.Fatalf("wrapper (%d,%d) and Parse (%d,%d) differ from the bare list (%d,%d)", len(wr), wd, len(pr), pd, len(lr), ld)
+	}
+	if wr[0] != lr[0] || pr[0] != lr[0] {
+		t.Errorf("wrapper record %+v differs from list record %+v", wr[0], lr[0])
+	}
 }

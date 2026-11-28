@@ -40,6 +40,24 @@ func TestHelperProcess(t *testing.T) {
 				break
 			}
 		}
+	case "echo-schema":
+		// Print the schema the provider was given: the inline value after
+		// --json-schema, or the contents of the file after --output-schema.
+		args := os.Args
+		for i, a := range args[:len(args)-1] {
+			switch a {
+			case "--json-schema":
+				// claude speaks stream-json, so answer in its result event.
+				os.Stdout.WriteString(`{"type":"result","subtype":"success","is_error":false,"result":` + jsonString("INLINE:"+args[i+1]) + "}\n")
+			case "--output-schema":
+				data, err := os.ReadFile(args[i+1])
+				if err != nil {
+					os.Stdout.WriteString("UNREADABLE:" + err.Error())
+					break
+				}
+				os.Stdout.WriteString("FILE:" + args[i+1] + "\x1f" + string(data))
+			}
+		}
 	case "echo-stdin":
 		buf := new(strings.Builder)
 		_, _ = io.Copy(buf, os.Stdin)

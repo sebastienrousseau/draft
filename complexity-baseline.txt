@@ -20,7 +20,6 @@ engine/acp.go acpConn.read cognitive=16 cyclomatic=12
 engine/api.go API.Generate cyclomatic=12
 engine/engine.go chainForName cognitive=16
 engine/ollama.go Ollama.Generate cognitive=25 cyclomatic=19 halstead=32.3 lines=107
-engine/session.go Session.Generate cyclomatic=13 halstead=32.1
 engine/session.go parseStreamJSON cognitive=44 cyclomatic=24 halstead=34.3 lines=80
 examples/frontmatter/main.go main cognitive=16 cyclomatic=16 lines=91
 frontmatter/frontmatter.go ExtractMetadata cognitive=29 cyclomatic=19 halstead=34.3 lines=94

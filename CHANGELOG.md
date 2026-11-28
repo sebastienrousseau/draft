@@ -6,6 +6,24 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Added
+
+- `DRAFT_STRUCTURED_OUTPUT=1` now covers Claude and Codex as well as
+  Ollama: `claude` gets the schema with `--json-schema`, and `codex` gets
+  it as a file in the call's sandbox directory with `--output-schema`.
+  Both answered with the schema's object in live runs. On six sections
+  of a 65-page paper, single runs verified 64 claims and dropped 17
+  records in JSON against 68 and 22 in text for Claude, and 137 and 16
+  against 135 and 8 for Codex, so structured output stays opt-in.
+
+### Changed
+
+- The claim schema's root is an object, `{"claims": [...]}`, instead of
+  the array itself, and it names no `$schema` dialect. Claude rejects a
+  schema whose root is not an object, and one that names the 2020-12
+  dialect. `claims.ParseJSON` reads both the object and a bare array, so
+  cached and earlier output still parses, and gates both identically.
+
 ## [0.0.51] - 2026-11-28
 
 ### Added

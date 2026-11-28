@@ -18,9 +18,20 @@ var ClaimStrengths = []string{
 	"demonstrated", "hedged", "speculation-or-future-work",
 }
 
-// Schema returns the JSON Schema (draft 2020-12) for a claim ledger: an array
-// of claim objects, each with a non-empty claim and source quote and a type
-// and strength drawn from the enumerations above.
+// Schema returns the JSON Schema for a claim ledger: an
+// object whose one property, claims, is an array of claim objects, each with a
+// non-empty claim and source quote and a type and strength drawn from the
+// enumerations above.
+//
+// The list sits inside an object because the backends that take a schema
+// require an object at the root: Claude's --json-schema rejects anything else
+// with "input_schema.type: Input should be 'object'", and OpenAI structured
+// outputs (Codex --output-schema) have the same rule. One shape for every
+// backend keeps one prompt and one decoder.
+//
+// It declares no $schema dialect: Claude's validator cannot load the 2020-12
+// metaschema and refuses a schema that names it, and nothing here needs more
+// than the keywords every draft shares.
 //
 // It is the structured-decoding counterpart to the CLAIM/SOURCE_QUOTE text
 // format the ledger is written in: an engine that supports response_format
@@ -34,9 +45,12 @@ var ClaimStrengths = []string{
 // mutate or marshal.
 func Schema() map[string]any {
 	return map[string]any{
-		"$schema": "https://json-schema.org/draft/2020-12/schema",
-		"type":    "array",
-		"items":   claimObjectSchema(),
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"claims"},
+		"properties": map[string]any{
+			"claims": map[string]any{"type": "array", "items": claimObjectSchema()},
+		},
 	}
 }
 
