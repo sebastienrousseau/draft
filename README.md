@@ -388,15 +388,19 @@ draft [flags] <source> [more-sources...]
 
 | Flag                   | Description                                                 |
 | ---------------------- | ----------------------------------------------------------- |
-| `--engine <mode>`      | `auto` (default), `ollama`, or a provider name              |
+| `--engine <mode>`      | `auto` (default), `ollama`, a provider, or `api:<provider>` |
 | `--model <name>`       | Session-provider model override (e.g. `opus`)               |
+| `--reader <name>`      | Document reader: `pdftotext` (default) or `docling`         |
+| `--style <file>`       | JSON house style: word band, banned vocabulary, language    |
 | `--experimental`       | Let auto mode use experimental providers                    |
 | `--strict-numbers`     | Fail a draft carrying a number found in no verified claim   |
+| `--second-gate`        | Drop verified claims a local model finds unsupported        |
 | `--out <dir>`          | Directory to write drafts into (default `~/Drop/Drafts`)    |
 | `--sources-dir <dir>`  | Directory bare filenames resolve against                    |
 | `--no-cache`           | Re-extract instead of reusing cached claims                 |
 | `--clear-cache`        | Delete every cached claim extraction and exit               |
 | `--doctor`             | Check that this machine can run draft, and exit             |
+| `--trust-config`       | Trust `./draft.toml` as it now stands, and exit             |
 | `--num-ctx <n>`        | Ollama context window (default `8192`)                      |
 | `--num-predict <n>`    | Ollama max output tokens (default `6000`)                   |
 | `--force-new`          | Draft even if today's folder already has one                |
@@ -417,6 +421,7 @@ draft [flags] <source> [more-sources...]
 | `--print`              | Run without the TUI; print draft paths to stdout            |
 | `--json`               | Run without the TUI; one JSON object per job on stdout      |
 | `--completion <sh>`    | Print a completion script: `bash`, `zsh`, or `fish`         |
+| `--man`                | Print a roff manual page on stdout, and exit                |
 | `--version`            | Print version and exit                                      |
 | `-h, --help`           | Show help                                                   |
 
@@ -1182,7 +1187,9 @@ Honesty here saves you an evening.
 - **You want a general-purpose summariser.** `draft` drops any claim it cannot
   verify verbatim. A thin source yields a thin ledger and a short draft. That
   is the design, not a defect.
-- **You have no agent CLI and no Ollama.** There is no direct API mode.
+- **You have no agent CLI, no Ollama and no API key.** `draft` needs one of
+  them: `--engine api:anthropic` or `api:openai` is the opt-in direct-API
+  path for a machine with a key but no agent CLI.
 - **Your sources are scans.** With the default reader, a PDF with no text
   layer is reported as such, with a suggestion to run OCR first.
   `--reader docling` falls back to Docling's OCR for such a PDF, which

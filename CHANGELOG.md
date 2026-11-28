@@ -6,6 +6,16 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The README flag table lists `--reader`, `--style`, `--second-gate`,
+  `--trust-config` and `--man`, which the CLI accepted but the table left
+  out, and `--engine` now shows the `api:<provider>` form. A test reads the
+  flag set and fails on any flag the table misses or invents, so the two
+  cannot drift again.
+- "When not to use draft" no longer says there is no direct API mode;
+  `--engine api:anthropic` and `api:openai` have existed since ADR 0011.
+
 ## [0.0.50] - 2026-11-20
 
 ### Changed
