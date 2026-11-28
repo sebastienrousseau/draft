@@ -6,19 +6,7 @@ series until `0.0.999`.
 
 ## [Unreleased]
 
-### Fixed
-
-- Offline extraction no longer fails sections against an Ollama server
-  that runs one request at a time. draft sent two at once and assumed the
-  second would just queue, but Ollama sends no headers until it starts a
-  request, so a queued one waited out the header timeout: on an 8 GB
-  machine with `OLLAMA_NUM_PARALLEL=1`, a section failed after five
-  minutes while the one ahead of it took 6 min 38 s, and a full run spent
-  its time retrying. draft now keeps no more requests in flight than
-  `OLLAMA_NUM_PARALLEL` in its own environment allows, one by default,
-  and waits for a slot before sending, so the header timeout measures
-  the server, not a queue. Export `OLLAMA_NUM_PARALLEL` to draft as well
-  as the server to run sections in parallel.
+## [0.0.52] - 2026-11-28
 
 ### Added
 
@@ -51,6 +39,20 @@ series until `0.0.999`.
   schema whose root is not an object, and one that names the 2020-12
   dialect. `claims.ParseJSON` reads both the object and a bare array, so
   cached and earlier output still parses, and gates both identically.
+
+### Fixed
+
+- Offline extraction no longer fails sections against an Ollama server
+  that runs one request at a time. draft sent two at once and assumed the
+  second would just queue, but Ollama sends no headers until it starts a
+  request, so a queued one waited out the header timeout: on an 8 GB
+  machine with `OLLAMA_NUM_PARALLEL=1`, a section failed after five
+  minutes while the one ahead of it took 6 min 38 s, and a full run spent
+  its time retrying. draft now keeps no more requests in flight than
+  `OLLAMA_NUM_PARALLEL` in its own environment allows, one by default,
+  and waits for a slot before sending, so the header timeout measures
+  the server, not a queue. Export `OLLAMA_NUM_PARALLEL` to draft as well
+  as the server to run sections in parallel.
 
 ## [0.0.51] - 2026-11-28
 
@@ -1935,6 +1937,7 @@ series until `0.0.999`.
 - Truncation check decodes the final rune, so a draft ending in a smart quote or
   ellipsis is no longer flagged as truncated.
 
+[0.0.52]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.52
 [0.0.51]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.51
 [0.0.50]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.50
 [0.0.49]: https://github.com/sebastienrousseau/draft/releases/tag/v0.0.49
