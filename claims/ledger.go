@@ -23,27 +23,21 @@ func RenderLedger(records []Record, dropped int) string {
 	return b.String()
 }
 
-// RenderPromptLedger produces the compact ledger fed to the writing model,
-// capped by record count and character budget so a small model is not swamped.
+// promptLedgerHeader opens the compact ledger the writer is given.
+const promptLedgerHeader = "# Compact Verified Claims For Writing\n\n"
+
+// RenderPromptLedger produces the compact ledger fed to the writing model:
+// the records SelectForPrompt chooses within maxClaims and maxChars, so a
+// small model is not swamped and a long paper is not cut to its opening.
 func RenderPromptLedger(records []Record, maxClaims, maxChars int) string {
+	selected := SelectForPrompt(records, maxClaims, maxChars)
 	var b strings.Builder
-	b.WriteString("# Compact Verified Claims For Writing\n\n")
-	countPos := b.Len()
-	b.WriteString("Included records: 0 of 0\n\n")
-	included := 0
-	for _, rec := range records {
-		var block strings.Builder
-		writeRecord(&block, rec)
-		if included >= maxClaims || b.Len()+block.Len() > maxChars {
-			break
-		}
-		b.WriteString(block.String())
-		included++
+	b.WriteString(promptLedgerHeader)
+	fmt.Fprintf(&b, "Included records: %d of %d\n\n", len(selected), len(records))
+	for _, rec := range selected {
+		writeRecord(&b, rec)
 	}
-	out := b.String()
-	countLine := fmt.Sprintf("Included records: %d of %d", included, len(records))
-	nl := strings.Index(out[countPos:], "\n") + countPos
-	return out[:countPos] + countLine + out[nl:]
+	return b.String()
 }
 
 func writeRecord(b *strings.Builder, rec Record) {

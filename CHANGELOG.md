@@ -22,6 +22,13 @@ series until `0.0.999`.
 
 ### Added
 
+- A draft must carry at least one of the limitations its writer was
+  given, or it is sent back with the rule named; each limitation it drops
+  is reported. The manifest's grounding assertion records how many were
+  given and carried (`limitations_given`, `limitations_carried`). The
+  floor is one, not all: thirteen published articles carried 103 of the
+  310 limitations their ledgers held, and a long ledger has more caveats
+  than one article can hold.
 - `DRAFT_STRUCTURED_OUTPUT=1` now covers Claude and Codex as well as
   Ollama: `claude` gets the schema with `--json-schema`, and `codex` gets
   it as a file in the call's sandbox directory with `--output-schema`.
@@ -32,6 +39,13 @@ series until `0.0.999`.
 
 ### Changed
 
+- The writer is given claims from across the whole ledger, with a fifth
+  of its 45 slots kept for limitations, instead of the first 45 in source
+  order. On a long paper the first 45 are the abstract and introduction:
+  on the same 65-page paper, the article drew 51 of its 81 attributed
+  claims from the ledger's first quarter before, and 41 of 107 after,
+  with the rest spread over the later three quarters. A ledger that fits
+  the budget is given whole, as before.
 - The claim schema's root is an object, `{"claims": [...]}`, instead of
   the array itself, and it names no `$schema` dialect. Claude rejects a
   schema whose root is not an object, and one that names the 2020-12

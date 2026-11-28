@@ -232,7 +232,8 @@ const groundingRules = `- Every number, name, mechanism, metric, and result in y
 - Match each claim's STRENGTH exactly:
   demonstrated -> state it plainly as a result.
   hedged -> use hedged verbs: suggests, appears to, may, is associated with. Never as settled fact.
-  speculation-or-future-work -> frame as proposed or future. Never as achieved.`
+  speculation-or-future-work -> frame as proposed or future. Never as achieved.
+- A CLAIM with TYPE: limitation is something the source says it does not show or cannot do. Carry the limitations into the article in the source's terms, beside the results they qualify; never leave them all out.`
 
 // ContinueWriting nudges a backend that stopped on a length limit to finish the
 // article seamlessly from where it left off. It carries the compact ledger and

@@ -177,11 +177,13 @@ func (r *Runner) saveProvenance(outputDir, stem, title, saved string, records []
 	for _, s := range r.sourceDigests {
 		sources = append(sources, provenance.Source{Path: manifestSourcePath(absOr(dir), absOr(s.Path)), SHA256: s.SHA256})
 	}
+	limGiven, limCarried := validate.LimitationCounts(saved, writerLedger(records))
 	man := provenance.NewManifest(provenance.ManifestInput{
 		Title: title, Body: saved, Version: r.cfg.Version,
 		Engine: r.writerName(), Model: r.writerModel(), Reader: reader,
 		PromptVersion: prompt.ClaimVersion(), LedgerSHA256: r.ledgerDigest,
 		Sources: sources, When: now, Attribution: &att,
+		LimitationsGiven: limGiven, LimitationsCarried: limCarried,
 	})
 	write := func(name string, v any) string {
 		path := filepath.Join(dir, stem+name)
